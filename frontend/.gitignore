@@ -1,0 +1,64 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+.DS_Store
+dist
+dist-ssr
+coverage
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+*.tsbuildinfo
+
+.eslintcache
+
+# Cypress
+/cypress/videos/
+/cypress/screenshots/
+
+# Vitest
+__screenshots__/
+
+# Vite
+*.timestamp-*-*.mjs
+
+# @hey-api/openapi-ts
+src/client/
+
+# VitePress 文档站构建产物与缓存
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+
+# VitePress 在仓库根运行时的依赖预打包缓存
+/.vitepress/
+
+# 保密文件：施工日报示例 xlsx 不上传服务器（csv 版本经 git-lfs 跟踪）
+docs/**/*.xlsx
+
+# file based router
+typed-router.d.ts
+
+# OpenAPI
+openapi.json
+
+# Code Agent
+.mimocode
+.opencode
+.claude
+

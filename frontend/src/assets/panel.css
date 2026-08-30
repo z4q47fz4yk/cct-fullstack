@@ -1,0 +1,87 @@
+/* ========== panel.css ========== */
+/* 工程数据面板原子类 — 替代原 Starglass 玻璃容器体系（glass.css）。
+ *
+ * 扁平面板：纯色底 + 发丝线边框，无模糊、无渐变、无噪点、无光晕。
+ * 颜色使用 CSS 变量 --color-panel / --color-panel-hover /
+ * --color-panel-border / --color-panel-border-hover（base.css 分别定义
+ * 深色与亮色值）。
+ *
+ * 容器体系（原子化）：
+ *   panel          唯一面板基类（纯色底 + 发丝线 + 小圆角 + 极淡阴影）
+ *   panel-hover    hover 边框变亮 + 背景微亮（可交互面板）
+ *   panel-float    悬浮大卡片（第三阶阴影，模态场景）
+ *
+ * 用法：
+ *   静态面板：   <div class="panel p-4">...</div>
+ *   交互面板：   <div class="panel panel-hover p-3">...</div>
+ *   图表容器：   <div class="panel h-full">...</div>
+ *
+ * 已废弃（勿用于新代码）：
+ *   glass-surface / glass-inset / glass-lift 已并入 panel / panel-hover，
+ *   模板中对应类名均已迁移，此处不再提供别名。
+ */
+
+/* ═══════ 面板容器原子类 ═══════ */
+
+/* 基类：唯一面板表面 */
+@utility panel {
+  position: relative;
+  border-radius: var(--radius-box);
+  border: 1px solid var(--color-panel-border);
+  background: var(--color-panel);
+  box-shadow: var(--shadow-glass-1);
+  transition:
+    border-color 0.15s var(--ease-soft),
+    box-shadow 0.15s var(--ease-soft),
+    background-color 0.15s;
+}
+
+/* 修饰符：可交互面板 —— hover 仅边框变亮 + 背景微亮，不上浮 */
+@utility panel-hover {
+  &:hover {
+    border-color: var(--color-panel-border-hover);
+    background: var(--color-panel-hover);
+    box-shadow: var(--shadow-glass-2);
+  }
+}
+
+/* 修饰符：悬浮大卡片 —— 第三阶阴影（模态 / 抽屉） */
+@utility panel-float {
+  box-shadow: var(--shadow-glass-3);
+
+  &:hover {
+    box-shadow: var(--shadow-glass-3);
+  }
+}
+
+/* 发丝线网格：gap:1px + 底纹背景，子元素为面板底 → 形成完美 1px 分割线
+ * 用法：<div class="panel-grid grid-cols-2"> <section>...</section> ... </div> */
+@utility panel-grid {
+  display: grid;
+  gap: 1px;
+  background: var(--color-panel-border);
+
+  & > * {
+    background: var(--color-panel);
+    min-width: 0;
+  }
+}
+
+/* 区块标题：纯文本小节标题（原玻璃渐变竖条已废弃） */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  color: var(--color-base-content);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .panel-hover,
+  .panel-float {
+    transition: none;
+  }
+}

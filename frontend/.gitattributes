@@ -1,0 +1,4 @@
+* text=auto eol=lf
+
+# 文档示例数据：csv 经 git-lfs 跟踪（xlsx 为保密文件，已忽略不上传）
+*.csv filter=lfs diff=lfs merge=lfs -text

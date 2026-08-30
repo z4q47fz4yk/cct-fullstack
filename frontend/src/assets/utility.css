@@ -1,0 +1,96 @@
+/* ========== utility.css ========== */
+/* 通用 UI utility。base.css 已 import tailwindcss 与自研组件层，
+ * 所以此处 @apply 可识别工具类与组件类。 */
+
+/* ========== 语义化前景色 utility ========== */
+
+@utility text-fg {
+  color: var(--color-fg);
+}
+
+@utility text-fg-muted {
+  color: var(--color-fg-muted);
+}
+
+@utility text-fg-subtle {
+  color: var(--color-fg-subtle);
+}
+
+/* ========== Material Symbols icon size utilities ========== */
+
+@utility icon-xs {
+  font-size: 0.875rem; /* 14px */
+  line-height: 1;
+}
+
+@utility icon-sm {
+  font-size: 1rem; /* 16px */
+  line-height: 1;
+}
+
+@utility icon-md {
+  font-size: 1.25rem; /* 20px */
+  line-height: 1;
+}
+
+@utility icon-lg {
+  font-size: 1.5rem; /* 24px */
+  line-height: 1;
+}
+
+@utility icon-xl {
+  font-size: 2rem; /* 32px */
+  line-height: 1;
+}
+
+@utility icon-2xl {
+  font-size: 2.5rem; /* 40px */
+  line-height: 1;
+}
+
+/* ========== 大字数值 utility ========== */
+
+@utility metric-value {
+  font-size: 2rem; /* 32px */
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ========== 按钮变体 utility ========== */
+
+@utility btn-ghost-outline {
+  border: 1px solid color-mix(in oklch, var(--color-base-content) 20%, transparent);
+  &:hover {
+    border: 1px solid color-mix(in oklch, var(--color-base-content) 60%, transparent);
+    background-color: color-mix(in oklch, var(--color-base-content) 8%, transparent);
+  }
+}
+
+/* ========== 滚动条 utility ========== */
+
+@utility scrollbar-thin {
+  &::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: oklch(from var(--color-base-content) l c h / 0.12);
+    border-radius: 2px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: oklch(from var(--color-base-content) l c h / 0.2);
+  }
+}
+
+@utility scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

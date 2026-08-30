@@ -1,0 +1,1286 @@
+/* ========== components.css ========== */
+/* 自研工程组件层 — 替代 DaisyUI 组件 CSS。
+ *
+ * 所有类名与 DaisyUI 5 保持一致（含已废弃的 input-bordered /
+ * select-bordered 别名），模板标记零迁移。
+ * 行为等价：
+ *   - modal      → 原生 <dialog> + showModal()，Esc 原生关闭，
+ *                  <form method="dialog" class="modal-backdrop"> 点击遮罩关闭
+ *   - collapse   → 原生 <details>/<summary>（checkbox hack 也兼容）
+ *   - tabs       → 纯 CSS 状态类（tab-active 由 JS 切换）
+ *   - checkbox / radio / toggle → 原生 input 的 :checked/:indeterminate
+ *   - tooltip    → 纯 CSS :hover / :focus-visible（当前无 UI 需求，未实现）
+ *
+ * 工程面板默认值（Engineering Data Panel）：
+ *   - 背景：color-mix(in oklch, --color-base-content 5%, transparent)（中性半透明）
+ *   - 边框：color-mix(in oklch, --color-base-content 10%, transparent)（发丝线）
+ *   - 控件高度：2.25rem（紧凑）；聚焦：2px ring（无泛光、无模糊）
+ *   - 容器（panel/card/list/collapse/modal-box）统一由 panel.css 提供面板样式
+ * 主题变量见 base.css 的 :root / [data-theme] 块。
+ */
+
+/* ═══════════ 按钮 Button ═══════════ */
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 font-medium cursor-pointer select-none whitespace-nowrap;
+  height: 2.25rem;
+  padding-inline: 0.75rem;
+  font-size: 0.875rem;
+  border-radius: var(--radius-field);
+  border: 1px solid color-mix(in oklch, var(--color-base-content) 12%, transparent);
+  background: color-mix(in oklch, var(--color-base-content) 5%, transparent);
+  color: var(--color-base-content);
+  transition:
+    background-color 0.2s var(--ease-soft),
+    border-color 0.2s var(--ease-soft),
+    color 0.15s,
+    box-shadow 0.2s var(--ease-soft);
+  &:hover {
+    border-color: color-mix(in oklch, var(--color-base-content) 22%, transparent);
+    background: color-mix(in oklch, var(--color-base-content) 9%, transparent);
+  }
+  &:active {
+    box-shadow: inset 0 1px 3px color-mix(in oklch, var(--color-base-content) 12%, transparent);
+  }
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-primary) 40%, transparent);
+    border-color: color-mix(in oklch, var(--color-primary) 50%, transparent);
+  }
+  &:disabled,
+  &.btn-disabled {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+}
+
+@utility btn-primary {
+  background: color-mix(in oklch, var(--color-primary) 90%, transparent);
+  border-color: color-mix(in oklch, var(--color-primary) 55%, transparent);
+  color: var(--color-primary-content);
+  &:hover {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+  }
+}
+
+@utility btn-secondary {
+  background: color-mix(in oklch, var(--color-secondary) 90%, transparent);
+  border-color: color-mix(in oklch, var(--color-secondary) 55%, transparent);
+  color: var(--color-secondary-content);
+  &:hover {
+    background: var(--color-secondary);
+    border-color: var(--color-secondary);
+  }
+}
+
+@utility btn-neutral {
+  background: color-mix(in oklch, var(--color-neutral) 90%, transparent);
+  border-color: color-mix(in oklch, var(--color-neutral) 55%, transparent);
+  color: var(--color-neutral-content);
+  &:hover {
+    background: var(--color-neutral);
+    border-color: var(--color-neutral);
+  }
+}
+
+@utility btn-info {
+  background: color-mix(in oklch, var(--color-info) 90%, transparent);
+  border-color: color-mix(in oklch, var(--color-info) 55%, transparent);
+  color: var(--color-info-content);
+  &:hover {
+    background: var(--color-info);
+    border-color: var(--color-info);
+  }
+}
+
+@utility btn-success {
+  background: color-mix(in oklch, var(--color-success) 90%, transparent);
+  border-color: color-mix(in oklch, var(--color-success) 55%, transparent);
+  color: var(--color-success-content);
+  &:hover {
+    background: var(--color-success);
+    border-color: var(--color-success);
+  }
+}
+
+@utility btn-warning {
+  background: color-mix(in oklch, var(--color-warning) 90%, transparent);
+  border-color: color-mix(in oklch, var(--color-warning) 55%, transparent);
+  color: var(--color-warning-content);
+  &:hover {
+    background: var(--color-warning);
+    border-color: var(--color-warning);
+  }
+}
+
+@utility btn-error {
+  background: color-mix(in oklch, var(--color-error) 90%, transparent);
+  border-color: color-mix(in oklch, var(--color-error) 55%, transparent);
+  color: var(--color-error-content);
+  &:hover {
+    background: var(--color-error);
+    border-color: var(--color-error);
+  }
+}
+
+@utility btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  &:hover {
+    background: color-mix(in oklch, var(--color-base-content) 8%, transparent);
+    border-color: transparent;
+  }
+}
+
+@utility btn-outline {
+  background: transparent;
+  border-color: color-mix(in oklch, var(--color-base-content) 30%, transparent);
+  &:hover {
+    background: var(--color-base-content);
+    border-color: var(--color-base-content);
+    color: var(--color-base-100);
+  }
+}
+
+@utility btn-soft {
+  background: color-mix(in oklch, var(--color-base-content) 8%, transparent);
+  border-color: transparent;
+  &:hover {
+    background: color-mix(in oklch, var(--color-base-content) 14%, transparent);
+  }
+}
+
+@utility btn-active {
+  box-shadow: inset 0 1px 3px color-mix(in oklch, var(--color-base-content) 12%, transparent);
+}
+
+@utility btn-block {
+  width: 100%;
+}
+
+@utility btn-square {
+  width: 2.25rem;
+  padding-inline: 0;
+}
+
+@utility btn-circle {
+  width: 2.25rem;
+  padding-inline: 0;
+  border-radius: 9999px;
+}
+
+@utility btn-xs {
+  height: 1.375rem;
+  padding-inline: 0.5rem;
+  font-size: 0.75rem;
+  &.btn-square,
+  &.btn-circle {
+    width: 1.375rem;
+  }
+}
+
+@utility btn-sm {
+  height: 1.75rem;
+  padding-inline: 0.625rem;
+  font-size: 0.8125rem;
+  &.btn-square,
+  &.btn-circle {
+    width: 1.75rem;
+  }
+}
+
+@utility btn-md {
+  height: 2.25rem;
+  padding-inline: 0.75rem;
+  font-size: 0.875rem;
+}
+
+@utility btn-lg {
+  height: 2.5rem;
+  padding-inline: 1rem;
+  font-size: 0.9375rem;
+}
+
+/* ═══════════ 表单 Fieldset / Label ═══════════ */
+
+@utility fieldset {
+  @apply flex flex-col gap-2;
+  border: none;
+  padding: 0;
+}
+
+@utility fieldset-legend {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-base-content);
+  padding: 0;
+  margin: 0;
+}
+
+@utility fieldset-label {
+  font-size: 0.75rem;
+  color: var(--color-fg-muted);
+}
+
+@utility label {
+  font-size: 0.75rem;
+  color: var(--color-fg-muted);
+}
+
+/* ═══════════ 表单输入 Input / Select / Textarea ═══════════ */
+
+/* 工程输入框（原生 input 元素或 label 包裹 input 的结构均适用） */
+@utility input {
+  @apply inline-flex items-center;
+  height: 2.25rem;
+  padding-inline: 0.75rem;
+  border-radius: var(--radius-field);
+  border: 1px solid color-mix(in oklch, var(--color-base-content) 12%, transparent);
+  background: var(--color-base-200);
+  color: var(--color-base-content);
+  font-size: 0.875rem;
+  outline: none;
+  cursor: text;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    box-shadow 0.2s;
+
+  &::placeholder,
+  & input::placeholder {
+    color: color-mix(in oklch, var(--color-base-content) 30%, transparent);
+  }
+
+  /* 内层原生 input：由包装器提供全部外观，禁用浏览器默认样式
+   * （含 :focus 默认 outline，聚焦指示统一由包装器 :focus-within ring 承担） */
+  & input {
+    outline: none;
+    border: none;
+    background: transparent;
+    min-width: 0;
+    color: inherit;
+  }
+
+  &:hover {
+    border-color: color-mix(in oklch, var(--color-base-content) 20%, transparent);
+  }
+
+  &:focus,
+  &:focus-within {
+    border-color: color-mix(in oklch, var(--color-primary) 50%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-primary) 18%, transparent);
+  }
+
+  &:disabled,
+  &:has(input:disabled) {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+@utility input-error {
+  border-color: color-mix(in oklch, var(--color-error) 50%, transparent);
+  &:hover,
+  &:focus,
+  &:focus-within {
+    border-color: color-mix(in oklch, var(--color-error) 65%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-error) 18%, transparent);
+  }
+}
+
+@utility input-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@utility input-sm {
+  height: 1.75rem;
+  padding-inline: 0.625rem;
+  font-size: 0.8125rem;
+
+  & input {
+    outline: none;
+    border: none;
+    background: transparent;
+    min-width: 0;
+    color: inherit;
+  }
+}
+
+@utility select {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 2.25rem;
+  padding-inline: 0.75rem;
+  padding-right: 2.25rem;
+  border-radius: var(--radius-field);
+  border: 1px solid color-mix(in oklch, var(--color-base-content) 12%, transparent);
+  background: var(--color-base-200)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
+    no-repeat right 0.625rem center / 1rem;
+  color: var(--color-base-content);
+  font-size: 0.875rem;
+  outline: none;
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    background-color 0.2s,
+    box-shadow 0.2s;
+
+  &:hover {
+    border-color: color-mix(in oklch, var(--color-base-content) 20%, transparent);
+  }
+
+  &:focus {
+    border-color: color-mix(in oklch, var(--color-primary) 50%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-primary) 18%, transparent);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+@utility select-error {
+  border-color: color-mix(in oklch, var(--color-error) 50%, transparent);
+  &:focus {
+    border-color: color-mix(in oklch, var(--color-error) 65%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-error) 18%, transparent);
+  }
+}
+
+@utility select-xs {
+  height: 1.375rem;
+  padding-inline: 0.5rem;
+  padding-right: 1.5rem;
+  font-size: 0.75rem;
+}
+
+@utility select-sm {
+  height: 1.75rem;
+  padding-inline: 0.625rem;
+  padding-right: 1.75rem;
+  font-size: 0.8125rem;
+}
+
+@utility select-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@utility textarea {
+  min-height: 4.5rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius-field);
+  border: 1px solid color-mix(in oklch, var(--color-base-content) 12%, transparent);
+  background: var(--color-base-200);
+  color: var(--color-base-content);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  outline: none;
+  resize: vertical;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    box-shadow 0.2s;
+
+  &::placeholder {
+    color: color-mix(in oklch, var(--color-base-content) 30%, transparent);
+  }
+
+  &:hover {
+    border-color: color-mix(in oklch, var(--color-base-content) 20%, transparent);
+  }
+
+  &:focus {
+    border-color: color-mix(in oklch, var(--color-primary) 50%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-primary) 18%, transparent);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+/* ═══════════ 表单控件 Checkbox / Radio / Toggle ═══════════ */
+
+@utility checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: var(--radius-selector);
+  border: 1px solid color-mix(in oklch, var(--color-base-content) 30%, transparent);
+  background: var(--color-base-200);
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 0.6875rem;
+    height: 0.6875rem;
+    background: var(--color-primary-content);
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    transform: scale(0);
+    transition: transform 0.12s ease-out;
+  }
+
+  &:checked {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+    &::before {
+      transform: scale(1);
+    }
+  }
+
+  &:indeterminate {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+    &::before {
+      transform: scale(1);
+      -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E");
+      mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E");
+    }
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-primary) 18%, transparent);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+@utility checkbox-primary {
+  &:checked,
+  &:indeterminate {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+  }
+}
+
+@utility checkbox-secondary {
+  &:checked,
+  &:indeterminate {
+    border-color: var(--color-secondary);
+    background: var(--color-secondary);
+    &::before {
+      background: var(--color-secondary-content);
+    }
+  }
+}
+
+@utility checkbox-sm {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  &::before {
+    width: 0.5625rem;
+    height: 0.5625rem;
+  }
+}
+
+@utility radio {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in oklch, var(--color-base-content) 30%, transparent);
+  background: var(--color-base-200);
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 0.5625rem;
+    height: 0.5625rem;
+    border-radius: 9999px;
+    background: var(--color-primary);
+    transform: scale(0);
+    transition: transform 0.12s ease-out;
+  }
+
+  &:checked {
+    border-color: var(--color-primary);
+    &::before {
+      transform: scale(1);
+    }
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-primary) 18%, transparent);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+@utility radio-primary {
+  &:checked {
+    border-color: var(--color-primary);
+  }
+}
+
+@utility radio-sm {
+  width: 0.9375rem;
+  height: 0.9375rem;
+  &::before {
+    width: 0.5rem;
+    height: 0.5rem;
+  }
+}
+
+@utility toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 1.25rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in oklch, var(--color-base-content) 30%, transparent);
+  background: color-mix(in oklch, var(--color-base-content) 12%, transparent);
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0.1875rem;
+    left: 0.1875rem;
+    width: 0.8125rem;
+    height: 0.8125rem;
+    border-radius: 9999px;
+    background: var(--color-base-content);
+    transition: transform 0.18s ease-out;
+  }
+
+  &:checked {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+    &::before {
+      background: var(--color-primary-content);
+      transform: translateX(1rem);
+    }
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-primary) 18%, transparent);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+/* ═══════════ 徽章 Badge ═══════════ */
+
+@utility badge {
+  @apply inline-flex items-center gap-1 whitespace-nowrap;
+  height: 1.125rem;
+  padding-inline: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: var(--radius-selector);
+  border: 1px solid color-mix(in oklch, var(--color-base-content) 12%, transparent);
+  background: color-mix(in oklch, var(--color-base-content) 6%, transparent);
+  color: var(--color-base-content);
+}
+
+@utility badge-sm {
+  height: 0.9375rem;
+  padding-inline: 0.375rem;
+  font-size: 0.625rem;
+}
+
+@utility badge-primary {
+  border-color: color-mix(in oklch, var(--color-primary) 40%, transparent);
+  background: color-mix(in oklch, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
+}
+
+@utility badge-secondary {
+  border-color: color-mix(in oklch, var(--color-secondary) 40%, transparent);
+  background: color-mix(in oklch, var(--color-secondary) 18%, transparent);
+  color: var(--color-secondary);
+}
+
+@utility badge-info {
+  border-color: color-mix(in oklch, var(--color-info) 40%, transparent);
+  background: color-mix(in oklch, var(--color-info) 18%, transparent);
+  color: var(--color-info);
+}
+
+@utility badge-success {
+  border-color: color-mix(in oklch, var(--color-success) 40%, transparent);
+  background: color-mix(in oklch, var(--color-success) 18%, transparent);
+  color: var(--color-success);
+}
+
+@utility badge-warning {
+  border-color: color-mix(in oklch, var(--color-warning) 40%, transparent);
+  background: color-mix(in oklch, var(--color-warning) 18%, transparent);
+  color: var(--color-warning);
+}
+
+@utility badge-error {
+  border-color: color-mix(in oklch, var(--color-error) 40%, transparent);
+  background: color-mix(in oklch, var(--color-error) 18%, transparent);
+  color: var(--color-error);
+}
+
+@utility badge-neutral {
+  border-color: color-mix(in oklch, var(--color-neutral) 45%, transparent);
+  background: color-mix(in oklch, var(--color-neutral) 22%, transparent);
+  color: var(--color-neutral-content);
+}
+
+@utility badge-ghost {
+  border-color: transparent;
+  background: color-mix(in oklch, var(--color-base-content) 6%, transparent);
+}
+
+@utility badge-outline {
+  border-color: color-mix(in oklch, var(--color-base-content) 30%, transparent);
+  background: transparent;
+}
+
+@utility badge-soft {
+  border-color: transparent;
+  background: color-mix(in oklch, var(--color-base-content) 8%, transparent);
+}
+
+/* ═══════════ 提示条 Alert ═══════════ */
+
+@utility alert {
+  @apply flex items-center gap-3;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius-box);
+  border: 1px solid color-mix(in oklch, var(--color-base-content) 12%, transparent);
+  background: color-mix(in oklch, var(--color-base-content) 5%, transparent);
+  font-size: 0.875rem;
+  color: var(--color-base-content);
+}
+
+@utility alert-sm {
+  padding: 0.375rem 0.625rem;
+  font-size: 0.75rem;
+}
+
+@utility alert-info {
+  border-color: color-mix(in oklch, var(--color-info) 35%, transparent);
+  background: color-mix(in oklch, var(--color-info) 10%, transparent);
+  color: var(--color-info);
+}
+
+@utility alert-success {
+  border-color: color-mix(in oklch, var(--color-success) 35%, transparent);
+  background: color-mix(in oklch, var(--color-success) 10%, transparent);
+  color: var(--color-success);
+}
+
+@utility alert-warning {
+  border-color: color-mix(in oklch, var(--color-warning) 35%, transparent);
+  background: color-mix(in oklch, var(--color-warning) 10%, transparent);
+  color: var(--color-warning);
+}
+
+@utility alert-error {
+  border-color: color-mix(in oklch, var(--color-error) 35%, transparent);
+  background: color-mix(in oklch, var(--color-error) 10%, transparent);
+  color: var(--color-error);
+}
+
+@utility alert-soft {
+  border-color: transparent;
+  background: color-mix(in oklch, var(--color-base-content) 8%, transparent);
+}
+
+/* ═══════════ 加载 Loading / 骨架 Skeleton ═══════════ */
+
+@utility loading {
+  display: inline-block;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  color: inherit;
+  animation: gl-spin 1s linear infinite;
+}
+
+@utility loading-spinner {
+  border-radius: 9999px;
+  border: 0.2em solid color-mix(in oklch, var(--color-base-content) 18%, transparent);
+  border-top-color: currentColor;
+}
+
+@utility loading-dots {
+  background-image:
+    radial-gradient(circle at 25% 50%, currentColor 0 0.35em, transparent 0.35em 100%),
+    radial-gradient(circle at 75% 50%, currentColor 0 0.35em, transparent 0.35em 100%);
+  background-repeat: no-repeat;
+  background-size: 1em 1em;
+  animation: gl-dots 1.2s ease-in-out infinite;
+}
+
+@utility loading-ring {
+  border: 0.2em solid transparent;
+  border-top-color: currentColor;
+  border-right-color: currentColor;
+  border-radius: 9999px;
+}
+
+@utility loading-xs {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+@utility loading-sm {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+@utility loading-md {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+@utility loading-lg {
+  width: 2rem;
+  height: 2rem;
+}
+
+@utility skeleton {
+  display: block;
+  border-radius: var(--radius-selector);
+  background: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+  animation: gl-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ═══════════ 进度 Progress ═══════════ */
+
+@utility progress {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 0.375rem;
+  border-radius: 9999px;
+  overflow: hidden;
+  background: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+
+  &::-webkit-progress-bar {
+    background: transparent;
+  }
+  &::-webkit-progress-value {
+    background: var(--color-primary);
+    border-radius: 9999px;
+    transition: width 0.3s ease;
+  }
+  &::-moz-progress-bar {
+    background: var(--color-primary);
+    border-radius: 9999px;
+  }
+}
+
+@utility progress-primary {
+  &::-webkit-progress-value {
+    background: var(--color-primary);
+  }
+  &::-moz-progress-bar {
+    background: var(--color-primary);
+  }
+}
+
+@utility progress-success {
+  &::-webkit-progress-value {
+    background: var(--color-success);
+  }
+  &::-moz-progress-bar {
+    background: var(--color-success);
+  }
+}
+
+@utility progress-error {
+  &::-webkit-progress-value {
+    background: var(--color-error);
+  }
+  &::-moz-progress-bar {
+    background: var(--color-error);
+  }
+}
+
+/* ═══════════ 面板 Panel（原 card） ═══════════ */
+
+/* 扁平面板基类：border 发丝线 + 纯色底（样式定义在 panel.css 的 .panel 原子类，
+ * 此处兼容 DaisyUI 的 card 类名。 */
+@utility card {
+  position: relative;
+  border-radius: var(--radius-box);
+  border: 1px solid color-mix(in oklch, var(--color-base-content) 10%, transparent);
+  background: var(--color-panel);
+}
+
+@utility card-border {
+  border-color: var(--color-panel-border);
+}
+
+@utility card-title {
+  @apply flex items-center gap-2;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+@utility card-actions {
+  @apply flex flex-wrap items-start gap-2;
+  margin-top: 0.5rem;
+}
+
+/* ═══════════ 模态框 Modal（原生 <dialog> 派） ═══════════ */
+
+@utility modal {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  z-index: 60;
+  display: none;
+  place-items: center;
+  padding: 1rem;
+  overflow-y: auto;
+  pointer-events: none;
+  background: transparent;
+  border: none;
+
+  &::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: auto;
+    background: color-mix(in oklch, var(--color-base-100) 72%, transparent);
+  }
+}
+
+.modal.modal-open,
+dialog.modal[open] {
+  display: grid;
+}
+
+@utility modal-box {
+  width: 100%;
+  max-width: 32rem;
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  padding: 1.25rem;
+  border-radius: var(--radius-box);
+  border: 1px solid var(--color-panel-border);
+  background: var(--color-panel);
+  box-shadow: var(--shadow-glass-3);
+  pointer-events: auto;
+}
+
+@utility modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: auto;
+
+  & button {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: transparent;
+    cursor: default;
+  }
+}
+
+@utility modal-action {
+  @apply flex items-center justify-end gap-2;
+  margin-top: 1rem;
+}
+
+/* ═══════════ 表格 Table ═══════════ */
+
+@utility table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+
+  & :where(th, td) {
+    /* 垂直 0.5rem×2 + 13px×1.5 行高 ≈ 35.5px ≈ h-9 */
+    padding: 0.5rem 0.625rem;
+    text-align: inherit;
+    vertical-align: middle;
+  }
+  & :where(thead tr) {
+    background: color-mix(in oklch, var(--color-base-content) 4%, transparent);
+  }
+  & :where(thead th) {
+    color: var(--color-fg-muted);
+    font-weight: 600;
+    font-size: 0.75rem;
+  }
+  & :where(tbody tr) {
+    border-bottom: 1px solid color-mix(in oklch, var(--color-base-content) 6%, transparent);
+  }
+  & :where(tbody tr:last-child) {
+    border-bottom: none;
+  }
+  & :where(tbody tr:hover) {
+    background: color-mix(in oklch, var(--color-base-content) 3%, transparent);
+  }
+}
+
+/* 表格数字列：右对齐 + 等宽数字（保证小数点对齐）
+ * 用法：数字 th/td 加 class="num" */
+@utility table-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'ss01', 'tnum';
+}
+
+@utility table-pin-rows {
+  & :where(thead) {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--color-base-200);
+  }
+}
+
+/* ═══════════ 标签页 Tabs ═══════════ */
+
+@utility tabs {
+  @apply inline-flex items-center gap-1;
+}
+
+@utility tab {
+  @apply inline-flex items-center justify-center gap-2 whitespace-nowrap;
+  height: 1.75rem;
+  padding-inline: 0.75rem;
+  font-size: 0.8125rem;
+  border-radius: var(--radius-selector);
+  color: var(--color-fg-muted);
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    background-color 0.15s;
+
+  &:hover {
+    color: var(--color-base-content);
+    background: color-mix(in oklch, var(--color-base-content) 6%, transparent);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-primary) 18%, transparent);
+  }
+}
+
+@utility tab-active {
+  color: var(--color-primary);
+  background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+}
+
+@utility tabs-boxed {
+  padding: 0.25rem;
+  border-radius: var(--radius-box);
+  border: 1px solid var(--color-panel-border);
+  background: var(--color-panel);
+}
+
+@utility tabs-sm {
+  & .tab {
+    height: 1.375rem;
+    padding-inline: 0.625rem;
+    font-size: 0.75rem;
+  }
+}
+
+/* ═══════════ 分组 Join / 分割线 Divider / 链接 Link ═══════════ */
+
+@utility join {
+  @apply inline-flex items-stretch;
+}
+
+@utility join-item {
+  border-radius: 0;
+  &:first-child {
+    border-start-start-radius: var(--radius-field);
+    border-end-start-radius: var(--radius-field);
+  }
+  &:last-child {
+    border-end-end-radius: var(--radius-field);
+    border-start-end-radius: var(--radius-field);
+  }
+  &:not(:first-child) {
+    border-inline-start-width: 0;
+  }
+}
+
+@utility divider {
+  @apply flex items-center;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--color-fg-subtle);
+
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: color-mix(in oklch, var(--color-base-content) 12%, transparent);
+  }
+}
+
+@utility link {
+  color: var(--color-primary);
+  text-decoration-line: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration-line: underline;
+  }
+}
+
+@utility link-primary {
+  color: var(--color-primary);
+}
+
+@utility link-hover {
+  color: var(--color-primary);
+  text-decoration-line: none;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  &:hover {
+    text-decoration-line: underline;
+  }
+}
+
+/* ═══════════ 列表 List（SearchableSelect 下拉选项） ═══════════ */
+
+@utility list {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-box);
+  border: 1px solid var(--color-panel-border);
+  background: var(--color-panel);
+}
+
+@utility list-row {
+  @apply flex items-center gap-2;
+  padding: 0.375rem 0.75rem;
+  cursor: pointer;
+
+  &:not(:last-child) {
+    border-bottom: 1px solid color-mix(in oklch, var(--color-base-content) 8%, transparent);
+  }
+
+  /* hover 高亮（同 SearchableSelect 交互态）：主色左边条 + 弱化底色 */
+  &:hover {
+    border-left: 2px solid var(--color-primary);
+    background-color: oklch(from var(--color-primary) l c h / 0.1);
+  }
+}
+
+/* 选中态：当前值以主色标示 */
+.list-row.active {
+  color: var(--color-primary);
+  border-left: 2px solid var(--color-primary);
+  background-color: oklch(from var(--color-primary) l c h / 0.1);
+}
+
+/* ═══════════ 折叠 Collapse（<details>/<summary> 原生派） ═══════════ */
+
+@utility collapse {
+  border-radius: var(--radius-box);
+  border: 1px solid var(--color-panel-border);
+  background: var(--color-panel);
+
+  & > input[type='checkbox'] {
+    display: none;
+  }
+}
+
+@utility collapse-title {
+  padding: 0.75rem;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background-color 0.15s;
+
+  &:hover {
+    background: color-mix(in oklch, var(--color-base-content) 4%, transparent);
+  }
+}
+
+@utility collapse-content {
+  padding: 0 0.75rem 0.75rem;
+}
+
+@utility collapse-arrow {
+  & > .collapse-title::after {
+    content: '';
+    display: inline-block;
+    width: 0.875rem;
+    height: 0.875rem;
+    margin-left: 0.25rem;
+    background: currentColor;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    transition: transform 0.15s;
+    vertical-align: middle;
+  }
+  &[open] > .collapse-title::after {
+    transform: rotate(180deg);
+  }
+}
+
+@utility collapse-open {
+  & > .collapse-title::after {
+    transform: rotate(180deg);
+  }
+}
+
+/* ═══════════ 动画与无障碍 ═══════════ */
+
+@keyframes gl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes gl-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes gl-dots {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateX(0.25em);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading,
+  .skeleton {
+    animation: none;
+  }
+  .modal,
+  .modal-box,
+  .input,
+  .select,
+  .textarea,
+  .checkbox,
+  .radio,
+  .toggle,
+  .tab,
+  .btn {
+    transition: none;
+  }
+}
+
+/* =========================================================================
+   FLIP 动画（用于列表顺序变化的平滑位移）
+   使用：<TransitionGroup name="flip" tag="div">
+   ========================================================================= */
+.flip-move {
+  transition: transform 0.3s var(--ease-soft, ease);
+}
+
+.flip-leave-active {
+  position: absolute;
+}
+
+.flip-enter-active {
+  transition:
+    opacity 0.3s var(--ease-soft, ease),
+    transform 0.3s var(--ease-soft, ease);
+}
+
+.flip-enter-from {
+  opacity: 0;
+  transform: scale(0.92);
+}
+
+/* =========================================================================
+   Pin 动画（解集对比：基线/对比槽位与徽标出现）
+   使用：<Transition name="pin"> / <TransitionGroup name="pin">
+   ========================================================================= */
+.pin-enter-active {
+  animation: pin-in 0.28s var(--ease-soft, ease);
+}
+
+.pin-leave-active {
+  transition:
+    opacity 0.15s var(--ease-soft, ease),
+    transform 0.15s var(--ease-soft, ease);
+}
+
+.pin-enter-from,
+.pin-leave-to {
+  opacity: 0;
+  transform: scale(0.6);
+}
+
+@keyframes pin-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

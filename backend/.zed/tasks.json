@@ -1,0 +1,11 @@
+[
+  {
+    // 主 worktree 存在 .env 时复制到新 worktree，再同步全部依赖组
+    "label": "copy .env and uv sync",
+    "command": "[ -f \"$ZED_MAIN_GIT_WORKTREE/.env\" ] && cp \"$ZED_MAIN_GIT_WORKTREE/.env\" \"$ZED_WORKTREE_ROOT/.env\"; uv sync --all-groups",
+    "hooks": ["create_worktree"],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "reveal": "no_focus",
+    "hide": "on_success"
+  }
+]

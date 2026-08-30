@@ -1,0 +1,61 @@
+{
+  "name": "vite-project",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vp dev",
+    "build": "run-p type-check \"build-only {@}\" --",
+    "preview": "vp preview",
+    "build-only": "vp build",
+    "type-check": "vue-tsc --build",
+    "lint": "run-s lint:oxlint",
+    "format": "vp fmt --write src/",
+    "generate-api": "openapi-ts",
+    "prepare": "vp config",
+    "docs:dev": "vitepress dev docs --port 5174",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "dependencies": {
+    "@pinia/colada": "^1.4.2",
+    "@pinia/colada-plugin-auto-refetch": "^0.2.6",
+    "@tailwindcss/vite": "^4.3.3",
+    "@valibot/i18n": "^1.2.0",
+    "@vee-validate/valibot": "^4.15.1",
+    "@vueuse/core": "^14.4.0",
+    "echarts": "^5.6.0",
+    "echarts-gl": "^2.1.0",
+    "ky": "^1.14.3",
+    "material-symbols": "^0.40.2",
+    "pinia": "^3.0.4",
+    "tailwindcss": "^4.3.3",
+    "valibot": "^1.4.2",
+    "vee-validate": "^4.15.1",
+    "vue": "^3.5.41",
+    "vue-echarts": "^6.7.3",
+    "vue-router": "^5.2.0",
+    "vue-sonner": "^2.0.9"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "^0.93.1",
+    "@tsconfig/node24": "^24.0.4",
+    "@types/node": "^24.13.3",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vizejs/vite-plugin": "^0.28.0",
+    "@vue/tsconfig": "^0.8.1",
+    "jiti": "^2.7.0",
+    "npm-run-all2": "^8.0.4",
+    "typescript": "~5.9.3",
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.4",
+    "vite-plugin-vue-devtools": "^8.2.1",
+    "vite-plus": "catalog:",
+    "vitepress": "2.0.0-alpha.19",
+    "vitest": "4.1.10",
+    "vue-tsc": "^3.3.9"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "packageManager": "pnpm@11.11.0"
+}

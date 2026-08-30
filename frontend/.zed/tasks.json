@@ -1,0 +1,11 @@
+[
+  {
+    // 新建 worktree 后自动安装依赖并生成/校验 API
+    "label": "bootstrap new worktree",
+    "command": "vp install && vpr generate-api && vpr type-check",
+    "hooks": ["create_worktree"],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "reveal": "no_focus",
+    "hide": "on_success"
+  }
+]

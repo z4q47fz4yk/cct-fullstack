@@ -1,0 +1,73 @@
+{
+  "blocks": [
+    {
+      "category": "labor",
+      "row_locator": {
+        "column": 0,
+        "label_regex": "^(?:现场人员|人员数量)$"
+      },
+      "rows": [
+        { "label_regex": "^(?:现场人员)$", "content_regex": "(.*)" },
+        { "label_regex": "^(?:人员数量)$", "content_regex": "(\\d+)\\s*人?" }
+      ],
+      "cleaning": {
+        "break_on_empty": true,
+        "ignore_values": ["总计", "总量", "总人数", "total", "0", "/"]
+      },
+      "fields": {
+        "name": { "parts": [{"row": 0, "group": 0}], "sep": "" },
+        "quantity": { "parts": [{"row": 1, "group": 1}], "sep": "" }
+      }
+    },
+    {
+      "category": "machinery",
+      "row_locator": {
+        "column": 0,
+        "label_regex": "^(?:施工机械|数量|机械型号)$"
+      },
+      "rows": [
+        { "label_regex": "^(?:施工机械)$", "content_regex": "(.*)" },
+        { "label_regex": "^(?:数量)$", "content_regex": "(\\d+)\\s*(?:台|台班)?" },
+        { "label_regex": "^(?:机械型号)$", "content_regex": "(.*)" }
+      ],
+      "cleaning": {
+        "break_on_empty": true,
+        "ignore_values": [
+          "0",
+          "/",
+          "每台型号均需列出，大型机械安拆、顶升等关键管理动作均需记录在册"
+        ]
+      },
+      "fields": {
+        "name": {
+          "parts": [{"row": 0, "group": 0}, {"row": 2, "group": 0}],
+          "sep": "-",
+          "filter_empty": true
+        },
+        "quantity": { "parts": [{"row": 1, "group": 1}], "sep": "" }
+      }
+    },
+    {
+      "category": "transport",
+      "cargo_dimension": "运输货物",
+      "row_locator": {
+        "column": 0,
+        "label_regex": "^(?:货物类别|运输类别|运输工具|车辆|车型|车次|运输数量)$"
+      },
+      "rows": [
+        { "label_regex": "^(?:货物类别|运输类别)$", "content_regex": "(.*)" },
+        { "label_regex": "^(?:运输工具|车辆|车型)$", "content_regex": "(.*)" },
+        { "label_regex": "^(?:车次|运输数量)$", "content_regex": "(\\d+)\\s*(?:车次|次)?" }
+      ],
+      "cleaning": {
+        "break_on_empty": true,
+        "ignore_values": ["0", "/", "总计", "总量", "total"]
+      },
+      "fields": {
+        "name": { "parts": [{"row": 1, "group": 0}], "sep": "" },
+        "quantity": { "parts": [{"row": 2, "group": 1}], "sep": "" },
+        "cargo": { "parts": [{"row": 0, "group": 0}], "sep": "" }
+      }
+    }
+  ]
+}

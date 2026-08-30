@@ -1,0 +1,290 @@
+@import url('https://fonts.font.im/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import 'material-symbols/outlined.css' layer(base);
+@import 'tailwindcss';
+
+/* ============================================================
+ * 主题变量（自研，替代 daisyui/theme 插件）
+ *
+ * 工程数据面板 —— 专业工程软件视觉
+ * 深色主题挂 :root（无 JS 首屏兜底）+ [data-theme='starglass']
+ * 亮色主题挂 [data-theme='starglass-light']
+ * 切换机制：useTheme.ts 写 document.documentElement.dataset.theme
+ *
+ * 设计原则：
+ *   1. 平实底色 + 发丝线分割（无玻璃模糊、无渐变、无噪点、无光晕）
+ *   2. 紧凑控件与数据密度优先
+ *   3. 数字等宽（tabular-nums）+ 千分位 + 统一精度
+ *   4. 语义色专用：绿=低碳 / 橙=加速 / 红=关键路径与超标 / 蓝=常规
+ *   5. 圆角收敛：容器 8px、控件 6px
+ * ============================================================ */
+
+/* 桥接：让 Tailwind 工具类（bg-base-100 / rounded-field / shadow-glass-2 等）
+ * 引用运行时主题变量。值在下方 :root / [data-theme] 块定义。 */
+@theme inline {
+  --font-sans:
+    'Inter', 'HarmonyOS Sans SC', 'Noto Sans SC', 'PingFang SC', system-ui, -apple-system,
+    sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  --color-base-100: var(--color-base-100);
+  --color-base-200: var(--color-base-200);
+  --color-base-300: var(--color-base-300);
+  --color-base-content: var(--color-base-content);
+
+  --color-primary: var(--color-primary);
+  --color-primary-content: var(--color-primary-content);
+  --color-secondary: var(--color-secondary);
+  --color-secondary-content: var(--color-secondary-content);
+  --color-accent: var(--color-accent);
+  --color-accent-content: var(--color-accent-content);
+  --color-tertiary: var(--color-tertiary);
+  --color-tertiary-content: var(--color-tertiary-content);
+
+  --color-neutral: var(--color-neutral);
+  --color-neutral-content: var(--color-neutral-content);
+
+  --color-info: var(--color-info);
+  --color-info-content: var(--color-info-content);
+  --color-success: var(--color-success);
+  --color-success-content: var(--color-success-content);
+  --color-warning: var(--color-warning);
+  --color-warning-content: var(--color-warning-content);
+  --color-error: var(--color-error);
+  --color-error-content: var(--color-error-content);
+
+  /* 领域语义色：加速专用橙 */
+  --color-accel: var(--color-accel);
+  --color-accel-content: var(--color-accel-content);
+
+  --color-fg: var(--color-fg);
+  --color-fg-muted: var(--color-fg-muted);
+  --color-fg-subtle: var(--color-fg-subtle);
+
+  --color-cyan: var(--color-cyan);
+  --color-indigo: var(--color-indigo);
+  --color-blue: var(--color-blue);
+  --color-violet: var(--color-violet);
+  --color-purple: var(--color-purple);
+  --color-teal: var(--color-teal);
+  --color-green: var(--color-green);
+  --color-emerald: var(--color-emerald);
+  --color-amber: var(--color-amber);
+  --color-orange: var(--color-orange);
+  --color-rose: var(--color-rose);
+  --color-red: var(--color-red);
+
+  --color-surface-deep: var(--color-surface-deep);
+  --color-panel: var(--color-panel);
+  --color-panel-hover: var(--color-panel-hover);
+  --color-panel-border: var(--color-panel-border);
+  --color-panel-border-hover: var(--color-panel-border-hover);
+  --color-panel-shadow: var(--color-panel-shadow);
+
+  --radius-selector: var(--radius-selector);
+  --radius-field: var(--radius-field);
+  --radius-box: var(--radius-box);
+  --radius-pill: 9999px;
+
+  --tracking-tight: -0.02em;
+  --tracking-wide: 0.04em;
+
+  --shadow-glass-1: var(--shadow-glass-1);
+  --shadow-glass-2: var(--shadow-glass-2);
+  --shadow-glass-3: var(--shadow-glass-3);
+
+  --ease-soft: var(--ease-soft);
+  --ease-snap: var(--ease-snap);
+}
+
+/* ── 深色主题：starglass（工程深色面板） ── */
+:root,
+[data-theme='starglass'] {
+  color-scheme: dark;
+
+  --color-base-100: oklch(0.145 0.015 260);
+  --color-base-200: oklch(0.17 0.015 260);
+  --color-base-300: oklch(0.2 0.015 260);
+  --color-base-content: oklch(0.9 0.01 260);
+
+  /* 工程蓝主色（250°），info 为青蓝（230°） */
+  --color-primary: oklch(0.6 0.15 250);
+  --color-primary-content: oklch(0.97 0.01 250);
+
+  --color-secondary: oklch(0.6 0.15 290);
+  --color-secondary-content: oklch(0.97 0.01 290);
+
+  --color-accent: oklch(0.68 0.15 340);
+  --color-accent-content: oklch(0.97 0.01 340);
+
+  --color-tertiary: oklch(0.58 0.16 290);
+  --color-tertiary-content: oklch(0.97 0.01 290);
+
+  --color-neutral: oklch(0.24 0.015 260);
+  --color-neutral-content: oklch(0.75 0.01 260);
+
+  --color-info: oklch(0.62 0.12 230);
+  --color-info-content: oklch(0.97 0.01 230);
+  --color-success: oklch(0.68 0.16 155);
+  --color-success-content: oklch(0.14 0.04 155);
+  --color-warning: oklch(0.78 0.13 75);
+  --color-warning-content: oklch(0.2 0.04 75);
+  --color-error: oklch(0.62 0.19 20);
+  --color-error-content: oklch(0.97 0.01 20);
+
+  /* 加速策略专用橙（55°），与 warning 琥珀（75°）区分 */
+  --color-accel: oklch(0.72 0.17 55);
+  --color-accel-content: oklch(0.2 0.04 55);
+
+  --radius-selector: 0.375rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.5rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+
+  --color-fg: var(--color-base-content);
+  --color-fg-muted: oklch(0.7 0.01 260);
+  --color-fg-subtle: oklch(0.52 0.01 260);
+
+  /* 图表辅助色（数据系列色，非语义色） */
+  --color-cyan: #22d3ee;
+  --color-indigo: #818cf8;
+  --color-blue: #60a5fa;
+  --color-violet: #a78bfa;
+  --color-purple: #c084fc;
+  --color-teal: #2dd4bf;
+  --color-green: #4ade80;
+  --color-emerald: #34d399;
+  --color-amber: #fbbf24;
+  --color-orange: #fb923c;
+  --color-rose: #fb7185;
+  --color-red: #f87171;
+
+  --color-surface-deep: #0d1117;
+
+  /* 扁平面板：纯色底 + 发丝线边框，无模糊无渐变 */
+  --color-panel: oklch(0.17 0.015 260);
+  --color-panel-hover: oklch(0.195 0.015 260);
+  --color-panel-border: oklch(1 0 0 / 0.08);
+  --color-panel-border-hover: oklch(1 0 0 / 0.16);
+  --color-panel-shadow: oklch(0 0 0 / 0.25);
+
+  /* 紧凑阴影（仅层级提示，不承担视觉分隔） */
+  --shadow-glass-1: 0 1px 2px var(--color-panel-shadow);
+  --shadow-glass-2: 0 4px 12px var(--color-panel-shadow);
+  --shadow-glass-3: 0 16px 40px var(--color-panel-shadow);
+
+  --ease-soft: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-snap: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ── 亮色主题：starglass-light（工程浅色面板） ── */
+[data-theme='starglass-light'] {
+  color-scheme: light;
+
+  --color-base-100: oklch(0.975 0.004 260);
+  --color-base-200: oklch(0.955 0.005 260);
+  --color-base-300: oklch(0.925 0.006 260);
+  --color-base-content: oklch(0.24 0.015 260);
+
+  --color-primary: oklch(0.45 0.14 250);
+  --color-primary-content: oklch(0.97 0.01 250);
+
+  --color-secondary: oklch(0.47 0.15 290);
+  --color-secondary-content: oklch(0.97 0.01 290);
+
+  --color-accent: oklch(0.52 0.15 340);
+  --color-accent-content: oklch(0.97 0.01 340);
+
+  --color-tertiary: oklch(0.46 0.16 290);
+  --color-tertiary-content: oklch(0.97 0.01 290);
+
+  --color-neutral: oklch(0.85 0.005 260);
+  --color-neutral-content: oklch(0.45 0.01 260);
+
+  --color-info: oklch(0.5 0.12 230);
+  --color-info-content: oklch(0.97 0.01 230);
+  --color-success: oklch(0.48 0.14 155);
+  --color-success-content: oklch(0.97 0.01 155);
+  --color-warning: oklch(0.62 0.13 75);
+  --color-warning-content: oklch(0.22 0.04 75);
+  --color-error: oklch(0.52 0.18 20);
+  --color-error-content: oklch(0.97 0.01 20);
+
+  --color-accel: oklch(0.58 0.16 55);
+  --color-accel-content: oklch(0.97 0.01 55);
+
+  --radius-selector: 0.375rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.5rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+
+  --color-fg: var(--color-base-content);
+  --color-fg-muted: oklch(0.5 0.01 260);
+  --color-fg-subtle: oklch(0.63 0.01 260);
+
+  --color-cyan: #0891b2;
+  --color-indigo: #4f46e5;
+  --color-blue: #2563eb;
+  --color-violet: #7c3aed;
+  --color-purple: #9333ea;
+  --color-teal: #0d9488;
+  --color-green: #16a34a;
+  --color-emerald: #059669;
+  --color-amber: #d97706;
+  --color-orange: #ea580c;
+  --color-rose: #e11d48;
+  --color-red: #dc2626;
+
+  --color-surface-deep: #eef0f3;
+
+  --color-panel: oklch(1 0 0);
+  --color-panel-hover: oklch(0.965 0.005 260);
+  --color-panel-border: oklch(0 0 0 / 0.1);
+  --color-panel-border-hover: oklch(0 0 0 / 0.2);
+  --color-panel-shadow: oklch(0 0 0 / 0.12);
+
+  --shadow-glass-1: 0 1px 2px var(--color-panel-shadow);
+  --shadow-glass-2: 0 4px 12px var(--color-panel-shadow);
+  --shadow-glass-3: 0 16px 40px var(--color-panel-shadow);
+
+  --ease-soft: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-snap: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ========== Material Symbols Font Configuration ========== */
+.material-symbols-outlined {
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+}
+
+/* 数值字体特性：等宽数字 + Inter ss01（让指标/表格数字对齐、更精致） */
+@utility font-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'ss01', 'tnum';
+}
+
+/* 页面背景：平实工程底色（无渐变、无动画） */
+body {
+  min-height: 100dvh;
+  background: var(--color-base-100);
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+/* 真实 <fieldset> 元素：清除 UA 默认 margin。
+ * 放在 base 层（低于 utilities），不影响 space-y-* 等工具类外边距。 */
+@layer base {
+  fieldset {
+    margin-block: 0;
+  }
+}
+
+@import './utility.css';
+@import './components.css';
+@import './panel.css';

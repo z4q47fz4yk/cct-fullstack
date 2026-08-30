@@ -1,0 +1,170 @@
+@startuml
+skinparam handwritten false
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam sequenceArrowThickness 2
+skinparam sequenceParticipantBorderThickness 2
+
+skinparam sequence {
+    ArrowColor #333
+    ActorBorderColor #333
+    LifeLineBorderColor #999
+    LifeLineBackgroundColor #eee
+    ParticipantBorderColor #333
+    ParticipantBackgroundColor #fff
+    ParticipantFontColor #333
+    ActorBackgroundColor #fff
+    ActorFontColor #333
+}
+
+actor "Frontend" as FE
+participant "API Layer" as API
+participant "DailyReportService" as SVC
+participant "Parser" as PSR
+database "PostgreSQL" as DB
+
+== Step 1: Parse Excel ==
+FE -> API: POST /daily-report/parse
+FE -> API: Content-Type: multipart/form-data
+FE -> API: usage_date, file: daily_report.xlsx
+activate API #e1f5fe
+
+API -> SVC: parse_excel(filename, usage_date, file_content)
+activate SVC #e8f5e9
+
+SVC -> PSR: parse_daily_report(filename, content)
+activate PSR #fff3e0
+PSR -> PSR: parse_report(polars_df)
+PSR --> SVC: ParsedResult(items, warnings)
+deactivate PSR
+
+SVC -> SVC: _map_resources(parsed_items)
+SVC -> DB: SELECT * FROM resource WHERE name = ?
+DB --> SVC: existing_resources
+
+SVC -> DB: INSERT INTO import_batch
+SVC --> API: batch, parsed_items
+
+deactivate SVC
+API --> FE: DailyReportParseResponse
+API --> FE: batchId, parsedItems[], warnings[]
+deactivate API
+
+note right of FE
+  parsedItems: [
+    { resourceName, quantity, category,
+      mappingStatus: "EXACT_MATCH|NEW",
+      resourceId }
+  ]
+end note
+
+== Step 2: Confirm Mapping ==
+
+alt MappingStatus == NEW
+  FE -> FE: User chooses action:
+  note right of FE
+    USE_EXISTING + resourceId
+    or CREATE_NEW + newResource
+    or SKIP
+  end note
+end
+
+FE -> API: POST /daily-report/batches/{batchId}/confirm-mapping
+FE -> API: ConfirmMappingRequest
+activate API #e1f5fe
+
+note left of API
+  mappings: [
+    { resourceName, action,
+      resourceId?, newResource? }
+  ]
+end note
+
+API -> SVC: confirm_mapping(batch_id, mappings)
+activate SVC #e8f5e9
+
+SVC -> DB: SELECT parsed_items FROM import_batch
+DB --> SVC: parsed_items
+
+alt action == CREATE_NEW
+  SVC -> DB: INSERT INTO resource
+  SVC -> DB: RETURNING id
+end
+
+SVC -> DB: UPDATE import_batch
+SVC -> DB: SET confirmed_items = ?, status = 'MAPPING'
+SVC --> API: ConfirmMappingResponse
+
+deactivate SVC
+API --> FE: batchId, confirmedItems[]
+deactivate API
+
+note right of FE
+  confirmedItems: [
+    { resourceName, resourceId,
+      totalQuantity, allocatedQuantity: 0 }
+  ]
+end note
+
+== Step 3: Allocate Resources ==
+
+FE -> FE: User allocates to tasks
+note right of FE
+  allocations: [
+    { resourceName, taskId, quantity }
+  ]
+end note
+
+FE -> API: POST /daily-report/batches/{batchId}/allocate
+FE -> API: AllocateRequest
+activate API #e1f5fe
+
+API -> SVC: allocate(batch_id, allocations)
+activate SVC #e8f5e9
+
+SVC -> DB: SELECT confirmed_items FROM import_batch
+SVC -> SVC: Validate and summarize allocations
+
+SVC -> DB: UPDATE import_batch
+SVC -> DB: SET allocated_items = ?, status = 'ALLOCATING'
+
+SVC --> API: AllocateResponse
+
+deactivate SVC
+API --> FE: batchId, allocationSummary[]
+deactivate API
+
+note right of FE
+  allocationSummary: [
+    { resourceName, resourceId,
+      total, allocated, remaining,
+      tasks: [{taskId, taskName, quantity}] }
+  ]
+end note
+
+== Step 4: Submit ==
+
+FE -> API: POST /daily-report/batches/{batchId}/submit
+activate API #e1f5fe
+
+API -> SVC: submit(batch_id)
+activate SVC #e8f5e9
+
+SVC -> DB: SELECT allocated_items FROM import_batch
+SVC -> DB: WHERE status = 'ALLOCATING'
+
+loop For each allocation
+  SVC -> DB: INSERT INTO task_resource_usage
+  SVC -> DB: (task_id, resource_id, usage_date, quantity, batch_id)
+end
+
+SVC -> DB: UPDATE import_batch
+SVC -> DB: SET status = 'COMPLETED', imported_rows = ?
+
+SVC --> API: SubmitResponse
+
+deactivate SVC
+API --> FE: batchId, importedCount, taskResourceUsageIds[]
+deactivate API
+
+@enduml
