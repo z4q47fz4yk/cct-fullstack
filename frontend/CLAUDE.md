@@ -32,8 +32,9 @@ vp check --fix
 # 预览生产构建
 vp preview
 
-# 从后端 OpenAPI 规范生成 API 客户端
+# 从入库根 openapi.json 离线生成 API 客户端（无需后端运行）
 vpr generate-api
+# 推荐统一走 scripts/gen-client.sh
 ```
 
 # 项目架构
@@ -167,7 +168,7 @@ definePage({
 
 ## 反模式 (禁止)
 
-- **禁止** 修改 `src/client/` 目录 — 运行 `pnpm generate-api` 重新生成
+- **禁止** 修改 `src/client/` 目录 — 运行 `scripts/gen-client.sh`（`vpr generate-api`，从入库根 `openapi.json` 离线生成）重新生成
 - **禁止** 手动编辑 `typed-router.d.ts` — 自动生成
 - **禁止** UI 使用英文 — 所有界面文本必须中文
 - **禁止** 使用 `text-white` 等 Tailwind 原始类 — 用组件层语义类 (`btn`, `input` 等)
@@ -197,12 +198,13 @@ definePage({
 
 ## API 客户端架构
 
-本项目使用 **@hey-api/openapi-ts** 从后端 OpenAPI 规范自动生成类型安全的 API 客户端：
+本项目使用 **@hey-api/openapi-ts** 从**入库的仓库根 `openapi.json`**（由根 `scripts/openapi-export.sh` 从后端代码导出）自动生成类型安全的 API 客户端：
 
 ### 生成流程
 
 ```bash
-vpr generate-api  # 从 openapi.json 生成客户端代码
+bash ../scripts/gen-client.sh    # 从 openapi.json 离线生成客户端代码（无需后端运行）
+# 等价于：cd frontend && vpr generate-api
 ```
 
 ### 生成的代码
@@ -333,4 +335,4 @@ try {
 
 # 可用工具
 
-- agent-browser: 加载 skill，通过 bash 命令 `agent-browser` 使用，如 `agent-browser open http://localhost:5173`
+- agent-browser: 加载 skill，通过 bash 命令 `agent-browser` 使用，如 `agent-browser open http://localhost:5173`（5173 为默认端口；多 worktree 下取仓库根 .env 的 FRONTEND_PORT）

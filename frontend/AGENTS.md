@@ -35,22 +35,22 @@ src/
 
 ## WHERE TO LOOK
 
-| Task           | Location                                                               |
-| -------------- | ---------------------------------------------------------------------- |
-| 添加新页面     | `src/pages/` — 创建 `.vue` 文件，路由自动生成                          |
-| 添加新 API     | 后端更新 OpenAPI → `vpr generate-api`                                  |
-| 修改主题变量   | `src/assets/base.css` — 主题 CSS 变量 (starglass / starglass-light)    |
-| 修改组件样式   | `src/assets/components.css` — 自研组件层 (类名与 DaisyUI 兼容)         |
-| 面板容器       | `src/assets/panel.css` — panel / panel-hover / panel-grid 原子类       |
-| 任务/进度逻辑  | `src/composables/useScheduleApi.ts`                                    |
-| 日报工作流状态 | `src/stores/report.ts` (`useDailyReportStoreV2`)                       |
-| 优化分析状态   | `src/stores/insights.ts` (`useInsightsStore`)                          |
-| 优化参数配置   | `src/types/optimization.ts`                                            |
-| 资源管理 API   | `src/composables/useResourceApi.ts`                                    |
-| 图表颜色       | `src/utils/themeColors.ts` — 从 CSS 变量读取                           |
-| 资源类别色     | `getCategoryColor()` — 类别色与语义色分离（材料=青，绿仅用于低碳）     |
-| 错误处理       | `src/utils/error.ts` — ApiError + formatHttpError                      |
-| 数字格式化     | `src/utils/format.ts` — fmtNumber, fmtWanYuan, fmtDays, fmtEmission 等 |
+| Task           | Location                                                                                                |
+| -------------- | ------------------------------------------------------------------------------------------------------- |
+| 添加新页面     | `src/pages/` — 创建 `.vue` 文件，路由自动生成                                                           |
+| 添加新 API     | 后端更新 OpenAPI → 根 AGENTS.md 契约 checklist（`scripts/openapi-export.sh` + `scripts/gen-client.sh`） |
+| 修改主题变量   | `src/assets/base.css` — 主题 CSS 变量 (starglass / starglass-light)                                     |
+| 修改组件样式   | `src/assets/components.css` — 自研组件层 (类名与 DaisyUI 兼容)                                          |
+| 面板容器       | `src/assets/panel.css` — panel / panel-hover / panel-grid 原子类                                        |
+| 任务/进度逻辑  | `src/composables/useScheduleApi.ts`                                                                     |
+| 日报工作流状态 | `src/stores/report.ts` (`useDailyReportStoreV2`)                                                        |
+| 优化分析状态   | `src/stores/insights.ts` (`useInsightsStore`)                                                           |
+| 优化参数配置   | `src/types/optimization.ts`                                                                             |
+| 资源管理 API   | `src/composables/useResourceApi.ts`                                                                     |
+| 图表颜色       | `src/utils/themeColors.ts` — 从 CSS 变量读取                                                            |
+| 资源类别色     | `getCategoryColor()` — 类别色与语义色分离（材料=青，绿仅用于低碳）                                      |
+| 错误处理       | `src/utils/error.ts` — ApiError + formatHttpError                                                       |
+| 数字格式化     | `src/utils/format.ts` — fmtNumber, fmtWanYuan, fmtDays, fmtEmission 等                                  |
 
 ## CONVENTIONS
 
@@ -112,7 +112,7 @@ src/
 
 ## ANTI-PATTERNS
 
-- **禁止** 直接修改 `src/client/` — 运行 `vpr generate-api` 重新生成
+- **禁止** 直接修改 `src/client/` — 运行 `scripts/gen-client.sh`（`vpr generate-api`，从入库根 `openapi.json` 离线生成）
 - **禁止** 手动编辑 `typed-router.d.ts` — 自动生成
 - **禁止** UI 使用英文 — 所有界面文本必须中文
 - **禁止** 使用 `text-white` 等 Tailwind 原始类 — 用组件层语义类 (`btn`, `input` 等)
@@ -155,13 +155,13 @@ vpr build-only   # 仅构建，不进行类型检查
 vpr type-check   # 类型检查（vp check 不检查类型：oxlint 不支持 vue 模板）
 vp check --fix   # 代码检查 + 格式化 (oxlint + oxfmt)
 vp preview       # 预览生产构建
-vpr generate-api # 从 OpenAPI 生成客户端 (需后端运行)
+vpr generate-api # 从入库根 openapi.json 离线生成客户端（无后端运行亦可；推荐 scripts/gen-client.sh）
 ```
 
 ## NOTES
 
 - Node.js 要求：`^20.19.0 || >=22.12.0`
-- 后端 API：`http://localhost:8000`
+- 后端 API：由仓库根 `.env` 的 `VITE_API_BASE` 决定（默认 `http://localhost:8000`；多 worktree 下自动指向本 worktree 的后端，见根 AGENTS.md）
 - **无测试框架** — 项目暂无 Vitest/Jest
 - **无 CI/CD** — 无 GitHub Actions 配置
 - Store 文件名 `report.ts`，导出 `useDailyReportStoreV2`

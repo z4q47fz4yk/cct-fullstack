@@ -19,6 +19,12 @@ fastapi dev src/app.py            # 开发服务器（带 reload）
 .venv/bin/uvicorn src.app:app --host 0.0.0.0 --port 8000   # 无 reload 直启
 ```
 
+> **单仓库多 worktree 环境**：用根目录脚本启动，端口自动取仓库根 `.env` 的
+> `BACKEND_PORT`（默认 8000），前后端端口一一对应：
+> ```bash
+> bash ../scripts/dev-backend.sh   # 或在任意位置 bash scripts/dev-backend.sh
+> ```
+
 ### Code Quality
 ```bash
 ty check
@@ -49,6 +55,18 @@ DATABASE_URL="postgresql+asyncpg://cct:cct@localhost/cctv2-test" .venv/bin/alemb
 > 注意：xdist 会 fork 多个 worker，各 worker 独立连接测试数据库。
 > 测试使用嵌套事务回滚隔离，跨文件并行通常安全；若出现数据串扰，
 > 改用 `.venv/bin/pytest -n 4 --dist loadscope`（按测试文件分片）。
+
+### CORS（`src/config.py` 的 `Settings.cors_mode()`）
+
+- `CORS_ALLOW_ALL=true`（多 worktree 开发默认，见仓库根 `.env`/`scripts/worktree-env.sh`）
+  → `allow_origins=["*"]` 且 `allow_credentials=False`（浏览器规则强制，本应用无 cookie/认证）；
+- 否则按 `CORS_ORIGINS` 白名单（逗号分隔，默认 `localhost:5173/5174/5175/4173`）+ 允许凭据。
+
+### OpenAPI 契约导出（入库快照）
+
+后端代码 → 仓库根 `openapi.json`：`bash ../scripts/openapi-export.sh`
+（仅导入 app 对象，离线安全）。契约变更后必须同步快照并重新生成前端客户端，
+流程见根 `AGENTS.md` 的契约变更 checklist；`bash ../scripts/check-contract.sh` 校验一致性。
 
 ## Architecture
 

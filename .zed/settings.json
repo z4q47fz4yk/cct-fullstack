@@ -1,3 +1,11 @@
+// Folder-specific settings
+//
+// For a full list of overridable settings, and general information on folder-specific settings,
+// see the documentation: https://zed.dev/docs/configuring-zed#settings-files
+//
+// 单仓库合并说明：
+// - lsp 段：来自原 frontend/.zed/settings.json（oxlint + oxfmt）；
+// - languages.Python：来自原 backend/.zed/settings.json（ty + basedpyright + ruff）。
 {
   "lsp": {
     "oxlint": {
@@ -22,6 +30,9 @@
     }
   },
   "languages": {
+    "Python": {
+      "language_servers": ["ty", "basedpyright", "ruff"],
+    },
     "CSS": {
       "format_on_save": "on",
       "prettier": {

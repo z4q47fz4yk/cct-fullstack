@@ -4,15 +4,18 @@
 
 ## 架构一览
 
-CCT 由两部分组成：
+CCT 是前后端**单仓库**（根目录含 `frontend/` 与 `backend/`），由两部分组成：
 
 ```
 ┌─────────────────────┐       ┌──────────────────────┐
-│  前端 vite-project   │  HTTP │  后端 backendv2       │
+│  前端 frontend/      │  HTTP │  后端 backend/        │
 │  Vue 3 + VitePress   │ ─────▶│  FastAPI + PostgreSQL│
-│  http://localhost:5173 │      │  http://localhost:8000 │
+│  默认 :5173          │       │  默认 :8000           │
 └─────────────────────┘       └──────────────────────┘
 ```
+
+端口为**默认值**：多 worktree 并行开发时每个 worktree 拥有独立端口三元组，
+由仓库根 `.env` 统一管理（前后端共用一份 ⇒ 端口一一对应），见根 `AGENTS.md`。
 
 ## 环境要求
 
@@ -31,22 +34,22 @@ CCT 由两部分组成：
 ## 第一步：启动后端
 
 ```bash
-cd backendv2
+cd backend
 
-# 1. 安装依赖
-uv sync
+# 1. 安装依赖（venv 含 test/migrate 组）
+uv sync --all-groups
 
 # 2. 创建数据库（首次）
 psql -U postgres -c "CREATE DATABASE cctv2;"
 
-# 3. 配置数据库连接（backendv2/.env）
-# DATABASE_URL=postgresql+asyncpg://cct:cct@localhost:5432/cctv2
+# 3. 配置数据库连接（backend/.env，或仓库根 .env）
+# DATABASE_URL=postgres+asyncpg://cct:cct@localhost:5432/cctv2
 
 # 4. 执行数据库迁移
-uv run --group migrate alembic upgrade head
+.venv/bin/alembic upgrade head
 
-# 5. 启动服务（开发模式，热重载）
-uv run uvicorn src.app:app --reload --reload-dir src
+# 5. 启动服务（开发模式，热重载；端口默认 8000）
+bash ../scripts/dev-backend.sh
 ```
 
 后端启动后：
@@ -57,29 +60,36 @@ uv run uvicorn src.app:app --reload --reload-dir src
 ## 第二步：启动前端与文档站
 
 ```bash
-cd vite-project
+cd frontend
 
 # 安装依赖（首次）
 vp install
 
-# 启动开发服务器（应用，端口 5173）
-vp dev
+# 从入库的 openapi.json 离线生成客户端（首次，无需后端运行）
+bash ../scripts/gen-client.sh
 
-# 另开一个终端：启动文档站开发服务器（端口 5174）
-vp run docs:dev
+# 启动开发服务器（应用，端口默认 5173，由仓库根 .env 决定）
+bash ../scripts/dev-frontend.sh
+
+# 另开一个终端：启动文档站开发服务器（端口默认 5174）
+bash ../scripts/dev-docs.sh
 ```
 
 应用启动后访问 <http://localhost:5173>。应用与文档站**同源部署**：
 
 - 应用页面：<http://localhost:5173/>
-- 文档站：<http://localhost:5173/docs/>（应用 dev server 将 `/docs` 代理到 5174 的 VitePress）
+- 文档站：<http://localhost:5173/docs/>（应用 dev server 将 `/docs` 代理到 VitePress dev server）
 - 文档站独立访问：<http://localhost:5174/>
 
 应用左上角导航栏与文档站导航栏均有对方入口（「文档」/「打开系统」），可互相跳转。
 
 ::: tip
-前端通过 `src/hey-api.ts` 中的 `baseUrl: 'http://localhost:8000'` 访问后端，如后端部署在其他地址，请修改该文件。
+前端访问后端的基址由**仓库根 `.env`** 的 `VITE_API_BASE` 决定（默认 `http://localhost:8000`），
+多 worktree 下自动指向本 worktree 的后端，无需修改代码。见根 `AGENTS.md`。
 :::
+
+> 多 worktree 并行开发时端口随 `.env` 变化（如第二个 worktree 为 5174/8001/5175），
+> 请阅读根 `AGENTS.md` 的「多 worktree 开发」。
 
 ## 第三步：走通第一个完整流程
 
@@ -131,28 +141,30 @@ vp run docs:dev
 ### 后端
 
 ```bash
-uv run uvicorn src.app:app --reload --reload-dir src   # 启动开发服务
-uv run pytest                                           # 运行测试
-uv run ruff check .                                     # 代码检查
-uv run --group migrate alembic upgrade head             # 数据库迁移
+bash ../scripts/dev-backend.sh   # 启动开发服务（端口取根 .env 的 BACKEND_PORT，默认 8000）
+.venv/bin/pytest                 # 运行测试（或激活 venv 后直接用 pytest）
+ruff check .                     # 代码检查（全局工具，无需 uv run）
+ty check                         # 类型检查
+.venv/bin/alembic upgrade head   # 数据库迁移
 ```
 
 ### 前端
 
 ```bash
-vp dev            # 启动开发服务器
-vp build          # 构建生产版本（含类型检查）
-vpr build-only    # 仅构建，不进行类型检查
-vp check --fix    # 代码检查 + 格式化
-vpr generate-api  # 从后端 OpenAPI 生成 API 客户端（需后端运行）
+bash ../scripts/dev-frontend.sh  # 启动开发服务器（端口取根 .env 的 FRONTEND_PORT，默认 5173）
+vp build                         # 构建生产版本（含类型检查）
+vpr build-only                   # 仅构建，不进行类型检查
+vp check --fix                   # 代码检查 + 格式化
+bash ../scripts/gen-client.sh    # 从入库 openapi.json 离线生成客户端
+bash ../scripts/check-contract.sh # 契约一致性校验（后端代码 ↔ openapi.json ↔ 前端）
 ```
 
 ### 文档站
 
 ```bash
-vp run docs:dev      # 启动文档站开发服务器（http://localhost:5174，应用 /docs 代理指向它）
-vp run docs:build    # 构建文档站（产物带 /docs/ base 前缀，输出到 docs/.vitepress/dist）
-vp run docs:preview  # 预览构建产物
+bash ../scripts/dev-docs.sh      # 启动文档站开发服务器（端口取根 .env 的 DOCS_PORT，默认 5174）
+vp run docs:build                # 构建文档站（产物带 /docs/ base 前缀，输出到 docs/.vitepress/dist）
+vp run docs:preview              # 预览构建产物
 ```
 
 ## 部署（L1 同源双构建）

@@ -38,6 +38,9 @@ __screenshots__/
 # Vite
 *.timestamp-*-*.mjs
 
+# 前端本地环境（端口/API 基址统一由仓库根 .env 管理，见 scripts/worktree-env.sh）
+.env
+
 # @hey-api/openapi-ts
 src/client/
 
@@ -51,11 +54,8 @@ docs/.vitepress/dist/
 # 保密文件：施工日报示例 xlsx 不上传服务器（csv 版本经 git-lfs 跟踪）
 docs/**/*.xlsx
 
-# file based router
-typed-router.d.ts
-
-# OpenAPI
-openapi.json
+# file based router（入库管理：全新 worktree 无需先跑 dev 即可类型检查；dev 启动会自动覆写为同内容）
+# typed-router.d.ts
 
 # Code Agent
 .mimocode

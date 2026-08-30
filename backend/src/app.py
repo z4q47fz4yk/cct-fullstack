@@ -70,15 +70,15 @@ app.include_router(weather.router)
 app.include_router(evaluation.router)
 app.include_router(diagnostics.router)
 
+# CORS 由环境变量控制（backend/src/config.py 的 Settings.cors_mode）：
+# - CORS_ALLOW_ALL=true（多 worktree 开发默认，见仓库根 .env / scripts/worktree-env.sh）
+#   允许任意来源跨域，适配前端端口变化；此时 allow_credentials=False；
+# - 否则按 CORS_ORIGINS 白名单（默认 localhost:5173/5174/5175/4173）。
+allow_origins, allow_credentials = settings.cors_mode()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:5175",
-        "http://localhost:4173",
-    ],
-    allow_credentials=True,
+    allow_origins=allow_origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

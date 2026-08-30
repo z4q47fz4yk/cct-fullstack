@@ -1,0 +1,11 @@
+[
+  {
+    // 新建 worktree 后一键引导：分配端口、同步依赖、离线生成客户端、类型检查
+    "label": "bootstrap worktree",
+    "command": "bash scripts/worktree-bootstrap.sh",
+    "hooks": ["create_worktree"],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "reveal": "no_focus",
+    "hide": "on_success"
+  }
+]

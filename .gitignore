@@ -1,0 +1,5 @@
+# 每个 worktree 的端口/环境配置（由 scripts/worktree-env.sh 生成）
+.env
+
+# pnpm 安装时在仓库根生成的依赖缓存（vp install）
+.pnpm-store/
