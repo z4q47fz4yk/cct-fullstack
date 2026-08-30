@@ -58,16 +58,25 @@ if [ ! -f "$ENV_FILE" ] && [ -n "$main_wt" ] && [ -f "$main_wt/.env" ]; then
   echo "已复制主 worktree 的 .env 作为基底: $main_wt/.env"
 fi
 
-# 在三个独立区间各取最小空闲端口（每选一个立即标记占用，避免区间互相重叠）
-pick_port() {
-  local p="$1"
-  while is_used "$p"; do p=$((p + 1)); done
-  mark_used "$p"
-  printf '%d' "$p"
-}
-BACKEND_PORT="$(pick_port 8000)"
-FRONTEND_PORT="$(pick_port 5173)"
-DOCS_PORT="$(pick_port 5174)"
+# 在三个独立区间各取最小空闲端口（父 shell 内直接分配：命令替换会开子 shell，
+# 子 shell 里对 used 的修改不生效，会导致 FRONTEND/DOCS 分到同一端口）
+BACKEND_PORT=8000
+while is_used "$BACKEND_PORT"; do BACKEND_PORT=$((BACKEND_PORT + 1)); done
+mark_used "$BACKEND_PORT"
+
+FRONTEND_PORT=5173
+while is_used "$FRONTEND_PORT"; do FRONTEND_PORT=$((FRONTEND_PORT + 1)); done
+mark_used "$FRONTEND_PORT"
+
+DOCS_PORT=5174
+while is_used "$DOCS_PORT"; do DOCS_PORT=$((DOCS_PORT + 1)); done
+mark_used "$DOCS_PORT"
+
+# 同 worktree 内端口必须互不相同（防御性断言）
+if [ "$FRONTEND_PORT" -eq "$DOCS_PORT" ] || [ "$FRONTEND_PORT" -eq "$BACKEND_PORT" ] || [ "$DOCS_PORT" -eq "$BACKEND_PORT" ]; then
+  echo "错误：端口分配冲突（F=$FRONTEND_PORT D=$DOCS_PORT B=$BACKEND_PORT），请检查其他 worktree 的 .env" >&2
+  exit 1
+fi
 
 # 写回：剔除被覆写的键，追加新值（保留其余键与注释），最后原子替换
 TMP="$(mktemp)"
