@@ -34,44 +34,52 @@
 class TagDimension(TimeStampMixin, ProjectScopeMixin, SQLModel, table=True):
     __tablename__ = "tag_dimension"
     __table_args__ = (
-        sa.UniqueConstraint("project_id", "name", name="uix_tag_dimension_project_name"),
+        sa.UniqueConstraint(
+            "project_id", "name", name="uix_tag_dimension_project_name"
+        ),
     )
-    id: int | None          # PK
-    name: str               # 维度名称，如：碳排放来源
+    id: int | None  # PK
+    name: str  # 维度名称，如：碳排放来源
     description: str
+
 
 # src/models/tag.py —— 标签（维度内 name 唯一，同维度成树）
 class Tag(TimeStampMixin, ProjectScopeMixin, SQLModel, table=True):
     __tablename__ = "tag"
     __table_args__ = (
-        sa.UniqueConstraint("project_id", "dimension_id", "name",
-                            name="uix_tag_project_dimension_name"),
+        sa.UniqueConstraint(
+            "project_id", "dimension_id", "name", name="uix_tag_project_dimension_name"
+        ),
     )
     id: int | None
     name: str
-    dimension_id: int       # FK tag_dimension.id CASCADE，父标签须同维度
-    parent_id: int | None   # 自引用 FK；null = 顶级
+    dimension_id: int  # FK tag_dimension.id CASCADE，父标签须同维度
+    parent_id: int | None  # 自引用 FK；null = 顶级
     description: str
+
 
 # src/models/tag.py —— 三个打标关联点（结构一致，仅关联对象不同）
 class ResourceTag(TimeStampMixin, ProjectScopeMixin, SQLModel, table=True):  # 已有
-    __tablename__ = "resource_tag"     # UNIQUE(project_id, resource_id, tag_id)
+    __tablename__ = "resource_tag"  # UNIQUE(project_id, resource_id, tag_id)
     resource_id / tag_id
 
+
 class TaskTag(TimeStampMixin, ProjectScopeMixin, SQLModel, table=True):
-    __tablename__ = "task_tag"         # UNIQUE(project_id, task_id, tag_id)
-    task_id / tag_id                   # INDEX(project_id, tag_id, task_id) 供聚合
+    __tablename__ = "task_tag"  # UNIQUE(project_id, task_id, tag_id)
+    task_id / tag_id  # INDEX(project_id, tag_id, task_id) 供聚合
+
 
 class UsageTag(TimeStampMixin, ProjectScopeMixin, SQLModel, table=True):
-    __tablename__ = "usage_tag"        # UNIQUE(project_id, usage_id, tag_id)
-    usage_id / tag_id                  # INDEX(project_id, tag_id) 供聚合
+    __tablename__ = "usage_tag"  # UNIQUE(project_id, usage_id, tag_id)
+    usage_id / tag_id  # INDEX(project_id, tag_id) 供聚合
+
 
 # src/models/chart.py —— 图表定义（新增切片配置）
 class ChartDefinition(TimeStampMixin, ProjectScopeMixin, SQLModel, table=True):
-    __tablename__ = "chart_definition" # UNIQUE(project_id, name)
+    __tablename__ = "chart_definition"  # UNIQUE(project_id, name)
     id / name / description / chart_type
-    slice_entity: str                  # RESOURCE/TASK/USAGE/ANY，默认 RESOURCE（兼容旧图）
-    resource_categories: list | None   # JSON；material/transport/... 过滤，null=不过滤
+    slice_entity: str  # RESOURCE/TASK/USAGE/ANY，默认 RESOURCE（兼容旧图）
+    resource_categories: list | None  # JSON；material/transport/... 过滤，null=不过滤
 ```
 
 ## 核心查询逻辑（以项目为单位）

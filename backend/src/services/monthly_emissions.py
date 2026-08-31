@@ -196,11 +196,7 @@ class MonthlyEmissionService:
             total_resources=len(distinct_resources),
             start_month=sorted_months[0] if sorted_months else None,
             end_month=_next_month(sorted_months[-1]) if sorted_months else None,
-            source=(
-                "usage"
-                if usage_type == UsageType.PLANNED
-                else None
-            ),
+            source=("usage" if usage_type == UsageType.PLANNED else None),
         )
 
     async def _get_planned_baseline(self) -> Plan | None:

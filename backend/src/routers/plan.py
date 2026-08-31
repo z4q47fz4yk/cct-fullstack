@@ -79,9 +79,7 @@ async def save_plan_draft_endpoint(
 ) -> PlanResp:
     """保存计划草稿。"""
     try:
-        plan = await save_plan_with_status(
-            session, project.id, data, PlanStatus.DRAFT
-        )
+        plan = await save_plan_with_status(session, project.id, data, PlanStatus.DRAFT)
     except ValueError as e:
         if str(e) == "已存在正式施工计划基线，不能另存草稿":
             raise HTTPException(status_code=409, detail=str(e)) from e
