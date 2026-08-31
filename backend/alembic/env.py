@@ -79,7 +79,8 @@ def run_migrations_offline() -> None:
     """
     from src.config import settings
 
-    url = settings.database_url
+    # settings.database_async_url：postgresql:// 运维写法 → asyncpg 驱动 URL
+    url = settings.database_async_url
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -106,7 +107,7 @@ async def run_async_migrations() -> None:
     from src.config import settings
 
     connectable = async_engine_from_config(
-        {"url": settings.database_url},
+        {"url": settings.database_async_url},
         prefix="",
         poolclass=pool.NullPool,
     )

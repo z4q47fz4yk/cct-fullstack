@@ -10,7 +10,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.config import settings
 
 # 测试数据库配置，确保 alembic 已经迁移 `DATABASE_URL=... alembic upgrade head`
-TEST_DATABASE_URI = "postgresql+asyncpg://cct:cct@localhost/cctv2-test"
+# 采用运维惯例写法（postgresql://），asyncpg 驱动由 settings.database_async_url 注入
+TEST_DATABASE_URI = "postgresql://cct:cct@localhost/cctv2-test"
 settings.database_url = TEST_DATABASE_URI
 
 
@@ -24,7 +25,9 @@ load_sqlmodel_metadata()
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def db_engine() -> AsyncEngine:
-    return create_async_engine(TEST_DATABASE_URI, echo=False, poolclass=NullPool)
+    return create_async_engine(
+        settings.database_async_url, echo=False, poolclass=NullPool
+    )
 
 
 @pytest_asyncio.fixture(scope="function")

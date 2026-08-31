@@ -6,8 +6,10 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.config import settings
 
 # Create async engine with the database URL from settings
+# （settings.database_url 为运维惯例的 postgresql:// 写法，asyncpg 驱动由
+# settings.database_async_url 注入，见 src/config.py）
 engine = create_async_engine(
-    settings.database_url,
+    settings.database_async_url,
     echo=settings.debug,
     future=True,
 )

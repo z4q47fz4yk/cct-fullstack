@@ -39,5 +39,5 @@ pytest + pytest-asyncio suite. Nested transactions for isolation (rollback after
 - Tests that need project-scoped data must create `Project` rows (default id=1 from migration)
 - `asyncio_mode = "auto"` — no need for `@pytest.mark.asyncio`
 - Parametrized tests use `@pytest.mark.parametrize` extensively
-- Test DB: `postgresql+asyncpg://cct:cct@localhost/cctv2-test` — must run `alembic upgrade head` first
+- Test DB: `postgresql://cct:cct@localhost/cctv2-test` — must run `alembic upgrade head` first（asyncpg 驱动由 `settings.database_async_url` 注入）
 - Fixture data uses deterministic IDs (not UUIDs) for easy assertions

@@ -43,7 +43,7 @@ uv sync --all-groups
 psql -U postgres -c "CREATE DATABASE cctv2;"
 
 # 3. 配置数据库连接（backend/.env，或仓库根 .env）
-# DATABASE_URL=postgres+asyncpg://cct:cct@localhost:5432/cctv2
+# DATABASE_URL=postgresql://cct:cct@localhost:5432/cctv2
 
 # 4. 执行数据库迁移
 .venv/bin/alembic upgrade head

@@ -36,7 +36,7 @@ ruff format .
 .venv/bin/alembic revision --autogenerate -m "description"
 .venv/bin/alembic upgrade head
 .venv/bin/alembic downgrade -1
-DATABASE_URL="postgresql+asyncpg://cct:cct@localhost/cctv2-test" .venv/bin/alembic upgrade head
+DATABASE_URL="postgresql://cct:cct@localhost/cctv2-test" .venv/bin/alembic upgrade head
 ```
 
 ### Testing
@@ -172,7 +172,7 @@ See `核心算法.md` for algorithm formulas.
 
 ```bash
 psql -U postgres -c "CREATE DATABASE cctv2-test;"
-DATABASE_URL="postgresql+asyncpg://cct:cct@localhost/cctv2-test" .venv/bin/alembic upgrade head
+DATABASE_URL="postgresql://cct:cct@localhost/cctv2-test" .venv/bin/alembic upgrade head
 ```
 
 Tests use nested transactions for isolation (rollback after each test). The default project (id=1) is created by the project-support migration; tests that need other projects must create them via `Project` inserts.
