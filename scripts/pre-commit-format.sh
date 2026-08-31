@@ -8,16 +8,24 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 FE=()
 PY=()
+VUE=()
 for f in "$@"; do
   case "$f" in
     # 仅代码文件交给 oxfmt；文档（.md 等）保持作者格式，避免钩子改写
     frontend/*.ts | frontend/*.tsx | frontend/*.vue | frontend/*.js | frontend/*.jsx | frontend/*.mts | frontend/*.cts | frontend/*.json | frontend/*.jsonc) FE+=("${f#frontend/}") ;;
     backend/*.py) PY+=("${f#backend/}") ;;
   esac
+  case "$f" in
+    frontend/*.vue) VUE+=("$f") ;;
+  esac
 done
 
 if [ "${#FE[@]}" -gt 0 ]; then
   ( cd "$ROOT/frontend" && vp check --fix "${FE[@]}" )
+fi
+if [ "${#VUE[@]}" -gt 0 ]; then
+  # 暂存的 Vue 模板做废弃类名拦截（清单见 scripts/check-deprecated-classes.sh）
+  bash "$ROOT/scripts/check-deprecated-classes.sh" "${VUE[@]}"
 fi
 if [ "${#PY[@]}" -gt 0 ]; then
   (

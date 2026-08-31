@@ -100,13 +100,11 @@ const { data, asyncStatus, refresh } = useQuery(() => ({
 - `defineField` 值类型为 `T | undefined`，提交时用 `??` 提供默认值
 - 参考实现：`src/components/resource/ResourceForm.vue`
 
-### 已废弃的类名（避免使用）
+### 已废弃类名（自动拦截）
 
-| 废弃类名         | 替代方案                               |
-| ---------------- | -------------------------------------- |
-| `form-control`   | 使用 `fieldset`                        |
-| `label-text`     | 使用 `fieldset-legend` 或纯文本 `span` |
-| `label-text-alt` | 使用 `label.label` 或描述性段落        |
+`form-control` / `label-text` / `label-text-alt` 等 DaisyUI 兼容层遗留类名已被组件层废弃：
+新代码混入会在 **pre-commit 钩子自动拦截**（`scripts/check-deprecated-classes.sh`，暂存 .vue 即检），
+也可手动全量扫描 `bash scripts/check-deprecated-classes.sh`。废弃清单与替代方案以该脚本为唯一事实来源。
 
 ### 样式
 
