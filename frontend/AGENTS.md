@@ -68,11 +68,45 @@ src/
 - Mutation 成功后调用 `queryCache.invalidateQueries()`
 - 项目上下文：`useProjectContext()` 获取 `currentProjectId`
 
+### API 客户端（@hey-api 生成物）
+
+客户端由 `scripts/gen-client.sh`（`vpr generate-api`）从入库根 `openapi.json` 离线生成。
+
+```typescript
+import { useQuery } from '@pinia/colada'
+import { listOptimizeRecordQuery } from '@/client/@pinia/colada.gen'
+
+// 返回 reactive 对象，无需手动转换为 store
+const { data, asyncStatus, refresh } = useQuery(() => ({
+  ...listOptimizeRecordQuery({ path: { id: someValue } }),
+  enabled: isActive.value,
+  staleTime: 1000,
+}))
+```
+
+- 优先使用生成的类型，避免重复定义；仅在涉及领域建模/用户体验/业务规则时才派生类型
+- 后端返回 `Any` 或命名不规范时，反馈后端修复 OpenAPI，勿前端适配（见下方 ANTI-PATTERNS）
+
 ### 表单
 
 - vee-validate + valibot 验证 (非 zod)
 - 组件层语义类：`fieldset`, `fieldset-legend`, `input`
 - **禁止** `form-control`, `label-text` (已废弃)
+
+### 表单校验模式（vee-validate v4）
+
+- 用 `defineField` 不用 `useField`（useField 与 useForm 上下文脱节）
+- 模板必须 `v-bind="xxxAttrs"` 透传验证触发器
+- `defineField` 值类型为 `T | undefined`，提交时用 `??` 提供默认值
+- 参考实现：`src/components/resource/ResourceForm.vue`
+
+### 已废弃的类名（避免使用）
+
+| 废弃类名         | 替代方案                               |
+| ---------------- | -------------------------------------- |
+| `form-control`   | 使用 `fieldset`                        |
+| `label-text`     | 使用 `fieldset-legend` 或纯文本 `span` |
+| `label-text-alt` | 使用 `label.label` 或描述性段落        |
 
 ### 样式
 
@@ -90,6 +124,49 @@ src/
 - 阴影三阶：`--shadow-glass-1/2/3`（层级提示，不承担视觉分隔）；缓动：`--ease-soft` / `--ease-snap`
 - 图标：Material Symbols (`material-symbols-outlined`)
 - **无** `tailwind.config.js` — Tailwind v4 使用 CSS 配置
+
+### Tailwind 动态类名陷阱
+
+用字符串插值动态生成类名（如 `:class="\`text-${color}\`"`）在 Tailwind CSS 中无效——
+Tailwind 静态扫描源码提取类名，无法识别运行时生成的字符串。用对象语法显式列出所有可能类名：
+
+```vue
+<!-- ❌ 错误 -->
+<span :class="`text-${statusColor}`"></span>
+
+<!-- ✅ 正确 -->
+<span
+  :class="{
+    'text-success': statusColor === 'success',
+    'text-primary': statusColor === 'primary',
+    'text-neutral': statusColor === 'neutral',
+  }"
+></span>
+```
+
+### 破坏性操作流程（删除/重置/停止优化/导入提交）
+
+所有不可逆或半不可逆操作按 3 步执行：
+
+```ts
+// 1. 二次确认（a11y 友好，自带 ESC / Enter / focus trap）
+const ok = await confirmDanger('确定删除 X？')
+if (!ok.confirmed) return
+
+// 2. mutation 包 try/catch：失败 toast + 控制台日志
+try {
+  await mutation.mutateAsync(...)
+} catch (e) {
+  notifyError({ title: '操作失败', description: formatHttpError(e) })
+  console.error('Failed:', e)
+} finally {
+  isSubmitting.value = false // 必须解除 loading，避免按钮卡死
+}
+```
+
+- `confirmDanger` 提供 a11y，比 `alert()` 不会被浏览器屏蔽
+- `notifyError` 走 vue-sonner，自动消失 + 多条堆叠
+- `finally` 解除 loading 是 silent fail 的高发地——失败后按钮永远转圈最常见
 
 ### 数字格式化（全站统一）
 
@@ -115,6 +192,7 @@ src/
 - **禁止** 直接修改 `src/client/` — 运行 `scripts/gen-client.sh`（`vpr generate-api`，从入库根 `openapi.json` 离线生成）
 - **禁止** 手动编辑 `typed-router.d.ts` — 自动生成
 - **禁止** UI 使用英文 — 所有界面文本必须中文
+  - 例外：专有名词（NSGA-II、Pareto/帕累托 等）；控制台日志中英文均可
 - **禁止** 使用 `text-white` 等 Tailwind 原始类 — 用组件层语义类 (`btn`, `input` 等)
 - **禁止** 玻璃/模糊/光晕效果 — 无 `backdrop-filter`、无渐变背景、无 glow 装饰；容器一律 `panel`
 - **禁止** 业务代码 `.toFixed()` — 一律走 `src/utils/format.ts`（精度约定见上表）
@@ -162,7 +240,7 @@ vpr generate-api # 从入库根 openapi.json 离线生成客户端（无后端�
 
 - Node.js 要求：`^20.19.0 || >=22.12.0`
 - 后端 API：同源 `/api`（dev 由 vite 反代到本 worktree 后端，部署由 nginx 反代；见根 AGENTS.md）；跨机直连可改根 `.env` 的 `VITE_API_BASE`
-- **无测试框架** — 项目暂无 Vitest/Jest
-- **无 CI/CD** — 无 GitHub Actions 配置
+- 无测试框架：项目暂无 Vitest/Jest（`vitest` 仅作为依赖存在）
+- 无 CI/CD：无 GitHub Actions 配置
 - Store 文件名 `report.ts`，导出 `useDailyReportStoreV2`
 - Store 文件名 `insights.ts`，导出 `useInsightsStore`
