@@ -10,7 +10,8 @@ FE=()
 PY=()
 for f in "$@"; do
   case "$f" in
-    frontend/*) FE+=("${f#frontend/}") ;;
+    # 仅代码文件交给 oxfmt；文档（.md 等）保持作者格式，避免钩子改写
+    frontend/*.ts | frontend/*.tsx | frontend/*.vue | frontend/*.js | frontend/*.jsx | frontend/*.mts | frontend/*.cts | frontend/*.json | frontend/*.jsonc) FE+=("${f#frontend/}") ;;
     backend/*.py) PY+=("${f#backend/}") ;;
   esac
 done
