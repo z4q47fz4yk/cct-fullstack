@@ -16,6 +16,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '..', '')
   const frontendPort = Number(env.FRONTEND_PORT ?? 5173)
   const docsPort = Number(env.DOCS_PORT ?? 5174)
+  const backendPort = Number(env.BACKEND_PORT ?? 8000)
 
   return {
     staged: {
@@ -103,8 +104,16 @@ export default defineConfig(({ mode }) => {
       // 端口由 worktree 的根 .env 决定；strictPort 冲突即报错，避免配对静默漂移
       port: frontendPort,
       strictPort: true,
-      // L1 同源双构建：/docs/ 代理到 VitePress dev server（见 scripts/dev-docs.sh）
       proxy: {
+        // 同源 /api：浏览器只访问前端端口，不需要 CORS；反代到本 worktree 后端（BACKEND_PORT）。
+        // 后端路由本身不带 /api 前缀（OpenAPI 契约不变），此处剥离后转发——
+        // 与部署环境 nginx `location /api { proxy_pass http://backend:8000/; }` 同构。
+        '/api': {
+          target: `http://localhost:${backendPort}`,
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/api/, ''),
+        },
+        // L1 同源双构建：/docs/ 代理到 VitePress dev server（见 scripts/dev-docs.sh）
         '/docs': `http://localhost:${docsPort}`,
       },
     },

@@ -153,13 +153,13 @@ definePage({
 
 ## 关键配置文件
 
-| 文件                   | 用途                                 |
-| ---------------------- | ------------------------------------ |
-| `vite.config.ts`       | Vite + Vue + Tailwind 配置           |
-| `src/assets/base.css`  | Tailwind 导入 + 主题变量 (starglass) |
-| `openapi-ts.config.ts` | API 客户端生成配置                   |
-| `src/hey-api.ts`       | API 运行时配置 (Base URL)            |
-| `typed-router.d.ts`    | 路由类型定义 (项目根目录)            |
+| 文件                   | 用途                                                                       |
+| ---------------------- | -------------------------------------------------------------------------- |
+| `vite.config.ts`       | Vite + Vue + Tailwind 配置                                                 |
+| `src/assets/base.css`  | Tailwind 导入 + 主题变量 (starglass)                                       |
+| `openapi-ts.config.ts` | API 客户端生成配置                                                         |
+| `src/hey-api.ts`       | API 运行时配置 (Base URL，默认同源 `/api`，由 vite 反代到本 worktree 后端) |
+| `typed-router.d.ts`    | 路由类型定义 (项目根目录)                                                  |
 
 ## 代码风格
 

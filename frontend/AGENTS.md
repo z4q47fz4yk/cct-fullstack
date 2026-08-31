@@ -161,7 +161,7 @@ vpr generate-api # 从入库根 openapi.json 离线生成客户端（无后端�
 ## NOTES
 
 - Node.js 要求：`^20.19.0 || >=22.12.0`
-- 后端 API：由仓库根 `.env` 的 `VITE_API_BASE` 决定（默认 `http://localhost:8000`；多 worktree 下自动指向本 worktree 的后端，见根 AGENTS.md）
+- 后端 API：同源 `/api`（dev 由 vite 反代到本 worktree 后端，部署由 nginx 反代；见根 AGENTS.md）；跨机直连可改根 `.env` 的 `VITE_API_BASE`
 - **无测试框架** — 项目暂无 Vitest/Jest
 - **无 CI/CD** — 无 GitHub Actions 配置
 - Store 文件名 `report.ts`，导出 `useDailyReportStoreV2`

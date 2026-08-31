@@ -84,8 +84,10 @@ bash ../scripts/dev-docs.sh
 应用左上角导航栏与文档站导航栏均有对方入口（「文档」/「打开系统」），可互相跳转。
 
 ::: tip
-前端访问后端的基址由**仓库根 `.env`** 的 `VITE_API_BASE` 决定（默认 `http://localhost:8000`），
-多 worktree 下自动指向本 worktree 的后端，无需修改代码。见根 `AGENTS.md`。
+前端访问后端走**同源 `/api`**（默认 `VITE_API_BASE=/api`）：dev 由 Vite 反代到
+本 worktree 的后端端口（`BACKEND_PORT`），**浏览器不直接访问后端、无需 CORS**，
+与部署环境 nginx 的 `/api` 反代一致。跨机直连场景可把根 `.env` 的 `VITE_API_BASE`
+改为 `http://host:port`（配合 `CORS_ALLOW_ALL=true`）。见根 `AGENTS.md`。
 :::
 
 > 多 worktree 并行开发时端口随 `.env` 变化（如第二个 worktree 为 5174/8001/5175），
@@ -169,7 +171,16 @@ vp run docs:preview              # 预览构建产物
 
 ## 部署（L1 同源双构建）
 
-应用与文档站部署到**同一域名**下：应用占 `/`，文档站占 `/docs/`（VitePress 已配置 `base: '/docs/'`，构建产物中所有资源路径自动带前缀）。
+应用与文档站部署到**同一域名**下：应用占 `/`，文档站占 `/docs/`（VitePress 已配置 `base: '/docs/'`，构建产物中所有资源路径自动带前缀）。前端 API 基址为同源 `/api`，**部署环境必须由服务器把 `/api` 反代到后端**（与 dev 的 Vite 反代同构）：
+
+```nginx
+# 后端反代：剥离 /api 前缀后转发到 FastAPI（后端路由本身不带 /api，见根 AGENTS.md）
+location /api {
+    proxy_pass http://backend:8000/;      # 尾斜杠=剥离 /api
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+```
 
 ### 方式一：合并静态目录
 
@@ -193,6 +204,10 @@ mkdir -p dist/docs && cp -r docs-dist/* dist/docs/
 
 ```nginx
 # 应用是 history 路由：必须 SPA fallback 到 index.html，且不能吞掉 /docs/*
+location /api {
+    proxy_pass http://backend:8000/;      # /api → 后端（剥离前缀）
+    proxy_set_header Host $host;
+}
 location /docs/ {
     alias /var/www/docs/;
     try_files $uri $uri.html $uri/ =404;   # 文档站已开 cleanUrls

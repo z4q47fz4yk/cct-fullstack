@@ -53,7 +53,7 @@ openapi.json  后端契约快照（入库；前端客户端离线生成源）
 | `BACKEND_PORT` | 后端 dev server 端口（`fastapi dev --port`） |
 | `FRONTEND_PORT` | 前端 dev server 端口（vite，`strictPort` 冲突即报错） |
 | `DOCS_PORT` | 文档站 vitepress 端口（前端 `/docs` 代理指向它） |
-| `VITE_API_BASE` | 前端访问后端的基址 = `http://localhost:${BACKEND_PORT}` |
+| `VITE_API_BASE` | 前端访问后端的基址 = `/api`（dev 由 vite 反代到 `BACKEND_PORT`，部署由 nginx 反代；跨机直连可改为 `http://host:port`） |
 | `CORS_ALLOW_ALL` | 开发期放开 CORS 允许任意来源（此时 `allow_credentials=False`） |
 | `DATABASE_URL` | 沿用主 worktree 的已有值；迁移/数据类 agent 建议独立库名 |
 
@@ -83,6 +83,7 @@ bash scripts/dev-docs.sh                  # 用 DOCS_PORT 启动文档站（可�
 ### 常见坑
 
 - **端口被占**：vite 已设 `strictPort`，后端端口冲突直接报错——调整占用方后重跑 `scripts/worktree-env.sh`；不要静默自增端口（会导致配对漂移）。
-- **CORS**：`allow_origins=["*"]` 时浏览器强制禁止携带凭据（`allow_credentials=False`）。本应用无 cookie/认证，开发期放开安全；引入认证后改用 `CORS_ORIGINS` 白名单。
+- **CORS**：dev 默认**同源**——浏览器只访问前端端口的 `/api`（vite 反代到本 worktree 后端），不触发 CORS；`CORS_ALLOW_ALL=true` 仅在跨机直连（如手机/局域网直接访问后端端口）时才需要。注意 `allow_origins=["*"]` 时浏览器强制禁止携带凭据（`allow_credentials=False`）；引入认证后改用 `CORS_ORIGINS` 白名单。
+- **`vp preview`（4173）无反代**：`/api` 请求会 404，dev 反代仅存在于 `scripts/dev-frontend.sh` 启动的开发服务器；部署环境由 nginx `/api` 反代提供。
 - **共享数据库**：默认各 worktree 共用主 worktree 的 `DATABASE_URL`。改迁移/数据的 agent 应在自己 worktree 的 `.env` 配独立库名（如 `cctv2-wt2`）并执行 `alembic upgrade head`。
 - **前端不要直接改 `src/client/`**：改后端契约请走上方 checklist。

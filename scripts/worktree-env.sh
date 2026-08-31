@@ -82,7 +82,7 @@ fi
 TMP="$(mktemp)"
 if [ -f "$ENV_FILE" ]; then
   # 保留既有键与用户注释；剔除端口相关键、脚本自带的注释与空行
-  grep -v -E '^[[:space:]]*$|^\s*(BACKEND_PORT|FRONTEND_PORT|DOCS_PORT|VITE_API_BASE|CORS_ALLOW_ALL)=|^# ---- 端口三元组|^# 开发期放开 CORS' "$ENV_FILE" >"$TMP" || true
+  grep -v -E '^[[:space:]]*$|^\s*(BACKEND_PORT|FRONTEND_PORT|DOCS_PORT|VITE_API_BASE|CORS_ALLOW_ALL)=|^# ---- 端口三元组|^# dev 同源' "$ENV_FILE" >"$TMP" || true
 else
   : >"$TMP"
 fi
@@ -91,7 +91,8 @@ cat >>"$TMP" <<EOF
 BACKEND_PORT=$BACKEND_PORT
 FRONTEND_PORT=$FRONTEND_PORT
 DOCS_PORT=$DOCS_PORT
-VITE_API_BASE=http://localhost:$BACKEND_PORT
+# dev 同源 /api（vite 反代到 BACKEND_PORT，见根 AGENTS.md）；CORS 仅供跨机直连场景
+VITE_API_BASE=/api
 # 开发期放开 CORS 允许任意来源（allow_origins=[*]，此时 allow_credentials=False）
 CORS_ALLOW_ALL=true
 EOF
@@ -99,6 +100,6 @@ mv "$TMP" "$ENV_FILE"
 
 echo "worktree: $ROOT"
 echo "  BACKEND_PORT=$BACKEND_PORT  FRONTEND_PORT=$FRONTEND_PORT  DOCS_PORT=$DOCS_PORT"
-echo "  VITE_API_BASE=http://localhost:$BACKEND_PORT"
+echo "  VITE_API_BASE=/api（dev 由 vite 反代到本 worktree 后端端口 ${BACKEND_PORT}）"
 echo "  .env: $ENV_FILE"
 echo "提示：若端口仍被占用（strictPort / fastapi 报错），调整占用方后重跑本脚本即可。"
