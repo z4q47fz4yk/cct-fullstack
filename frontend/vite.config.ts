@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => {
       semi: false,
       tabWidth: 2,
       useTabs: false,
+      ignorePatterns: ['typed-router.d.ts'],
     },
     lint: {
       plugins: ['eslint', 'typescript', 'unicorn', 'oxc', 'vue'],
