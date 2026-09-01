@@ -48,6 +48,12 @@ const { usageDate, effectiveUsageType, inferenceReason, isForced, forceToggle, f
 
 // 手动待提交行
 const pendingRows = ref<PendingUsageRow[]>([])
+// 手动参与的工序集合（含尚无手动行的「待分配工序」）
+const manualTaskIds = ref<number[]>([])
+
+function handleAddTask(taskId: number) {
+  if (!manualTaskIds.value.includes(taskId)) manualTaskIds.value.push(taskId)
+}
 
 // 提交结果错误信息
 const submitErrorMessage = ref('')
@@ -57,6 +63,7 @@ const submitting = ref(false)
 
 function handleAddRow(row: Omit<PendingUsageRow, '_key' | 'error'>) {
   pendingRows.value.push({ _key: crypto.randomUUID(), ...row })
+  if (!manualTaskIds.value.includes(row.task_id)) manualTaskIds.value.push(row.task_id)
 }
 function handleUpdateRow(key: string, row: Omit<PendingUsageRow, '_key' | 'error'>) {
   const idx = pendingRows.value.findIndex((r) => r._key === key)
@@ -106,10 +113,11 @@ const hasPendingReportBatch = computed(
 const { recordProgressBatch, isRecording } = useProgressApi()
 const progressEntries = ref<Record<number, number>>({})
 
-// 涉及工序 = 手动行工序 ∪ 日报批次工序
+// 涉及工序 = 手动行工序 ∪ 待分配工序 ∪ 日报批次工序
 const involvedTaskIds = computed<number[]>(() => {
   const set = new Set<number>()
   for (const r of pendingRows.value) set.add(r.task_id)
+  for (const id of manualTaskIds.value) set.add(id)
   for (const u of reportStore.resourceUsages) set.add(u.taskId)
   return Array.from(set)
 })
@@ -227,6 +235,8 @@ async function handleCompleteDay() {
     if (results.length > 0) {
       notifySuccess({ title: '已完成一天的录入', description: `已提交：${results.join('、')}` })
       progressEntries.value = {}
+      // 成功提交后重置待分配工序（重新开始新一天的录入）
+      manualTaskIds.value = []
     }
     if (failed) {
       notifyError({ title: '部分提交失败', description: '失败项已保留，请处理后重试' })
@@ -328,6 +338,7 @@ const infoTone = computed(() => (isForced.value ? 'warning' : 'info'))
   <!-- 统一「待提交数据」卡片 -->
   <UsageEntrySummary
     :manual-rows="pendingRows"
+    :manual-task-ids="manualTaskIds"
     :usage-date="usageDate"
     :usage-type="effectiveUsageType"
     :existing-duplicate-keys="pendingRowDuplicateKeys"
@@ -335,6 +346,7 @@ const infoTone = computed(() => (isForced.value ? 'warning' : 'info'))
     @update-row="handleUpdateRow"
     @remove-row="handleRemoveRow"
     @remove-batch="reportStore.reset()"
+    @add-task="handleAddTask"
   />
 
   <!-- 当日工序进度（可选，随「完成一天的录入」提交） -->

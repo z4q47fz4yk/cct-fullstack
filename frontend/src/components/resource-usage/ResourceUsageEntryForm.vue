@@ -23,17 +23,20 @@ import { todayIsoLocal } from '@/utils/date'
 
 const showModal = defineModel<boolean>('show', { required: true })
 
-const { mode, initialValue, usageDate, usageType, isSubmitting, error, title } = defineProps<{
-  mode: 'create' | 'update'
-  initialValue?: ResourceUsageBatchItem | ResourceUsageUpdate | null
-  /** 录入模式下的使用日期（顶部表格共享） */
-  usageDate?: string
-  /** 当前 batch 的用量类型（实际 / 计划） */
-  usageType?: UsageType
-  isSubmitting?: boolean
-  error?: string
-  title: string
-}>()
+const { mode, initialValue, usageDate, usageType, isSubmitting, error, title, lockedTaskId } =
+  defineProps<{
+    mode: 'create' | 'update'
+    initialValue?: ResourceUsageBatchItem | ResourceUsageUpdate | null
+    /** 录入模式下的使用日期（顶部表格共享） */
+    usageDate?: string
+    /** 当前 batch 的用量类型（实际 / 计划） */
+    usageType?: UsageType
+    isSubmitting?: boolean
+    error?: string
+    title: string
+    /** 锁定工序（如每工序内「+补充」直接补充，免选工序） */
+    lockedTaskId?: number
+  }>()
 
 const emit = defineEmits<{
   submit: [data: ResourceUsageBatchItem | ResourceUsageUpdate]
@@ -87,12 +90,16 @@ const selectedResourceUnit = computed(() => {
 
 // 同步 initialValue 变化到表单
 watch(
-  () => initialValue,
-  (val) => {
+  [() => lockedTaskId, () => initialValue],
+  ([locked, val]) => {
+    const lockedId = locked ?? null
+    if (lockedId !== null) {
+      setValues({ task_id: lockedId })
+    }
     if (val) {
       const v = val as ResourceUsageBatchItem & ResourceUsageUpdate
       setValues({
-        task_id: v.task_id ?? v.taskId ?? 0,
+        task_id: lockedId ?? v.task_id ?? v.taskId ?? 0,
         resource_id: v.resource_id ?? v.resourceId ?? 0,
         quantity: v.quantity ?? 0,
       })
@@ -116,7 +123,7 @@ watch(showModal, (open) => {
 const onSubmit = handleSubmit(() => {
   if (mode === 'create') {
     const data: ResourceUsageBatchItem = {
-      task_id: Number(taskId.value) || 0,
+      task_id: lockedTaskId ?? (Number(taskId.value) || 0),
       resource_id: Number(resourceId.value) || 0,
       usage_date: usageDate || todayIsoLocal(),
       quantity: Number(quantity.value) || 0,
@@ -147,10 +154,14 @@ function closeModal() {
         <select
           v-model="taskId"
           v-bind="taskIdAttrs"
-          :disabled="isSubmitting"
+          :disabled="isSubmitting || lockedTaskId !== undefined"
           class="select select-bordered w-full"
           :class="{ 'select-error': errors.task_id }"
         >
+          <option v-if="lockedTaskId !== undefined" :value="lockedTaskId" selected>
+            {{ tasks.find((t) => t.id === lockedTaskId)?.code }}
+            {{ tasks.find((t) => t.id === lockedTaskId)?.name ?? `工序 #${lockedTaskId}` }}
+          </option>
           <option :value="0" disabled>请选择工序</option>
           <option v-for="t in tasks" :key="t.id" :value="t.id">
             {{ t.code ? `${t.code} - ${t.name}` : t.name }}

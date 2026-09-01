@@ -46,9 +46,11 @@ interface DisplayEntry {
   conflict?: boolean
 }
 
-const { manualRows, usageDate, usageType, existingDuplicateKeys } = defineProps<{
+const { manualRows, manualTaskIds, usageDate, usageType, existingDuplicateKeys } = defineProps<{
   /** 手动待提交行 */
   manualRows: PendingUsageRow[]
+  /** 手动参与的工序集合（含尚无手动行的「待分配工序」） */
+  manualTaskIds: number[]
   /** 当前使用日期（仅用于编辑弹窗默认值） */
   usageDate: string
   /** 当前用量类型（仅用于编辑弹窗标签） */
@@ -62,6 +64,8 @@ const emit = defineEmits<{
   'update-row': [key: string, row: Omit<PendingUsageRow, '_key' | 'error'>]
   'remove-row': [key: string]
   'remove-batch': []
+  /** 新增一个待分配工序 */
+  'add-task': [taskId: number]
 }>()
 
 const { confirmDanger } = useConfirm()
@@ -163,9 +167,13 @@ const manualByResource = computed(() => {
 type ViewMode = 'task' | 'resource'
 const activeView = ref<ViewMode>('task')
 
-/** 按工序视图：日报 ∪ 手动 的任务并集 */
+/** 按工序视图：日报 ∪ 手动（含待分配工序） 的任务并集 */
 const taskEntries = computed<Array<{ taskId: number; entries: DisplayEntry[] }>>(() => {
-  const ids = new Set<number>([...dailyByTask.value.keys(), ...manualByTask.value.keys()])
+  const ids = new Set<number>([
+    ...dailyByTask.value.keys(),
+    ...manualByTask.value.keys(),
+    ...manualTaskIds,
+  ])
   return Array.from(ids)
     .sort((a, b) =>
       (taskMap.value.get(a)?.code ?? '').localeCompare(taskMap.value.get(b)?.code ?? ''),
@@ -208,18 +216,22 @@ const manualCount = computed(() => manualRows.length)
 const hasPendingBatch = computed(() => !!store.batchId && store.resourceUsages.length > 0)
 const shortBatchId = computed(() => (store.batchId ? store.batchId.slice(0, 8) : ''))
 
-// ─── 编辑弹窗 ──────────────────────────────────────────────
+// ─── 编辑/补充弹窗 ────────────────────────────────────────
 
 const showEditModal = ref(false)
 const editingRow = ref<PendingUsageRow | null>(null)
+/** 锁定工序（每工序卡片内「+补充」，免选工序） */
+const lockedAddTaskId = ref<number | null>(null)
 
-function handleAdd() {
+function handleAdd(taskId?: number) {
   editingRow.value = null
+  lockedAddTaskId.value = taskId ?? null
   showEditModal.value = true
 }
 
 function handleEdit(row: PendingUsageRow) {
   editingRow.value = row
+  lockedAddTaskId.value = null
   showEditModal.value = true
 }
 
@@ -239,6 +251,22 @@ function handleSubmitEdit(data: { task_id?: number; resource_id?: number; quanti
   }
   showEditModal.value = false
   editingRow.value = null
+  lockedAddTaskId.value = null
+}
+
+// ─── 新增待分配工序（工序选择弹窗） ─────────────────────────
+import BaseModal from '@/components/ui/BaseModal.vue'
+const showTaskPicker = ref(false)
+
+/** 待分配工序 = manualTaskIds ∪ 日报任务；弹窗过滤掉已在其中的工序 */
+const pickableTasks = computed(() => {
+  const existing = new Set<number>([...manualTaskIds, ...dailyByTask.value.keys()])
+  return tasks.value.filter((t) => !existing.has(t.id))
+})
+
+function pickTask(id: number) {
+  emit('add-task', id)
+  showTaskPicker.value = false
 }
 
 async function handleRemoveRow(row: PendingUsageRow) {
@@ -297,8 +325,18 @@ function taskCode(taskId: number) {
 
     <div class="p-4 space-y-3">
       <!-- 空态 -->
-      <div v-if="taskEntries.length === 0" class="text-center py-8 text-sm text-fg-muted">
-        暂无待提交数据，点击「+补充」手动录入，或从日报导入解析后分配。
+      <div v-if="taskEntries.length === 0" class="text-center py-8 text-sm text-fg-muted space-y-3">
+        <p>暂无待提交数据——先新增待分配工序手动补充，或从日报导入解析后分配。</p>
+        <div>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 h-8 px-4 rounded-full border border-dashed text-xs transition-colors bg-base-200/40 border-base-content/20 text-fg-muted hover:border-primary/40 hover:text-base-content"
+            @click="showTaskPicker = true"
+          >
+            <span class="material-symbols-outlined text-sm">add</span>
+            新增待分配工序
+          </button>
+        </div>
       </div>
 
       <template v-else>
@@ -376,6 +414,15 @@ function taskCode(taskId: number) {
                   <span class="material-symbols-outlined text-sm">close</span>
                 </button>
               </span>
+              <!-- 每工序内「+补充」：锁定该工序免选 -->
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 h-7 px-3 rounded-full border border-dashed text-[11px] transition-colors bg-base-200/40 border-base-content/20 text-fg-muted hover:border-primary/40 hover:text-base-content"
+                @click="handleAdd(group.taskId)"
+              >
+                <span class="material-symbols-outlined text-xs">add</span>
+                +补充
+              </button>
             </div>
           </div>
         </div>
@@ -440,19 +487,35 @@ function taskCode(taskId: number) {
           </div>
         </div>
 
-        <!-- +补充 虚线胶囊 -->
+        <!-- +新增待分配工序 虚线胶囊 -->
         <div class="flex justify-end pt-1">
           <button
             type="button"
             class="inline-flex items-center gap-1 h-7 px-3 rounded-full border border-dashed text-[11px] transition-colors bg-base-200/40 border-base-content/20 text-fg-muted hover:border-primary/40 hover:text-base-content"
-            @click="handleAdd"
+            @click="showTaskPicker = true"
           >
             <span class="material-symbols-outlined text-xs">add</span>
-            +补充
+            新增待分配工序
           </button>
         </div>
       </template>
     </div>
+
+    <!-- 新增待分配工序弹窗 -->
+    <BaseModal v-model:open="showTaskPicker" title="选择工序">
+      <ul v-if="pickableTasks.length > 0" class="list">
+        <li
+          v-for="task in pickableTasks"
+          :key="task.id"
+          class="list-row"
+          @click="pickTask(task.id)"
+        >
+          <span class="badge badge-primary badge-sm">{{ task.code }}</span>
+          <span class="flex-1 min-w-0 truncate">{{ task.name }}</span>
+        </li>
+      </ul>
+      <p v-else class="text-center py-8 text-sm text-fg-subtle">所有工序均已加入，无需新增。</p>
+    </BaseModal>
 
     <!-- 补充/编辑弹窗 -->
     <ResourceUsageEntryForm
@@ -460,6 +523,7 @@ function taskCode(taskId: number) {
       :mode="editingRow ? 'update' : 'create'"
       :usage-date="usageDate"
       :usage-type="usageType"
+      :locked-task-id="lockedAddTaskId ?? undefined"
       :initial-value="
         editingRow
           ? {
@@ -471,7 +535,7 @@ function taskCode(taskId: number) {
       "
       :title="editingRow ? '编辑使用量' : '补充使用量'"
       @submit="handleSubmitEdit"
-      @cancel="editingRow = null"
+      @cancel="((editingRow = null), (lockedAddTaskId = null))"
     />
   </div>
 </template>
