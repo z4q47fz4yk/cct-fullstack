@@ -31,7 +31,16 @@ const ERROR_FALLBACK: Record<string, string> = {
   AUTH_FAILED: '登录失败，请稍后重试',
 }
 
-const errorText = computed(() => errorDetail || ERROR_FALLBACK[errorCode] || '登录失败，请稍后重试')
+/**
+ * 错误提示文案：仅当后端回调携带 error/detail（?error=&detail=）时展示。
+ * 未登录被跳到本页（无 error 参数）时不展示错误，避免"登录失败"误导。
+ * 语义区分：未登录 = 中性提示（见模板副标题）；登录失败 = 下方错误横幅。
+ */
+const errorText = computed(() => {
+  if (errorDetail) return errorDetail
+  if (errorCode) return ERROR_FALLBACK[errorCode] ?? '登录失败，请稍后重试'
+  return ''
+})
 
 /** 登录成功后的回跳目标：优先 startLogin 时存入的 sessionStorage，其次 query.redirect */
 function redirectTarget(): string {
@@ -66,7 +75,9 @@ onMounted(async () => {
           <span class="material-symbols-outlined icon-lg text-primary">construction</span>
           <h1 class="text-lg font-semibold">施工多目标优化平台</h1>
         </div>
-        <p class="text-xs text-neutral-content">使用第三方账号登录以继续</p>
+        <p class="text-xs text-neutral-content">
+          {{ errorCode ? '登录未完成，请重试或更换方式' : '未登录，请选择下方登录方式进入工作台' }}
+        </p>
       </div>
 
       <div
