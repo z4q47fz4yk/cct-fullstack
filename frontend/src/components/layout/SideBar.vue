@@ -25,7 +25,7 @@ const expandedMenu = computed(() => {
 <template>
   <aside class="w-fit h-screen flex flex-col shrink-0">
     <div class="h-12 flex items-center px-5 pt-6 pb-4">
-      <span class="text-primary text-xl font-bold">icon</span>
+      <img src="/android-chrome-192x192.png" alt="CCT" class="h-8 w-8 rounded" />
     </div>
 
     <!-- 当前项目标识 -->
