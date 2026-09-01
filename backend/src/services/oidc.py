@@ -90,8 +90,12 @@ class OIDCRelay:
     async def fetch_userinfo(
         self, provider: str, token: dict[str, Any]
     ) -> dict[str, Any]:
-        """用 access_token 拉取 UserInfo 声明。"""
-        info = await self._client(provider).userinfo(token)
+        """用 access_token 拉取 UserInfo 声明。
+
+        注意：authlib 1.8 的 ``userinfo(**kwargs)`` 只接受关键字参数，
+        token 必须用 ``token=...`` 传（位置传参会 TypeError）。
+        """
+        info = await self._client(provider).userinfo(token=token)
         return dict(info)
 
 

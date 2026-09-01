@@ -11,7 +11,7 @@ from typing import Any
 
 import httpx
 from authlib.integrations.base_client.errors import MismatchingStateError
-from authlib.integrations.starlette_client import OAuthError
+from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import Depends
 from sqlmodel import select
 from starlette.responses import RedirectResponse
@@ -20,6 +20,7 @@ from src.app import app
 from src.config import OIDCProviderConfig, settings
 from src.dependencies.auth import get_oidc_relay, require_roles
 from src.models.auth import OIDCAccount, User
+from src.services.oidc import OIDCRelay
 
 # ---------------------------------------------------------------
 # 测试数据：两个 Provider（Gitea 形态 discovery + GitHub 形态手动端点/id claim）
@@ -100,7 +101,7 @@ class FakeOIDCRelay:
 # ---------------------------------------------------------------
 
 
-def install_relay(relay: FakeOIDCRelay) -> None:
+def install_relay(relay: FakeOIDCRelay | OIDCRelay) -> None:
     app.dependency_overrides[get_oidc_relay] = lambda: relay
 
 
@@ -461,5 +462,99 @@ async def test_require_roles_admin_allowed(client, monkeypatch):
         resp = await client.get("/auth-test-protected")
         assert resp.status_code == 200
         assert resp.json() == {"ok": True}
+    finally:
+        reset_relay_override()
+
+
+# ---------------------------------------------------------------
+# 真实 authlib 全链路（httpx.MockTransport 注入 client_kwargs.transport）
+# ---------------------------------------------------------------
+
+
+def _build_mock_oauth() -> OAuth:
+    """构造走真实 authlib 代码路径的 mock Provider（不经网络）。"""
+    oauth = OAuth()
+    discovery = {
+        "issuer": "https://mock.example",
+        "authorization_endpoint": "https://mock.example/authorize",
+        "token_endpoint": "https://mock.example/token",
+        "userinfo_endpoint": "https://mock.example/userinfo",
+        "jwks_uri": "https://mock.example/jwks",
+        "id_token_signing_alg_values_supported": ["RS256"],
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url.startswith("https://mock.example/.well-known/"):
+            return httpx.Response(200, json=discovery)
+        if url.startswith("https://mock.example/token"):
+            # 不含 id_token → authlib 跳过 id_token 验签分支
+            return httpx.Response(
+                200, json={"access_token": "mock-at", "token_type": "Bearer"}
+            )
+        if url.startswith("https://mock.example/userinfo"):
+            return httpx.Response(
+                200,
+                json={
+                    "sub": "1",
+                    "preferred_username": "mockuser",
+                    "email": "m@example.com",
+                },
+            )
+        return httpx.Response(404, json={"error": "not_found"})
+
+    oauth.register(
+        "mock",
+        client_id="cid-mock",
+        client_secret="csec-mock",
+        server_metadata_url="https://mock.example/.well-known/openid-configuration",
+        client_kwargs={
+            "scope": "openid profile email",
+            "transport": httpx.MockTransport(handler),
+        },
+    )
+    return oauth
+
+
+async def test_real_authlib_wiring_with_mock_transport(client, db_session, monkeypatch):
+    """真实 authlib 全链路（state 落会话 → code 换 token → userinfo）。
+
+    回归保护：authlib 1.8 的 ``userinfo()`` 只收关键字参数，位置传入会
+    TypeError（曾导致真实 Gitea 回调在拉取 userinfo 时失败）。
+    """
+    monkeypatch.setattr(
+        settings,
+        "oidc_providers",
+        [
+            OIDCProviderConfig(
+                name="mock",
+                display_name="Mock",
+                client_id="cid-mock",
+                client_secret="csec-mock",
+                scopes="openid profile email",
+                redirect_uri="http://localhost:5175/api/auth/mock/callback",
+                discovery_url="https://mock.example/.well-known/openid-configuration",
+            )
+        ],
+    )
+    relay = OIDCRelay(_build_mock_oauth())
+    install_relay(relay)
+    try:
+        resp = await client.get("/auth/mock/login")
+        assert resp.status_code == 302
+        from urllib.parse import parse_qs, urlsplit
+
+        state = parse_qs(urlsplit(resp.headers["location"]).query)["state"][0]
+
+        callback = await client.get(f"/auth/mock/callback?code=real-code&state={state}")
+        assert callback.status_code == 302
+        assert "done=1" in callback.headers["location"]
+
+        me = await client.get("/auth/me")
+        assert me.status_code == 200
+        assert me.json()["username"] == "mockuser"
+        accounts = (await db_session.exec(select(OIDCAccount))).all()
+        assert accounts[0].provider == "mock"
+        assert accounts[0].provider_user_id == "1"
     finally:
         reset_relay_override()
