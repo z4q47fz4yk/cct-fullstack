@@ -17,7 +17,7 @@ const TITLES: Record<ThemeMode, string> = {
 }
 
 const ROTATE: Record<ThemeMode, string> = {
-  auto: 'rotate-90',
+  auto: 'rotate-0',
   starglass: 'rotate-0',
   'starglass-light': 'rotate-180',
 }
