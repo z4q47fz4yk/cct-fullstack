@@ -58,8 +58,8 @@ function goToGuide() {
 
 async function goToConfirm() {
   await storeV2.allocateResources()
-  // 确认/提交职责已上移到「资源使用量」页的录入 tab（含进度与一键提交）
-  await router.push(`/project/${currentProjectId.value}/resource-usage?tab=entry`)
+  // 确认/提交职责已上移到「资源使用量」页的录入子页（含进度与一键提交）
+  await router.push(`/project/${currentProjectId.value}/resource-usage/entry`)
 }
 </script>
 
