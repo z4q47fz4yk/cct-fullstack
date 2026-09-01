@@ -10,6 +10,7 @@ import CompareRunsPanel from '@/components/optimization/CompareRunsPanel.vue'
 import CompareStatsPanel from '@/components/optimization/CompareStatsPanel.vue'
 import ParetoSolutionsTable from '@/components/optimization/ParetoSolutionsTable.vue'
 import SaveWeightPresetModal from '@/components/optimization/SaveWeightPresetModal.vue'
+import OptimizationConfig from '@/components/optimization/OptimizationConfig.vue'
 import RunStatusBar from '@/components/optimization/RunStatusBar.vue'
 import { sortTasksForGantt } from '@/utils/schedule'
 import { fmtNumber, fmtWanYuan } from '@/utils/format'
@@ -154,6 +155,8 @@ async function handleResetOptimization() {
 
 const runName = ref('')
 const runNameTouched = ref(false)
+// 参数修改面板展开态（内联于本页，取代独立的「优化配置」页）
+const showConfig = ref(false)
 
 // 数据体检被动入口：仅有零碳因子警告时显示一行小链接，不阻断流程
 const { zeroFactorCount: diagZeroFactorCount } = useDiagnosticsApi(() => 'ALL')
@@ -511,18 +514,40 @@ const tableSelectedId = computed<number | null>({
               基于当前资源约束，在工期、成本、碳排放三者之间寻找帕累托最优解
             </p>
           </div>
-          <div
-            class="flex items-center justify-between gap-3 w-full max-w-sm text-xs font-mono mt-1"
-          >
-            <p class="text-fg-subtle truncate">
-              {{ configPreview }}
-            </p>
-            <RouterLink
-              :to="`/project/${currentProjectId}/settings/optimization`"
-              class="link link-primary shrink-0"
+          <!-- 配置摘要 + 内联参数修改入口 -->
+          <div class="w-full text-xs font-mono mt-1" :class="showConfig ? 'max-w-xl' : 'max-w-sm'">
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-fg-subtle truncate">
+                {{ configPreview }}
+              </p>
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs gap-1 shrink-0"
+                :aria-expanded="showConfig"
+                :title="showConfig ? '收起参数' : '修改参数'"
+                @click="showConfig = !showConfig"
+              >
+                <span>修改参数</span>
+                <span
+                  class="material-symbols-outlined icon-sm transition-transform duration-200"
+                  :class="showConfig ? 'rotate-180' : ''"
+                  aria-hidden="true"
+                >
+                  expand_more
+                </span>
+              </button>
+            </div>
+
+            <!-- 内联参数表单（仅存前端 localStorage，启动优化时生效） -->
+            <div
+              v-if="showConfig"
+              class="border-t border-base-content/10 pt-4 mt-3 text-left font-sans"
             >
-              修改参数
-            </RouterLink>
+              <OptimizationConfig
+                :config="store.config"
+                @update:config="store.updateConfig($event)"
+              />
+            </div>
           </div>
 
           <div class="fieldset w-full max-w-sm text-left">
