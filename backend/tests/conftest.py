@@ -13,6 +13,9 @@ from src.config import settings
 # 采用运维惯例写法（postgresql://），asyncpg 驱动由 settings.database_async_url 注入
 TEST_DATABASE_URI = "postgresql://cct:cct@localhost/cctv2-test"
 settings.database_url = TEST_DATABASE_URI
+# 测试请求不带 /api 前缀（真实部署由反代剥离），故放开 Cookie 路径限制，
+# 否则 `path=/api` 的会话 Cookie 不会被发送，auth 测试的 login→callback 链路中断。
+settings.session_cookie_path = "/"
 
 
 def load_sqlmodel_metadata():

@@ -2,6 +2,7 @@
 import { useRoute } from 'vue-router'
 import SideBar from './SideBar.vue'
 import ThemeToggle from '@/components/common/ThemeToggle.vue'
+import UserMenu from '@/components/common/UserMenu.vue'
 import { docsHref } from '@site'
 
 const route = useRoute()
@@ -43,6 +44,7 @@ const docsUrl = docsHref('/guide/intro')
             <span class="hidden md:inline">文档</span>
           </a>
           <ThemeToggle />
+          <UserMenu />
         </div>
       </header>
 

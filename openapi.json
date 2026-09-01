@@ -5,6 +5,181 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/auth/providers": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "列出可用的登录方式",
+        "description": "返回当前配置的所有第三方登录 Provider，前端据此渲染登录按钮",
+        "operationId": "list_auth_providers",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderInfo"
+                  },
+                  "type": "array",
+                  "title": "Response List Auth Providers"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/{provider}/login": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "发起第三方登录",
+        "description": "生成 state 写入会话并 302 跳转至对应 Provider 的授权页",
+        "operationId": "auth_login",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/src__routers__auth__NotFoundResp"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/{provider}/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "第三方登录回调",
+        "description": "校验 state、用 code 换取 access_token、拉取 UserInfo、同步本地账号并写入会话；成功回跳前端登录页 ?done=1，失败携带 ?error=&detail=",
+        "operationId": "auth_callback",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/src__routers__auth__NotFoundResp"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "获取当前登录用户",
+        "description": "从会话读取 user_id 并实时查询用户与角色（角色变更立即生效）；未登录返回 401",
+        "operationId": "get_auth_me",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResp"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "退出登录",
+        "description": "清除本地会话 Cookie（仅本地登出，不调用 Provider 的登出端点）",
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
     "/project": {
       "get": {
         "tags": [
@@ -6455,6 +6630,20 @@
         ],
         "title": "AllocationCreateItem"
       },
+      "AuthErrorResp": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "中文错误描述"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "AuthErrorResp"
+      },
       "Body_parse_daily_report": {
         "properties": {
           "usage_date": {
@@ -7475,6 +7664,73 @@
           "NEW"
         ],
         "title": "MappingStatus"
+      },
+      "MeResp": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "本地用户ID"
+          },
+          "username": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Username",
+            "description": "用户名（唯一）"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "description": "显示名称"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email",
+            "description": "邮箱（可空：部分第三方不返回）"
+          },
+          "role": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Role",
+            "description": "角色名称"
+          },
+          "avatarUrl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatarurl",
+            "description": "头像地址"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "name",
+          "email",
+          "role",
+          "avatarUrl"
+        ],
+        "title": "MeResp",
+        "description": "当前登录用户信息（来自本地 User + Role，role 以数据库为准）。"
       },
       "MeasureCreate": {
         "properties": {
@@ -9726,6 +9982,27 @@
         "type": "object",
         "title": "ProjectUpdate",
         "description": "更新项目请求。\n\nNOT NULL 字段使用 ``Annotated[Alias, Field(default=None)]``：\nOpenAPI 不暴露 null 选项，``reject_explicit_none`` 在显式 null 时返回 422。\n其它 nullable 字段保持 ``T | None = Field(default=None)``。"
+      },
+      "ProviderInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Provider 标识（URL 中使用，如 gitea）"
+          },
+          "displayName": {
+            "type": "string",
+            "title": "Displayname",
+            "description": "登录按钮展示名称"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "displayName"
+        ],
+        "title": "ProviderInfo",
+        "description": "登录页可用的第三方 Provider 摘要。"
       },
       "ResourceCategory": {
         "type": "string",
@@ -12539,6 +12816,20 @@
         "type": "object",
         "title": "WeatherUpdate",
         "description": "更新天气月度记录（month 不可改，数值字段显式 null 表示清空）。"
+      },
+      "src__routers__auth__NotFoundResp": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "NotFoundResp",
+        "description": "404 错误响应。"
       },
       "src__routers__chart__ConflictResp": {
         "properties": {

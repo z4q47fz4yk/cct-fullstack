@@ -39,6 +39,7 @@ def set_target_metadata():
     from sqlmodel import SQLModel
 
     from src.models import (
+        auth,  # noqa: F401
         chart,  # noqa: F401
         daily_report,  # noqa: F401
         optimize,  # noqa: F401

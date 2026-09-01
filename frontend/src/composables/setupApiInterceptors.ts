@@ -33,6 +33,18 @@ export function setupApiInterceptors(): void {
       })
     }
 
+    // 会话失效（受保护业务接口 401）：整页跳转登录页并保留回跳目标。
+    // /auth/ 端点与静默请求不触发（登录页自身的探测请求不得循环跳转）。
+    if (
+      status === 401 &&
+      !silent &&
+      !endpoint.startsWith('/auth/') &&
+      !window.location.pathname.startsWith('/login')
+    ) {
+      const redirect = encodeURIComponent(window.location.pathname + window.location.search)
+      window.location.assign(`/login?redirect=${redirect}`)
+    }
+
     return apiErr
   })
 }
