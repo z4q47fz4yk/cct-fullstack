@@ -4,12 +4,14 @@ import { useRouter } from 'vue-router'
 import AllocateTable from '@/components/daily-report/AllocateTable.vue'
 import { useDailyReportStoreV2 } from '@/stores/report'
 import AllocationByTask from '@/components/daily-report/AllocationByTask.vue'
+import { useProjectContext } from '@/composables/useProjectContext'
 
 definePage({
   meta: {
     title: '分配工序',
     icon: 'assignment',
-    showInNav: true,
+    // 从侧边栏隐藏：日报向导仅从「资源使用量」页进入
+    showInNav: false,
     parentName: '/project/[projectId]/daily-report',
     navOrder: 3,
   },
@@ -17,6 +19,7 @@ definePage({
 
 const router = useRouter()
 const storeV2 = useDailyReportStoreV2()
+const { currentProjectId } = useProjectContext()
 
 const selectedTaskId = ref<number | null>(null)
 const isAllocationValid = ref(true)
@@ -55,7 +58,8 @@ function goToGuide() {
 
 async function goToConfirm() {
   await storeV2.allocateResources()
-  await router.push('./confirm')
+  // 确认/提交职责已上移到「资源使用量」页的录入 tab（含进度与一键提交）
+  await router.push(`/project/${currentProjectId.value}/resource-usage?tab=entry`)
 }
 </script>
 

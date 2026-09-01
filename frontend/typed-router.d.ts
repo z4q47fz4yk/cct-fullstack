@@ -40,10 +40,8 @@ declare module 'vue-router/auto-routes' {
       | '/project/[projectId]/daily-report'
       | '/project/[projectId]/daily-report/'
       | '/project/[projectId]/daily-report/allocate'
-      | '/project/[projectId]/daily-report/confirm'
       | '/project/[projectId]/daily-report/import'
       | '/project/[projectId]/daily-report/review'
-      | '/project/[projectId]/daily-report/success'
       | '/project/[projectId]/insights'
       | '/project/[projectId]/insights/'
       | '/project/[projectId]/insights/compliance'
@@ -80,10 +78,8 @@ declare module 'vue-router/auto-routes' {
       { projectId: ParamValue<false> },
       | '/project/[projectId]/daily-report/'
       | '/project/[projectId]/daily-report/allocate'
-      | '/project/[projectId]/daily-report/confirm'
       | '/project/[projectId]/daily-report/import'
       | '/project/[projectId]/daily-report/review'
-      | '/project/[projectId]/daily-report/success'
     >
     '/project/[projectId]/daily-report/': RouteRecordInfo<
       '/project/[projectId]/daily-report/',
@@ -99,13 +95,6 @@ declare module 'vue-router/auto-routes' {
       { projectId: ParamValue<false> },
       never
     >
-    '/project/[projectId]/daily-report/confirm': RouteRecordInfo<
-      '/project/[projectId]/daily-report/confirm',
-      '/project/:projectId/daily-report/confirm',
-      { projectId: ParamValue<true> },
-      { projectId: ParamValue<false> },
-      never
-    >
     '/project/[projectId]/daily-report/import': RouteRecordInfo<
       '/project/[projectId]/daily-report/import',
       '/project/:projectId/daily-report/import',
@@ -116,13 +105,6 @@ declare module 'vue-router/auto-routes' {
     '/project/[projectId]/daily-report/review': RouteRecordInfo<
       '/project/[projectId]/daily-report/review',
       '/project/:projectId/daily-report/review',
-      { projectId: ParamValue<true> },
-      { projectId: ParamValue<false> },
-      never
-    >
-    '/project/[projectId]/daily-report/success': RouteRecordInfo<
-      '/project/[projectId]/daily-report/success',
-      '/project/:projectId/daily-report/success',
       { projectId: ParamValue<true> },
       { projectId: ParamValue<false> },
       never
@@ -319,10 +301,8 @@ declare module 'vue-router/auto-routes' {
         | '/project/[projectId]/daily-report'
         | '/project/[projectId]/daily-report/'
         | '/project/[projectId]/daily-report/allocate'
-        | '/project/[projectId]/daily-report/confirm'
         | '/project/[projectId]/daily-report/import'
         | '/project/[projectId]/daily-report/review'
-        | '/project/[projectId]/daily-report/success'
         | '/project/[projectId]/insights'
         | '/project/[projectId]/insights/'
         | '/project/[projectId]/insights/compliance'
@@ -357,10 +337,8 @@ declare module 'vue-router/auto-routes' {
         | '/project/[projectId]/daily-report'
         | '/project/[projectId]/daily-report/'
         | '/project/[projectId]/daily-report/allocate'
-        | '/project/[projectId]/daily-report/confirm'
         | '/project/[projectId]/daily-report/import'
         | '/project/[projectId]/daily-report/review'
-        | '/project/[projectId]/daily-report/success'
       views: 'default'
       pathParamNames: never
     }
@@ -374,11 +352,6 @@ declare module 'vue-router/auto-routes' {
       views: never
       pathParamNames: never
     }
-    'src/pages/project/[projectId]/daily-report/confirm.vue': {
-      routes: '/project/[projectId]/daily-report/confirm'
-      views: never
-      pathParamNames: never
-    }
     'src/pages/project/[projectId]/daily-report/import.vue': {
       routes: '/project/[projectId]/daily-report/import'
       views: never
@@ -386,11 +359,6 @@ declare module 'vue-router/auto-routes' {
     }
     'src/pages/project/[projectId]/daily-report/review.vue': {
       routes: '/project/[projectId]/daily-report/review'
-      views: never
-      pathParamNames: never
-    }
-    'src/pages/project/[projectId]/daily-report/success.vue': {
-      routes: '/project/[projectId]/daily-report/success'
       views: never
       pathParamNames: never
     }

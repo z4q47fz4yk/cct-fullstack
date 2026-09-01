@@ -39,6 +39,21 @@ const source = computed<'manual' | 'daily-report' | 'unknown'>(() => {
   return 'unknown'
 })
 
+/** 组内记录的类型口径（取首条；同一批次通常统一） */
+const usageType = computed<'ACTUAL' | 'PLANNED' | null>(() => records[0]?.usageType ?? null)
+
+const usageTypeLabel = computed(() => {
+  if (usageType.value === 'ACTUAL') return '实际'
+  if (usageType.value === 'PLANNED') return '计划'
+  return ''
+})
+
+const usageTypeBadgeClass = computed(() => {
+  if (usageType.value === 'ACTUAL') return 'badge-success'
+  if (usageType.value === 'PLANNED') return 'badge-warning'
+  return 'badge-ghost'
+})
+
 const usageDate = computed(() => {
   if (records.length === 0) return ''
   return records[0]?.usageDate ?? ''
@@ -68,6 +83,9 @@ const batchLabel = computed(() => {
           {{
             source === 'manual' ? '手动录入' : source === 'daily-report' ? '日报导入' : '未知来源'
           }}
+        </span>
+        <span v-if="usageType" class="badge badge-sm" :class="usageTypeBadgeClass">
+          {{ usageTypeLabel }}口径
         </span>
         <span v-if="batchLabel" class="text-xs text-fg-subtle font-mono">{{ batchLabel }}</span>
       </div>

@@ -151,19 +151,28 @@ export function useResourceUsageApi(options: UseResourceUsageApiOptions) {
 }
 
 /**
- * 按日期拉取全部使用量记录（无分页），用于前端预检「同日重复」
+ * 按日期（可选按类型）拉取全部使用量记录（无分页），用于前端预检「同日重复」
  * query key 与普通列表查询独立，避免污染筛选页面缓存
+ *
+ * 传 usageType 时仅预检该口径的记录：
+ * 唯一约束含 usage_type，同一 (task, resource, date) 的 ACTUAL 与 PLANNED
+ * 本可共存，若不过滤会把不同口径误判为冲突。
  */
-export function useResourceUsagesByDate(date: Ref<string | null>) {
+export function useResourceUsagesByDate(
+  date: Ref<string | null>,
+  usageType?: Ref<UsageType | null>,
+) {
   const { currentProjectId } = useProjectContext()
   const { state, refresh } = useQuery(() => {
     const pid = currentProjectId.value
     const d = date.value
+    const t = usageType?.value ?? null
     return {
       ...listResourceUsagesQuery({
         path: { project_id: pid! },
         query: {
           date: d || null,
+          usageType: t || undefined,
           include_tags: true,
           page: 1,
           per_page: FETCH_ALL_PAGE_SIZE,

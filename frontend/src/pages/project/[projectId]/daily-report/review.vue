@@ -8,7 +8,8 @@ definePage({
   meta: {
     title: '核对资源',
     icon: 'fact_check',
-    showInNav: true,
+    // 从侧边栏隐藏：日报向导仅从「资源使用量」页进入
+    showInNav: false,
     parentName: '/project/[projectId]/daily-report',
     navOrder: 2,
   },

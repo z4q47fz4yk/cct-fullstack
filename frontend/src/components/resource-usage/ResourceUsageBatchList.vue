@@ -46,6 +46,8 @@ interface BatchGroup {
   remark: string
   records: ResourceUsageWithTagsResp[]
   source: 'manual' | 'daily-report' | 'unknown'
+  /** 组内记录的类型口径（同一批次通常统一；取首条） */
+  usageType: 'ACTUAL' | 'PLANNED' | null
   /** 组内所有记录的标签并集（按 tag.id 去重） */
   tags: TagResp[]
 }
@@ -98,6 +100,7 @@ const groups = computed<BatchGroup[]>(() => {
         records: [],
         source:
           u.manualBatchId !== null && u.manualBatchId !== undefined ? 'manual' : 'daily-report',
+        usageType: u.usageType ?? null,
         tags: [],
       })
     }
@@ -125,6 +128,16 @@ function sourceLabel(s: BatchGroup['source']) {
 function sourceBadgeClass(s: BatchGroup['source']) {
   if (s === 'manual') return 'badge-info'
   if (s === 'daily-report') return 'badge-neutral'
+  return 'badge-ghost'
+}
+function usageTypeLabel(t: BatchGroup['usageType']) {
+  if (t === 'ACTUAL') return '实际'
+  if (t === 'PLANNED') return '计划'
+  return ''
+}
+function usageTypeBadgeClass(t: BatchGroup['usageType']) {
+  if (t === 'ACTUAL') return 'badge-success'
+  if (t === 'PLANNED') return 'badge-warning'
   return 'badge-ghost'
 }
 function batchLabel(g: BatchGroup) {
@@ -172,8 +185,17 @@ const tableHeaders = [
                 <span class="badge badge-sm badge-primary">{{ g.count }} 条</span>
               </td>
               <td>
-                <span class="badge badge-sm" :class="sourceBadgeClass(g.source)">
-                  {{ sourceLabel(g.source) }}
+                <span class="flex items-center gap-1">
+                  <span class="badge badge-sm" :class="sourceBadgeClass(g.source)">
+                    {{ sourceLabel(g.source) }}
+                  </span>
+                  <span
+                    v-if="g.usageType"
+                    class="badge badge-sm"
+                    :class="usageTypeBadgeClass(g.usageType)"
+                  >
+                    {{ usageTypeLabel(g.usageType) }}
+                  </span>
                 </span>
               </td>
               <td>

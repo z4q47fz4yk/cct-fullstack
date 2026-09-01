@@ -5,13 +5,14 @@ import { useDailyReportStoreV2 } from '@/stores/report'
 import { useMutation } from '@pinia/colada'
 import { parseDailyReportMutation } from '@/client/@pinia/colada.gen'
 import { useProjectContext } from '@/composables/useProjectContext'
-import { todayIsoLocal } from '@/utils/date'
+import { useUsageDateType } from '@/composables/useUsageDateType'
 
 definePage({
   meta: {
     title: '导入日报',
     icon: 'upload_file',
-    showInNav: true,
+    // 从侧边栏隐藏：统一从「资源使用量」页进入
+    showInNav: false,
     parentName: '/project/[projectId]/daily-report',
     navOrder: 1,
   },
@@ -21,9 +22,11 @@ const router = useRouter()
 const storeV2 = useDailyReportStoreV2()
 const { currentProjectId } = useProjectContext()
 
+// 使用日期与「资源使用量」页共享（页面级唯一日期）
+const { usageDate, effectiveUsageType } = useUsageDateType()
+
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
-const usageDate = ref(todayIsoLocal())
 
 const { mutateAsync: parseDailyReport, data, isLoading } = useMutation(parseDailyReportMutation())
 
@@ -77,6 +80,18 @@ function goToReview() {
         <p class="text-sm text-fg-subtle">
           请上传施工现场的 Excel 日报文件，系统将自动解析资源使用数据
         </p>
+      </div>
+
+      <!-- 计划口径提示：日报导入按实际口径落库 -->
+      <div
+        v-if="effectiveUsageType === 'PLANNED'"
+        class="alert alert-warning alert-sm mb-4"
+        role="alert"
+      >
+        <span class="material-symbols-outlined icon-sm">warning</span>
+        <span class="text-sm">
+          当前为「计划」口径，日报导入将按「实际」口径落库；如需录入计划数据请回到资源使用量页切换口径。
+        </span>
       </div>
 
       <fieldset class="fieldset">
