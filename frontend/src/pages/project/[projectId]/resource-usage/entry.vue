@@ -337,8 +337,8 @@ const infoTone = computed(() => (isForced.value ? 'warning' : 'info'))
 
   <!-- 统一「待提交数据」卡片 -->
   <UsageEntrySummary
-    :manual-rows="pendingRows"
-    :manual-task-ids="manualTaskIds"
+    v-model:manual-rows="pendingRows"
+    v-model:manual-task-ids="manualTaskIds"
     :usage-date="usageDate"
     :usage-type="effectiveUsageType"
     :existing-duplicate-keys="pendingRowDuplicateKeys"

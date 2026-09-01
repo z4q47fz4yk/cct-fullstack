@@ -46,11 +46,10 @@ interface DisplayEntry {
   conflict?: boolean
 }
 
-const { manualRows, manualTaskIds, usageDate, usageType, existingDuplicateKeys } = defineProps<{
-  /** 手动待提交行 */
-  manualRows: PendingUsageRow[]
-  /** 手动参与的工序集合（含尚无手动行的「待分配工序」） */
-  manualTaskIds: number[]
+const manualRows = defineModel<PendingUsageRow[]>('manualRows', { required: true })
+const manualTaskIds = defineModel<number[]>('manualTaskIds', { required: true })
+
+const { usageDate, usageType, existingDuplicateKeys } = defineProps<{
   /** 当前使用日期（仅用于编辑弹窗默认值） */
   usageDate: string
   /** 当前用量类型（仅用于编辑弹窗标签） */
@@ -124,7 +123,7 @@ const dailyByResource = computed(() => {
 /** 手动条目（带资源名映射），按任务聚合 */
 const manualByTask = computed(() => {
   const m = new Map<number, DisplayEntry[]>()
-  for (const r of manualRows) {
+  for (const r of manualRows.value) {
     const res = resourceMap.value.get(r.resource_id)
     const conflict = existingDuplicateKeys?.has(`${r.task_id}|${r.resource_id}`) ?? false
     const list = m.get(r.task_id) ?? []
@@ -144,7 +143,7 @@ const manualByTask = computed(() => {
 /** 手动条目按资源名聚合（Map<resourceName, Array<DisplayEntry>>） */
 const manualByResource = computed(() => {
   const m = new Map<string, DisplayEntry[]>()
-  for (const r of manualRows) {
+  for (const r of manualRows.value) {
     const res = resourceMap.value.get(r.resource_id)
     const name = res?.name ?? `资源 #${r.resource_id}`
     const conflict = existingDuplicateKeys?.has(`${r.task_id}|${r.resource_id}`) ?? false
@@ -172,7 +171,7 @@ const taskEntries = computed<Array<{ taskId: number; entries: DisplayEntry[] }>>
   const ids = new Set<number>([
     ...dailyByTask.value.keys(),
     ...manualByTask.value.keys(),
-    ...manualTaskIds,
+    ...manualTaskIds.value,
   ])
   return Array.from(ids)
     .sort((a, b) =>
@@ -211,7 +210,7 @@ const parsedCount = computed(() => store.parsedResourceItems.length)
 const dailyTaskCount = computed(() => dailyByTask.value.size)
 const dailyItemCount = computed(() => store.resourceUsages.length)
 /** 手动条数 */
-const manualCount = computed(() => manualRows.length)
+const manualCount = computed(() => manualRows.value.length)
 
 const hasPendingBatch = computed(() => !!store.batchId && store.resourceUsages.length > 0)
 const shortBatchId = computed(() => (store.batchId ? store.batchId.slice(0, 8) : ''))
@@ -260,13 +259,18 @@ const showTaskPicker = ref(false)
 
 /** 待分配工序 = manualTaskIds ∪ 日报任务；弹窗过滤掉已在其中的工序 */
 const pickableTasks = computed(() => {
-  const existing = new Set<number>([...manualTaskIds, ...dailyByTask.value.keys()])
+  const existing = new Set<number>([...manualTaskIds.value, ...dailyByTask.value.keys()])
   return tasks.value.filter((t) => !existing.has(t.id))
 })
 
 function pickTask(id: number) {
   emit('add-task', id)
   showTaskPicker.value = false
+}
+
+/** 移除待分配工序（defineModel 双向写回父组件） */
+function removeTask(id: number) {
+  manualTaskIds.value = manualTaskIds.value.filter((t) => t !== id)
 }
 
 async function handleRemoveRow(row: PendingUsageRow) {
@@ -367,10 +371,17 @@ function taskCode(taskId: number) {
           <div
             v-for="group in taskEntries"
             :key="group.taskId"
-            class="rounded-lg border border-base-300 px-4 py-3"
+            class="group rounded-lg border border-base-300 px-4 py-3 hover:border-primary hover:border-dashed"
           >
-            <h4 class="font-medium text-base-content text-sm mb-2">
-              {{ taskDisplay(group.taskId) }}
+            <h4 class="flex justify-between font-medium text-base-content text-sm mb-2">
+              <span>{{ taskDisplay(group.taskId) }}</span>
+              <span
+                v-if="manualTaskIds.includes(group.taskId)"
+                :title="'移除待分配工序'"
+                class="hidden group-hover:inline-flex btn btn-ghost btn-xs rounded-full text-error material-symbols-outlined icon-sm"
+                @click="removeTask(group.taskId)"
+                >delete</span
+              >
             </h4>
             <div class="flex flex-wrap items-center gap-2">
               <!-- 日报条目：实线徽标 -->
@@ -417,11 +428,11 @@ function taskCode(taskId: number) {
               <!-- 每工序内「+补充」：锁定该工序免选 -->
               <button
                 type="button"
-                class="inline-flex items-center gap-1 h-7 px-3 rounded-full border border-dashed text-[11px] transition-colors bg-base-200/40 border-base-content/20 text-fg-muted hover:border-primary/40 hover:text-base-content"
+                class="invisible group-hover:visible inline-flex items-center gap-1 h-7 px-3 rounded-full border border-dashed text-[11px] transition-all bg-base-200/40 border-base-content/20 text-fg-muted hover:border-primary/40 hover:text-base-content"
                 @click="handleAdd(group.taskId)"
               >
                 <span class="material-symbols-outlined text-xs">add</span>
-                +补充
+                补充
               </button>
             </div>
           </div>
