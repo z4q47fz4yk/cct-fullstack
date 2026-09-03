@@ -4,7 +4,7 @@
 from typing import cast
 
 import pytest_asyncio
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 

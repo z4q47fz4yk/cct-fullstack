@@ -10,7 +10,7 @@
 import uuid
 from datetime import date
 
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.daily_report import ImportBatch, ImportBatchStatus

@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     # 避免与前端其它 Cookie 冲突、减少发送面。
     session_cookie_path: str = Field("/api", validation_alias="SESSION_COOKIE_PATH")
     # Cookie Secure 标志：生产 HTTPS 必须 true；本地 http://localhost 开发必须 false
-    # （否则浏览器/httpx 不会回传 Secure Cookie，登录回调将读不到 state）。
+    # （否则浏览器/httpx2 不会回传 Secure Cookie，登录回调将读不到 state）。
     session_cookie_secure: bool = Field(False, validation_alias="SESSION_COOKIE_SECURE")
     # 注册开关：false 时 OIDC 新用户不落库，回调回跳前端提示联系管理员
     auth_allow_new_user_registration: bool = Field(

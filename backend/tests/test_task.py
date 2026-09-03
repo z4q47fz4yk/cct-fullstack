@@ -4,7 +4,7 @@ from urllib.parse import parse_qs
 import pytest
 import pytest_asyncio
 from faker import Faker
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.tag import Tag, TagDimension, TaskTag

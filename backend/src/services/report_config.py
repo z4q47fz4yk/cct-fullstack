@@ -85,10 +85,10 @@ class ReportConfigService:
         preview: dict[str, Any] | None = None
         if sample_file is not None:
             try:
-                df = pl.read_excel(
-                    sample_file, engine="calamine"
-                ) if sample_filename.endswith((".xlsx", ".xls")) else pl.read_csv(
-                    sample_file
+                df = (
+                    pl.read_excel(sample_file, engine="calamine")
+                    if sample_filename.endswith((".xlsx", ".xls"))
+                    else pl.read_csv(sample_file)
                 )
             except Exception as e:
                 return ConfigValidationResult(
@@ -105,11 +105,7 @@ class ReportConfigService:
                 result = parse_report(df, config=config)
                 preview = {
                     "summary": f"共解析出 {len(result.items)} 条记录"
-                    + (
-                        f"，{len(result.warnings)} 条警告"
-                        if result.warnings
-                        else ""
-                    ),
+                    + (f"，{len(result.warnings)} 条警告" if result.warnings else ""),
                     "items": [
                         {
                             "name": item.name,
@@ -132,9 +128,7 @@ class ReportConfigService:
                     success=False, errors=errors, parsed_preview=None
                 )
 
-        return ConfigValidationResult(
-            success=True, errors=[], parsed_preview=preview
-        )
+        return ConfigValidationResult(success=True, errors=[], parsed_preview=preview)
 
     @staticmethod
     def save_config(
@@ -192,9 +186,7 @@ class ReportConfigService:
             config_json=json.loads(config.model_dump_json()),
             block_count=len(config.blocks),
             categories=[blk.category.value for blk in config.blocks],
-            descriptions=[
-                blk.description for blk in config.blocks if blk.description
-            ],
+            descriptions=[blk.description for blk in config.blocks if blk.description],
         )
 
     @staticmethod

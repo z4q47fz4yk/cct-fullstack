@@ -17,7 +17,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 from pydantic import ValidationError
 
 from src.schemas.daily_report_config import (
@@ -71,20 +71,18 @@ def _minimal_config_dict():
 
 def _make_sample_csv() -> bytes:
     """生成合法的样例日报文件（CSV 格式）"""
-    df = pl.DataFrame(
-        {
-            "col0": [
-                "现场人员",
-                "人员数量",
-                "",
-                "施工机械",
-                "数量",
-                "机械型号",
-            ],
-            "col1": ["张三", "5人", "", "挖掘机", "2台", "EX-200"],
-            "col2": ["李四", "3人", "", "推土机", "1台", "D6"],
-        }
-    )
+    df = pl.DataFrame({
+        "col0": [
+            "现场人员",
+            "人员数量",
+            "",
+            "施工机械",
+            "数量",
+            "机械型号",
+        ],
+        "col1": ["张三", "5人", "", "挖掘机", "2台", "EX-200"],
+        "col2": ["李四", "3人", "", "推土机", "1台", "D6"],
+    })
     buf = BytesIO()
     df.write_csv(buf)
     buf.seek(0)
@@ -214,18 +212,14 @@ class TestValidateConfigSecurity:
 
     def test_excessive_ignore_values(self):
         d = _minimal_config_dict()
-        d["blocks"][0]["cleaning"] = {
-            "ignore_values": [f"val{i}" for i in range(51)]
-        }
+        d["blocks"][0]["cleaning"] = {"ignore_values": [f"val{i}" for i in range(51)]}
         cfg = ParseEngineConfig.model_validate(d)
         errors = validate_config_security(cfg)
         assert len(errors) > 0
 
     def test_long_ignore_value(self):
         d = _minimal_config_dict()
-        d["blocks"][0]["cleaning"] = {
-            "ignore_values": ["a" * 201]
-        }
+        d["blocks"][0]["cleaning"] = {"ignore_values": ["a" * 201]}
         cfg = ParseEngineConfig.model_validate(d)
         errors = validate_config_security(cfg)
         assert len(errors) > 0
@@ -314,12 +308,10 @@ class TestReportConfigService:
         )
         monkeypatch.setattr(
             "src.services.report_config.load_config_by_id",
-            lambda project_id, config_id: (
-                ParseEngineConfig.model_validate(
-                    json.loads(
-                        (configs_dir / str(project_id) / f"{config_id}.json").read_text(
-                            encoding="utf-8"
-                        )
+            lambda project_id, config_id: ParseEngineConfig.model_validate(
+                json.loads(
+                    (configs_dir / str(project_id) / f"{config_id}.json").read_text(
+                        encoding="utf-8"
                     )
                 )
             ),
@@ -387,7 +379,9 @@ class TestConfigRouter:
     """
 
     @pytest.mark.anyio
-    @pytest.mark.skip(reason="需要 DB 连接（CurrentProject 依赖），核心逻辑在 service 层已覆盖")
+    @pytest.mark.skip(
+        reason="需要 DB 连接（CurrentProject 依赖），核心逻辑在 service 层已覆盖"
+    )
     async def test_extract_preview(self, client: AsyncClient, sample_csv: bytes):
         resp = await client.post(
             "/projects/1/report-config/extract-preview",
@@ -399,7 +393,9 @@ class TestConfigRouter:
         assert "日报文件预览" in data["markdownText"]
 
     @pytest.mark.anyio
-    @pytest.mark.skip(reason="需要 DB 连接（CurrentProject 依赖），核心逻辑在 service 层已覆盖")
+    @pytest.mark.skip(
+        reason="需要 DB 连接（CurrentProject 依赖），核心逻辑在 service 层已覆盖"
+    )
     async def test_validate_endpoint(self, client: AsyncClient, sample_csv: bytes):
         resp = await client.post(
             "/projects/1/report-config/validate",
@@ -412,8 +408,12 @@ class TestConfigRouter:
         assert data["parsedPreview"] is not None
 
     @pytest.mark.anyio
-    @pytest.mark.skip(reason="需要 DB 连接（CurrentProject 依赖），核心逻辑在 service 层已覆盖")
-    async def test_save_and_list(self, client: AsyncClient, tmp_path: Path, monkeypatch):
+    @pytest.mark.skip(
+        reason="需要 DB 连接（CurrentProject 依赖），核心逻辑在 service 层已覆盖"
+    )
+    async def test_save_and_list(
+        self, client: AsyncClient, tmp_path: Path, monkeypatch
+    ):
         """保存配置端到端"""
         configs_dir = tmp_path / "configs"
         configs_dir.mkdir()

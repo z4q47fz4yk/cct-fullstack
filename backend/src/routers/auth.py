@@ -16,7 +16,7 @@ import logging
 from typing import Annotated
 from urllib.parse import quote
 
-import httpx
+import httpx2
 from authlib.integrations.base_client.errors import MismatchingStateError
 from authlib.integrations.starlette_client import OAuthError
 from fastapi import APIRouter, Depends, HTTPException
@@ -93,7 +93,7 @@ async def auth_login_endpoint(
         raise HTTPException(status_code=404, detail=f"未配置登录方式：{provider}")
     try:
         return await relay.authorize_redirect(request, provider, cfg.redirect_uri)
-    except httpx.HTTPError as e:
+    except httpx2.HTTPError as e:
         logger.warning("OIDC 登录跳转失败 provider=%s: %s", provider, e)
         raise HTTPException(
             status_code=502, detail="第三方认证服务暂时不可用，请稍后重试"
@@ -133,7 +133,7 @@ async def auth_callback_endpoint(
         return _frontend_redirect(
             "TOKEN_EXCHANGE_FAILED", "第三方认证服务暂时不可用，请稍后重试"
         )
-    except httpx.HTTPError as e:
+    except httpx2.HTTPError as e:
         logger.warning("OIDC token 请求异常 provider=%s: %s", provider, e)
         return _frontend_redirect(
             "TOKEN_EXCHANGE_FAILED", "第三方认证服务暂时不可用，请稍后重试"
@@ -142,7 +142,7 @@ async def auth_callback_endpoint(
     # 2. 拉取 UserInfo
     try:
         claims = await relay.fetch_userinfo(provider, token)
-    except httpx.HTTPError as e:
+    except httpx2.HTTPError as e:
         logger.warning("OIDC userinfo 请求异常 provider=%s: %s", provider, e)
         return _frontend_redirect(
             "USERINFO_FAILED", "第三方认证服务暂时不可用，请稍后重试"

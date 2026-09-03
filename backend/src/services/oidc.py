@@ -4,7 +4,8 @@
   registry（Provider 配置即工厂）；
 - ``OIDCRelay``：路由与 authlib 之间的薄封装，也是单测的依赖注入缝
   （测试替换 OIDCRelay 实例即可隔离第三方网络；也可通过
-  ``client_kwargs={"transport": httpx.MockTransport(...)}`` 注入 mock 做真实链路测试）。
+  ``client_kwargs={"transport": httpx2.MockTransport(...)}``
+  注入 mock 做真实链路测试）。
 
 authlib 已确认的行为（不重复实现）：
 - state 按 ``session["_state_{provider}_{state}"]`` 存储（带过期时间、消费后清除）；

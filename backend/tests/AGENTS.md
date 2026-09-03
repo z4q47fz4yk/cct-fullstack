@@ -17,22 +17,22 @@ pytest + pytest-asyncio suite. Nested transactions for isolation (rollback after
 
 - `db_engine` — async engine to `cctv2-test`, NullPool, module-scoped
 - `db_session` — nested transaction per test, function-scoped, rollback on teardown
-- `client` — httpx `AsyncClient` with `get_session` dependency override
+- `client` — httpx2 `AsyncClient` with `get_session` dependency override
 
 ## Test Files
 
-| File | Tests | Parametrized Cases | What It Covers |
-|------|-------|-------------------|----------------|
-| `test_task.py` | 15 | ~47 | CRUD, predecessors, cycle detection, schedule stats |
-| `test_resourcev2.py` | 5 | ~36 | CRUD, filters (name/category/pagination) |
-| `test_resource_usage.py` | 16 | ~30 | Batch create, CRUD, filters, FK/unique violations |
-| `test_daily_report.py` | 5 | ~16 | 4-step import pipeline, CSV parsing, error cases |
-| `test_daily_report_parser.py` | 8 | 8 | Unit tests against real CSV (docs/20251214.csv) |
-| `test_project.py` | 5 | ~30 | CRUD, land_area/building_area fields |
-| `test_optimize.py` | 8 | ~30 | Run CRUD, constraint CRUD, status-dependent responses |
-| `test_resource_public.py` | 10 | ~15 | Read-only list, batch copy (by IDs, by category) |
-| `test_monthly_emissions.py` | 12 | 12 | ACTUAL vs PLANNED filtering, date windows, aggregation |
-| `test_db_errors.py` | 8 | 8 | Unit tests for SQLSTATE violation detection utilities |
+| File                          | Tests | Parametrized Cases | What It Covers                                         |
+| ----------------------------- | ----- | ------------------ | ------------------------------------------------------ |
+| `test_task.py`                | 15    | ~47                | CRUD, predecessors, cycle detection, schedule stats    |
+| `test_resourcev2.py`          | 5     | ~36                | CRUD, filters (name/category/pagination)               |
+| `test_resource_usage.py`      | 16    | ~30                | Batch create, CRUD, filters, FK/unique violations      |
+| `test_daily_report.py`        | 5     | ~16                | 4-step import pipeline, CSV parsing, error cases       |
+| `test_daily_report_parser.py` | 8     | 8                  | Unit tests against real CSV (docs/20251214.csv)        |
+| `test_project.py`             | 5     | ~30                | CRUD, land_area/building_area fields                   |
+| `test_optimize.py`            | 8     | ~30                | Run CRUD, constraint CRUD, status-dependent responses  |
+| `test_resource_public.py`     | 10    | ~15                | Read-only list, batch copy (by IDs, by category)       |
+| `test_monthly_emissions.py`   | 12    | 12                 | ACTUAL vs PLANNED filtering, date windows, aggregation |
+| `test_db_errors.py`           | 8     | 8                  | Unit tests for SQLSTATE violation detection utilities  |
 
 ## Conventions
 

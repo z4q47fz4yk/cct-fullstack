@@ -100,7 +100,8 @@ def _dataframe_to_markdown(
             break
         try:
             non_null = (
-                df.select(col_name)
+                df
+                .select(col_name)
                 .filter(pl.col(col_name).is_not_null())
                 .head(15)
                 .rows()

@@ -17,7 +17,7 @@ from typing import AsyncIterator
 
 import pytest
 from fastapi import HTTPException
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 
 from src.config import settings
 from src.routers.ai import _TEMP_ROOT, _resolve_attachment_path

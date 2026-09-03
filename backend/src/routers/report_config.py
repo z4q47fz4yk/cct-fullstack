@@ -115,8 +115,7 @@ async def validate_config_endpoint(
     responses={400: {"model": ErrorResponse}},
     summary="保存日报解析配置",
     description=(
-        "校验并存储 AI 生成的配置。只有通过全量校验的配置才能入库。"
-        "此接口是安全边界。"
+        "校验并存储 AI 生成的配置。只有通过全量校验的配置才能入库。此接口是安全边界。"
     ),
 )
 async def save_config_endpoint(
@@ -157,8 +156,8 @@ async def get_config_endpoint(
 ):
     try:
         return ReportConfigService.get_config(project.id, config_id)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail=f"配置 {config_id} 不存在")
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=f"配置 {config_id} 不存在") from e
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

@@ -102,7 +102,9 @@ class ExtractPreviewResponse(_CamelCaseMixin):
 class ProjectResourcesInfo(BaseModel):
     """项目已有资源信息（帮助 AI 写配置时做映射决策）"""
 
-    resources: list[dict[str, Any]] = Field(description="项目已有资源列表（name + category + unit）")
+    resources: list[dict[str, Any]] = Field(
+        description="项目已有资源列表（name + category + unit）"
+    )
     categories: list[str] = Field(description="项目中已使用的资源分类")
     tag_dimensions: list[dict[str, Any]] = Field(
         default_factory=list, description="项目已有的标签维度（用于 cargo_dimension）"

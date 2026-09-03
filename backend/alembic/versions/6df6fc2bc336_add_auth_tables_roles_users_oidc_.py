@@ -39,9 +39,7 @@ def upgrade() -> None:
             "updated_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
         ),
         sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column(
-            "name", sqlmodel.sql.sqltypes.AutoString(length=50), nullable=False
-        ),
+        sa.Column("name", sqlmodel.sql.sqltypes.AutoString(length=50), nullable=False),
         sa.Column(
             "description",
             sqlmodel.sql.sqltypes.AutoString(length=200),
@@ -65,16 +63,14 @@ def upgrade() -> None:
         sa.Column(
             "username", sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False
         ),
-        sa.Column(
-            "name", sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False
-        ),
-        sa.Column(
-            "email", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True
-        ),
+        sa.Column("name", sqlmodel.sql.sqltypes.AutoString(length=100), nullable=False),
+        sa.Column("email", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
         sa.Column(
             "avatar_url", sqlmodel.sql.sqltypes.AutoString(length=500), nullable=True
         ),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
+        sa.Column(
+            "is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")
+        ),
         sa.Column("role_id", sa.Integer(), nullable=False),
         sa.ForeignKeyConstraint(["role_id"], ["roles.id"]),
         sa.PrimaryKeyConstraint("id"),

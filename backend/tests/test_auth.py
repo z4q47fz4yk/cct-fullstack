@@ -9,7 +9,7 @@ state 校验、错误映射、账号同步（注册开关/默认角色/admin 邮
 
 from typing import Any
 
-import httpx
+import httpx2
 from authlib.integrations.base_client.errors import MismatchingStateError
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import Depends
@@ -298,7 +298,9 @@ async def test_callback_oauth_error_mapping(client):
 
 
 async def test_callback_userinfo_http_error(client):
-    install_relay(FakeOIDCRelay([GITEA_CFG], userinfo_error=httpx.ConnectError("boom")))
+    install_relay(
+        FakeOIDCRelay([GITEA_CFG], userinfo_error=httpx2.ConnectError("boom"))
+    )
     try:
         await client.get("/auth/gitea/login")
         resp = await client.get("/auth/gitea/callback?code=c&state=s")
@@ -467,7 +469,7 @@ async def test_require_roles_admin_allowed(client, monkeypatch):
 
 
 # ---------------------------------------------------------------
-# 真实 authlib 全链路（httpx.MockTransport 注入 client_kwargs.transport）
+# 真实 authlib 全链路（httpx2.MockTransport 注入 client_kwargs.transport）
 # ---------------------------------------------------------------
 
 
@@ -483,17 +485,17 @@ def _build_mock_oauth() -> OAuth:
         "id_token_signing_alg_values_supported": ["RS256"],
     }
 
-    async def handler(request: httpx.Request) -> httpx.Response:
+    async def handler(request: httpx2.Request) -> httpx2.Response:
         url = str(request.url)
         if url.startswith("https://mock.example/.well-known/"):
-            return httpx.Response(200, json=discovery)
+            return httpx2.Response(200, json=discovery)
         if url.startswith("https://mock.example/token"):
             # 不含 id_token → authlib 跳过 id_token 验签分支
-            return httpx.Response(
+            return httpx2.Response(
                 200, json={"access_token": "mock-at", "token_type": "Bearer"}
             )
         if url.startswith("https://mock.example/userinfo"):
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "sub": "1",
@@ -501,7 +503,7 @@ def _build_mock_oauth() -> OAuth:
                     "email": "m@example.com",
                 },
             )
-        return httpx.Response(404, json={"error": "not_found"})
+        return httpx2.Response(404, json={"error": "not_found"})
 
     oauth.register(
         "mock",
@@ -510,7 +512,7 @@ def _build_mock_oauth() -> OAuth:
         server_metadata_url="https://mock.example/.well-known/openid-configuration",
         client_kwargs={
             "scope": "openid profile email",
-            "transport": httpx.MockTransport(handler),
+            "transport": httpx2.MockTransport(handler),
         },
     )
     return oauth

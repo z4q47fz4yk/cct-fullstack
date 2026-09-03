@@ -5,7 +5,7 @@ from datetime import date
 from typing import cast
 
 import pytest_asyncio
-from httpx import AsyncClient
+from httpx2 import AsyncClient
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.chart import ChartDefinition, ChartTagMapping

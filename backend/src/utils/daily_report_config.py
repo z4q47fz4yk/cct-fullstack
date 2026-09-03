@@ -310,7 +310,8 @@ def validate_config_security(config: ParseEngineConfig) -> list[str]:
         # row_locator.column
         if blk.row_locator.column < 0 or blk.row_locator.column > L.MAX_COLUMN_INDEX:
             errors.append(
-                f"{prefix}.row_locator.column={blk.row_locator.column} 超出允许范围 [0, {L.MAX_COLUMN_INDEX}]"
+                f"{prefix}.row_locator.column={blk.row_locator.column} "
+                f"超出允许范围 [0, {L.MAX_COLUMN_INDEX}]"
             )
 
         # rows 数量
@@ -326,23 +327,28 @@ def validate_config_security(config: ParseEngineConfig) -> list[str]:
             errors.append(f"{prefix}.fields 不能为空")
         if len(blk.fields) > L.MAX_FIELDS_PER_BLOCK:
             errors.append(
-                f"{prefix}.fields 字段数 {len(blk.fields)} 超过上限 {L.MAX_FIELDS_PER_BLOCK}"
+                f"{prefix}.fields 字段数 {len(blk.fields)} "
+                f"超过上限 {L.MAX_FIELDS_PER_BLOCK}"
             )
         for fn, fs in blk.fields.items():
             if len(fs.parts) > L.MAX_PARTS_PER_FIELD:
                 errors.append(
-                    f"{prefix}.fields.{fn}.parts 片段数 {len(fs.parts)} 超过上限 {L.MAX_PARTS_PER_FIELD}"
+                    f"{prefix}.fields.{fn}.parts 片段数 {len(fs.parts)} "
+                    f"超过上限 {L.MAX_PARTS_PER_FIELD}"
                 )
 
         # cleaning
         if len(blk.cleaning.ignore_values) > L.MAX_IGNORE_VALUES:
             errors.append(
-                f"{prefix}.cleaning.ignore_values 项数 {len(blk.cleaning.ignore_values)} 超过上限 {L.MAX_IGNORE_VALUES}"
+                f"{prefix}.cleaning.ignore_values 项数 "
+                f"{len(blk.cleaning.ignore_values)} "
+                f"超过上限 {L.MAX_IGNORE_VALUES}"
             )
         for vi, val in enumerate(blk.cleaning.ignore_values):
             if len(val) > L.MAX_IGNORE_VALUE_LENGTH:
                 errors.append(
-                    f"{prefix}.cleaning.ignore_values[{vi}] 长度 {len(val)} 超过上限 {L.MAX_IGNORE_VALUE_LENGTH}"
+                    f"{prefix}.cleaning.ignore_values[{vi}] 长度 {len(val)} 超过上限 "
+                    f"{L.MAX_IGNORE_VALUE_LENGTH}"
                 )
 
         # 字符串长度
@@ -357,7 +363,8 @@ def validate_config_security(config: ParseEngineConfig) -> list[str]:
             for pi, part in enumerate(fs.parts):
                 if part.group > L.MAX_GROUP_INDEX:
                     errors.append(
-                        f"{prefix}.fields.{fn}.parts[{pi}].group={part.group} 超过上限 {L.MAX_GROUP_INDEX}"
+                        f"{prefix}.fields.{fn}.parts[{pi}].group={part.group} "
+                        f"超过上限 {L.MAX_GROUP_INDEX}"
                     )
 
     # ── Gate 3: 正则安全已在 RowSpec/RowLocator 的 field_validator 中执行 ──
