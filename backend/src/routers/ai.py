@@ -38,7 +38,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.config import settings
 from src.dependencies.public.session import get_db_session
 from src.models.ai_usage import AiUsageRecord
-from src.models.resource import Resource
 from src.models.tag import TagDimension
 from src.schemas.ai import AbortRequest, ChatRequest
 from src.schemas.ai_usage import AiUsageRecordResp, AiUsageSummary
@@ -324,6 +323,7 @@ def _translate_event(
         content = msg.get("content")
         text = _extract_text(content)
         if text:
+            print(text)
             return _sse("message_text", {"text": text})
         return None
     if etype == "tool_execution_start":
@@ -390,19 +390,58 @@ class _ExtractPreviewReq(BaseModel):
     file_path: str = Field(description="日报文件受控临时路径")
 
 
-class _ValidateConfigReq(BaseModel):
-    """validate_report_config 回调请求。"""
+def _coerce_config_json(
+    raw: str | dict[str, Any] | None,
+) -> dict[str, Any]:
+    """LLM/扩展偶尔会把 ``config_json`` 序列化成 JSON 字符串再传过来。
 
-    config_json: dict[str, Any] = Field(description="ParseEngineConfig JSON")
+    这里做一次归一化：str → ``json.loads``（解析失败返回 400）；dict 原样；
+    其它类型视为非法以便给前端清晰错误。
+    """
+    if raw is None:
+        raise HTTPException(status_code=400, detail="config_json 必填")
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise HTTPException(
+                status_code=400, detail=f"config_json 不是合法 JSON: {e}"
+            ) from e
+        if not isinstance(parsed, dict):
+            raise HTTPException(
+                status_code=400,
+                detail="config_json 必须是 JSON 对象（字典）",
+            )
+        return parsed
+    if isinstance(raw, dict):
+        return raw
+    raise HTTPException(
+        status_code=400, detail="config_json 必须是 JSON 对象或 JSON 字符串"
+    )
+
+
+class _ValidateConfigReq(BaseModel):
+    """validate_report_config 回调请求。
+
+    ``config_json`` 同时接受 JSON 对象和 JSON 字符串：规范路径是对象，
+    但部分 LLM/扩展会把整个对象序列化一次再传入（typebox ``Type.Any()``
+    没收紧），这里做归一化后传给 service。
+    """
+
+    config_json: dict[str, Any] | str = Field(
+        description="ParseEngineConfig JSON（对象或 JSON 字符串）"
+    )
     sample_file_path: str | None = Field(
         default=None, description="可选：样例日报受控临时路径"
     )
 
 
 class _SaveConfigReq(BaseModel):
-    """save_report_config 回调请求。"""
+    """save_report_config 回调请求（兼容 str/dict，语义同 _ValidateConfigReq）。"""
 
-    config_json: dict[str, Any] = Field(description="ParseEngineConfig JSON")
+    config_json: dict[str, Any] | str = Field(
+        description="ParseEngineConfig JSON（对象或 JSON 字符串）"
+    )
     name: str | None = Field(default=None, description="配置名")
 
 
@@ -412,9 +451,7 @@ async def internal_project_context(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ):
     """供 AI 编写解析配置前了解项目已有资源与标签维度。"""
-    resources = (
-        await session.exec(project_filter(select(Resource), Resource, project_id))
-    ).all()
+    resources = []  # resources 太多，对 AI 干扰太大
     dimensions = (
         await session.exec(
             project_filter(select(TagDimension), TagDimension, project_id)
@@ -456,16 +493,14 @@ async def internal_extract_preview(
 @_internal_router.post("/validate-config", summary="校验配置（可带样例文件）")
 async def internal_validate_config(
     project_id: int,
-    body: _ValidateConfigReq,
+    t: _ValidateConfigReq,
 ):
     """扩展工具 validate_report_config 的回调。"""
-    config_json = body.config_json
-    if not isinstance(config_json, dict):
-        raise HTTPException(status_code=400, detail="config_json 必须是对象")
+    config_json = _coerce_config_json(t.config_json)
 
     sample_bytes: bytes | None = None
     sample_filename = "sample.xlsx"
-    sample_path = body.sample_file_path
+    sample_path = t.sample_file_path
     if sample_path:
         resolved = _resolve_attachment_path(sample_path)
         try:
@@ -487,8 +522,9 @@ async def internal_save_config(
     body: _SaveConfigReq,
 ):
     """扩展工具 save_report_config 的回调。"""
+    config_json = _coerce_config_json(body.config_json)
     request = SaveConfigRequest(
-        config_json=body.config_json,
+        config_json=config_json,
         name=body.name,
     )
     try:

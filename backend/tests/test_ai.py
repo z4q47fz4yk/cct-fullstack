@@ -153,7 +153,13 @@ class TestInternalExtractPreview:
         assert resp.status_code == 200
         data = resp.json()
         assert data["filename"] == "report.csv"
-        assert "日报文件预览" in data["markdownText"]
+        # 预览现在交给 polars.write_csv 输出紧凑 csv（不再手工拼 markdown 表格）
+        preview = data["markdownText"]
+        assert "日报文件预览" in preview  # 概览行
+        assert "col0,col1" in preview  # header 行
+        assert "现场人员,张三" in preview  # 数据行
+        # 旧版 markdown 表格分隔符不应再出现
+        assert "---" not in preview
 
     async def test_extract_preview_missing_path(self, client: AsyncClient):
         resp = await client.post(
@@ -216,12 +222,37 @@ class TestInternalValidate:
         assert "items" in data["parsedPreview"]
 
     async def test_validate_rejects_non_object_config(self, client: AsyncClient):
-        """config_json 非对象 → Pydantic 模型校验拒绝（422）。"""
+        """config_json 既不是合法 JSON 对象、也不能解析为合法 JSON 时 → 400。
+
+        字符串形式的 config_json 进入路由层会被归一化（``JSON.loads``）；
+        当输入不是合法 JSON 字符串也不是 dict 时返回 400（业务校验错误），
+        便于 AI 把修正后的对象再发一次。
+        """
         resp = await client.post(
             "/internal/ai/projects/1/validate-config",
             json={"config_json": "not-a-dict"},
         )
-        assert resp.status_code == 422
+        assert resp.status_code == 400
+        assert "config_json" in resp.json()["detail"]
+
+    async def test_validate_accepts_stringified_config(self, client: AsyncClient):
+        """LLM/扩展偶尔把 config_json 序列化成字符串再传入 — 路由应能归一化。"""
+        import json as _json
+
+        resp = await client.post(
+            "/internal/ai/projects/1/validate-config",
+            json={"config_json": _json.dumps(_minimal_config_dict())},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+    async def test_validate_accepts_stringified_non_dict(self, client: AsyncClient):
+        """字符串 config_json 解析后是合法 JSON 但**不是 dict** → 400。"""
+        resp = await client.post(
+            "/internal/ai/projects/1/validate-config",
+            json={"config_json": "[1, 2, 3]"},
+        )
+        assert resp.status_code == 400
 
 
 # ============================================================================

@@ -20,6 +20,28 @@ const INTERNAL_BASE_URL = process.env["PI_INTERNAL_BASE_URL"] ?? "http://127.0.0
 // 内部工具端点的鉴权令牌：后端生成并注入，扩展仅原样透传。
 const INTERNAL_TOKEN = process.env["PI_INTERNAL_TOKEN"] ?? "";
 
+/**
+ * 部分 LLM 工具调用框架会把对象字段二次序列化为 JSON 字符串再传过来。
+ * 后端 FastAPI 期望的是 JSON 对象（在 router 端做了字符串归一化），
+ * 这里提前解析一次，能解析就传对象、不能解析才透传字符串，避免
+ * `JSON.stringify(string)` 把字符串再包一层引号变成 "双重编码"。
+ */
+function normalizeMaybeJsonString(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    (trimmed.startsWith("[") && trimmed.endsWith("]"))
+  ) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
 async function callInternal(path: string, method = "GET", body?: unknown): Promise<unknown> {
   const headers: Record<string, string> = {};
   if (INTERNAL_TOKEN) headers["x-internal-token"] = INTERNAL_TOKEN;
@@ -34,8 +56,8 @@ async function callInternal(path: string, method = "GET", body?: unknown): Promi
   if (!res.ok) {
     let detail = `HTTP ${res.status}`;
     try {
-      const json = (await res.json()) as { detail?: string };
-      if (json.detail) detail = `${detail}: ${json.detail}`;
+      const json = (await res.json()) as { detail?: object };
+      if (json.detail) detail = `${detail}: ${JSON.stringify(json.detail)}`;
     } catch {
       // 非 JSON 响应，保留状态码
     }
@@ -116,9 +138,20 @@ export default function (pi: ExtensionAPI): void {
     ],
     parameters: Type.Object({
       project_id: Type.Integer({ description: "项目 ID" }),
-      config_json: Type.Any({
-        description: "ParseEngineConfig 的 JSON 表示（schema_version + blocks）",
-      }),
+      // Type.Object 引导 LLM 传真正的 JSON 对象而非字符串；
+      // 字段集合偏宽松（properties 非必填），因为 schema 真正校验在后端。
+      config_json: Type.Object(
+        {
+          schema_version: Type.Optional(Type.String()),
+          name: Type.Optional(Type.String()),
+          blocks: Type.Optional(Type.Array(Type.Any())),
+        },
+        {
+          description:
+            "ParseEngineConfig 的 JSON 对象（必须包含 schema_version/name/blocks）；不要把整个对象序列化成字符串再传入。",
+          additionalProperties: true,
+        },
+      ),
       sample_file_path: Type.Optional(
         Type.String({ description: "可选：样例日报文件的临时绝对路径" }),
       ),
@@ -128,7 +161,7 @@ export default function (pi: ExtensionAPI): void {
         `/internal/ai/projects/${params.project_id}/validate-config`,
         "POST",
         {
-          config_json: params.config_json,
+          config_json: normalizeMaybeJsonString(params.config_json),
           sample_file_path: params.sample_file_path ?? null,
         },
       );
@@ -153,9 +186,17 @@ export default function (pi: ExtensionAPI): void {
     ],
     parameters: Type.Object({
       project_id: Type.Integer({ description: "项目 ID" }),
-      config_json: Type.Any({
-        description: "ParseEngineConfig 的 JSON 表示（已通过校验）",
-      }),
+      config_json: Type.Object(
+        {
+          schema_version: Type.Optional(Type.String()),
+          name: Type.Optional(Type.String()),
+          blocks: Type.Optional(Type.Array(Type.Any())),
+        },
+        {
+          description: "ParseEngineConfig 的 JSON 对象（已通过校验）",
+          additionalProperties: true,
+        },
+      ),
       name: Type.Optional(Type.String({ description: "人类可读的配置名称" })),
     }),
     async execute(_toolCallId, params) {
@@ -163,7 +204,7 @@ export default function (pi: ExtensionAPI): void {
         `/internal/ai/projects/${params.project_id}/save-config`,
         "POST",
         {
-          config_json: params.config_json,
+          config_json: normalizeMaybeJsonString(params.config_json),
           name: params.name ?? null,
         },
       );
