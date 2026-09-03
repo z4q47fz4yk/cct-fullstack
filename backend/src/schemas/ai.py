@@ -26,8 +26,10 @@ class ChatRequest(BaseModel):
     """一次聊天请求。
 
     ``session_id`` 可选：同一聊天窗口复用同一 ID 保持上下文；缺省时后端新建。
+    ``project_id`` 必填：进程按项目隔离、成本审计归属项目。
     """
 
+    project_id: int = Field(description="所属项目 ID（进程隔离 + 成本审计归属）")
     session_id: str | None = Field(
         default=None,
         max_length=64,
@@ -40,6 +42,15 @@ class ChatRequest(BaseModel):
     attachments: list[ChatAttachment] = Field(
         default_factory=list,
         description="可选：随消息上传的日报文件（base64）",
+    )
+
+
+class AbortRequest(BaseModel):
+    """中止一次正在生成的聊天会话。"""
+
+    project_id: int = Field(description="所属项目 ID")
+    session_id: str = Field(
+        max_length=64, description="要中止的会话 ID（同窗口的 session_id）"
     )
 
 

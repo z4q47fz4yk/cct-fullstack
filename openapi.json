@@ -6908,7 +6908,7 @@
           "ai"
         ],
         "summary": "AI 对话（SSE 流式）",
-        "description": "发起 AI 对话并流式返回事件（text/event-stream）。\n\n事件格式（data 为 JSON）：\n- ``start``: {session_id, attachment_paths}\n- ``message_delta``: {delta}\n- ``tool_call``: {tool_call_id, tool_name, args}\n- ``tool_result``: {tool_call_id, tool_name, content, is_error}\n- ``done``: {}\n- ``error``: {message}",
+        "description": "发起 AI 对话并流式返回事件（text/event-stream）。\n\n事件格式（data 为 JSON）：\n- ``start``: {session_id, attachment_paths}\n- ``message_delta``: {delta}\n- ``message_text``: {text}\n- ``tool_call``: {tool_call_id, tool_name, args}\n- ``tool_result``: {tool_call_id, tool_name, content, is_error}\n- ``done``: {}\n- ``error``: {message}\n\n每轮结束后（含中止/错误/客户端断开）写一条成本审计记录。",
         "operationId": "ai_chat",
         "requestBody": {
           "content": {
@@ -6941,10 +6941,125 @@
           }
         }
       }
+    },
+    "/ai/abort": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "中止 AI 生成（SSE）",
+        "description": "中止正在生成的会话（用户点停止）。\n\n中止后保留子进程与对话上下文，同窗口下一轮仍可继续；若前端不再使用\n该会话，应随后调用 release 或依赖空闲回收。",
+        "operationId": "ai_abort",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AbortRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project_id}/ai-usage": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "项目 AI 对话成本审计（汇总 + 明细）",
+        "description": "列出项目的 AI 对话成本记录（按时间倒序），并返回合计。",
+        "operationId": "ai_usage",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiUsageSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AbortRequest": {
+        "properties": {
+          "project_id": {
+            "type": "integer",
+            "title": "Project Id",
+            "description": "所属项目 ID"
+          },
+          "session_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Session Id",
+            "description": "要中止的会话 ID（同窗口的 session_id）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "session_id"
+        ],
+        "title": "AbortRequest",
+        "description": "中止一次正在生成的聊天会话。"
+      },
       "AddPredecessorRequest": {
         "properties": {
           "predecessorId": {
@@ -6971,6 +7086,166 @@
         ],
         "title": "AddPredecessorRequest",
         "description": "添加前置依赖请求 Schema"
+      },
+      "AiUsageRecordResp": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "记录 ID"
+          },
+          "sessionId": {
+            "type": "string",
+            "title": "Sessionid",
+            "description": "会话 ID"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider",
+            "description": "LLM Provider"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "LLM 模型"
+          },
+          "inputTokens": {
+            "type": "integer",
+            "title": "Inputtokens",
+            "description": "输入 token 数"
+          },
+          "outputTokens": {
+            "type": "integer",
+            "title": "Outputtokens",
+            "description": "输出 token 数"
+          },
+          "cacheReadTokens": {
+            "type": "integer",
+            "title": "Cachereadtokens",
+            "description": "缓存读取 token 数"
+          },
+          "cacheWriteTokens": {
+            "type": "integer",
+            "title": "Cachewritetokens",
+            "description": "缓存写入 token 数"
+          },
+          "cost": {
+            "type": "number",
+            "title": "Cost",
+            "description": "估算成本（美元）"
+          },
+          "messageCount": {
+            "type": "integer",
+            "title": "Messagecount",
+            "description": "助手消息数"
+          },
+          "toolCallCount": {
+            "type": "integer",
+            "title": "Toolcallcount",
+            "description": "工具调用数"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "completed / aborted / error"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "错误详情"
+          },
+          "createdAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Createdat",
+            "description": "记录时间"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "sessionId",
+          "provider",
+          "model",
+          "inputTokens",
+          "outputTokens",
+          "cacheReadTokens",
+          "cacheWriteTokens",
+          "cost",
+          "messageCount",
+          "toolCallCount",
+          "status"
+        ],
+        "title": "AiUsageRecordResp",
+        "description": "单条 AI 对话成本审计记录。"
+      },
+      "AiUsageSummary": {
+        "properties": {
+          "totalCost": {
+            "type": "number",
+            "title": "Totalcost",
+            "description": "总估算成本（美元）"
+          },
+          "totalInputTokens": {
+            "type": "integer",
+            "title": "Totalinputtokens",
+            "description": "总输入 token"
+          },
+          "totalOutputTokens": {
+            "type": "integer",
+            "title": "Totaloutputtokens",
+            "description": "总输出 token"
+          },
+          "totalCacheReadTokens": {
+            "type": "integer",
+            "title": "Totalcachereadtokens",
+            "description": "总缓存读取 token"
+          },
+          "totalCacheWriteTokens": {
+            "type": "integer",
+            "title": "Totalcachewritetokens",
+            "description": "总缓存写入 token"
+          },
+          "recordCount": {
+            "type": "integer",
+            "title": "Recordcount",
+            "description": "记录条数"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/AiUsageRecordResp"
+            },
+            "type": "array",
+            "title": "Records",
+            "description": "明细（按时间倒序）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "totalCost",
+          "totalInputTokens",
+          "totalOutputTokens",
+          "totalCacheReadTokens",
+          "totalCacheWriteTokens",
+          "recordCount",
+          "records"
+        ],
+        "title": "AiUsageSummary",
+        "description": "项目的 AI 成本汇总。"
       },
       "AllocateRespItem": {
         "properties": {
@@ -7389,6 +7664,11 @@
       },
       "ChatRequest": {
         "properties": {
+          "project_id": {
+            "type": "integer",
+            "title": "Project Id",
+            "description": "所属项目 ID（进程隔离 + 成本审计归属）"
+          },
           "session_id": {
             "anyOf": [
               {
@@ -7419,10 +7699,11 @@
         },
         "type": "object",
         "required": [
+          "project_id",
           "message"
         ],
         "title": "ChatRequest",
-        "description": "一次聊天请求。\n\n``session_id`` 可选：同一聊天窗口复用同一 ID 保持上下文；缺省时后端新建。"
+        "description": "一次聊天请求。\n\n``session_id`` 可选：同一聊天窗口复用同一 ID 保持上下文；缺省时后端新建。\n``project_id`` 必填：进程按项目隔离、成本审计归属项目。"
       },
       "ComplianceMaterialDiff": {
         "properties": {

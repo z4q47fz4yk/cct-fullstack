@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProjectContext } from '@/composables/useProjectContext'
 import { useAiChat, type ChatTurn } from '@/composables/useAiChat'
+import { useAiUsage } from '@/composables/useAiUsage'
 
 definePage({
   meta: {
@@ -19,12 +20,12 @@ definePage({
 const router = useRouter()
 const { currentProjectId } = useProjectContext()
 
-const { sessionId, turns, isStreaming, send, clear } = useAiChat()
+const { turns, isStreaming, send, stop, clear } = useAiChat()
+const { data: usageData, refresh: refreshUsage } = useAiUsage()
 
 const input = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFiles = ref<File[]>([])
-const abortController = ref<AbortController | null>(null)
 const scrollAnchor = ref<HTMLElement | null>(null)
 
 // 配置产出状态：任一工具结果中出现 save_report_config 成功即置真
@@ -37,6 +38,11 @@ const projectReady = computed(() => currentProjectId.value !== null)
 const canSend = computed(
   () => input.value.trim().length > 0 && !isStreaming.value && projectReady.value,
 )
+
+// 离开页面时若仍在生成 → 通知后端中止（避免 pi 进程残留生成）
+onUnmounted(() => {
+  if (isStreaming.value) void stop()
+})
 
 watch(
   () => turns.value.map((t) => t.streamingText + t.finalText).join(''),
@@ -162,21 +168,20 @@ async function handleSend() {
   const files = [...selectedFiles.value]
   selectedFiles.value = []
 
-  abortController.value = new AbortController()
   try {
     await send({
-      sessionId: sessionId.value ?? undefined,
       message,
       attachments: files,
-      signal: abortController.value.signal,
     })
-  } finally {
-    abortController.value = null
+    // 本轮结束（含中止）后刷新成本审计
+    refreshUsage()
+  } catch {
+    // send 内部已把错误落到 turn，无需额外处理
   }
 }
 
 function handleStop() {
-  abortController.value?.abort()
+  void stop()
 }
 
 function handleClear() {
@@ -225,6 +230,14 @@ function goBackToImport() {
         <span v-if="isStreaming" class="text-xs text-info flex items-center gap-1">
           <span class="loading loading-spinner loading-xs"></span>
           生成中…
+        </span>
+        <span
+          v-if="usageData && usageData.recordCount > 0"
+          class="badge badge-sm badge-neutral gap-1"
+          :title="`累计 ${usageData.recordCount} 次对话 · ${usageData.totalInputTokens.toLocaleString()} in / ${usageData.totalOutputTokens.toLocaleString()} out tokens`"
+        >
+          <span class="material-symbols-outlined icon-xs">receipt_long</span>
+          ≈ ${{ usageData.totalCost.toFixed(4) }}
         </span>
         <button
           v-if="turns.length > 0"

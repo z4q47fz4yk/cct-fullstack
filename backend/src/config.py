@@ -104,6 +104,9 @@ class Settings(BaseSettings):
     pi_model: str = Field("deepseek-v4-flash", validation_alias="PI_MODEL")
     # 自定义扩展文件路径（传给 pi -e，可多个）；内置工具（bash 等）一律禁用
     pi_extensions: str = Field("", validation_alias="PI_EXTENSIONS")
+    # 业务系统提示词文件（--append-system-prompt：说明 AI 如何产出日报解析配置）。
+    # 缺省为空 → 自动指向仓库内 backend/pi_extensions/system-prompt.md
+    pi_system_prompt_path: str = Field("", validation_alias="PI_SYSTEM_PROMPT_PATH")
     # 扩展工具回调本后端（report-config 等）的内部端点基址，缺省按本机端口推导
     pi_internal_base_url: str = Field("", validation_alias="PI_INTERNAL_BASE_URL")
     # 内部端点鉴权令牌：为空时启动时自动生成（扩展工具仅原样透传）
@@ -133,6 +136,17 @@ class Settings(BaseSettings):
         if self.pi_internal_base_url:
             return self.pi_internal_base_url.rstrip("/")
         return f"http://127.0.0.1:{self.backend_port}"
+
+    @property
+    def pi_system_prompt(self) -> str | None:
+        """系统提示词文件绝对路径；缺省自动指向仓库内默认文件，文件不存在返回 None。"""
+        raw = self.pi_system_prompt_path
+        default = _REPO_ROOT / "backend/pi_extensions/system-prompt.md"
+        path = Path(raw) if raw else default
+        if not path.is_absolute():
+            path = _REPO_ROOT / path
+        resolved = path.resolve()
+        return str(resolved) if resolved.exists() else None
 
     model_config = SettingsConfigDict(
         env_file=".env",

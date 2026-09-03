@@ -6,8 +6,14 @@
 - **安全**：以 ``--no-builtin-tools --no-skills --no-context-files`` 启动，
   内置工具（bash/read/write/edit 等）与技能、项目上下文文件全部禁用，
   模型只能调用扩展注册的自定义工具（本项目为 report-config 系列）。
-- **生命周期**：每个聊天会话（session_id）对应一个 pi 子进程；消息串行
-  处理（asyncio.Lock）；空闲超时后自动回收，进程随后端退出而终止。
+- **生命周期**：每个 (project_id, session_id) 对应一个 pi 子进程；消息
+  串行处理（asyncio.Lock）；空闲超时或超出池上限时回收，进程随后端退出
+  而终止。
+- **稳定性**：子进程 stdout/stderr 以 64MiB 缓冲读取（默认 64KiB 会在
+  单行 JSON 事件超长时抛 ValueError）；reader/stderr 循环异常时自动清理
+  会话，杜绝僵尸进程。
+- **中断**：``abort()`` 向 pi stdin 下发 abort 命令并中止当前轮；会话进程
+  保留供同窗口下一轮复用；``release_session()`` 彻底终止并移除会话。
 - **事件流**：reader task 持续读取 stdout 的 JSONL 事件并放入队列，
   每轮 prompt 从队列消费事件直至 ``agent_settled``。
 
@@ -29,11 +35,14 @@ from src.config import settings
 logger = logging.getLogger(__name__)
 
 # 会话空闲回收时间（秒）
-_SESSION_IDLE_TTL = 30 * 60
+_SESSION_IDLE_TTL = 5 * 60
 # 单轮 prompt 整体超时（秒）
 _PROMPT_TIMEOUT = 600
-# pi RPC 输出的 JSON 行最大长度保护（防异常输出撑爆内存）
-_MAX_LINE_LEN = 8 * 1024 * 1024
+# stdout/stderr 流缓冲上限：pi 单行 JSON 事件（message_end / tool 结果）
+# 可携带大负载，默认 64KiB 会抛 "Separator is not found" —— 放至 64MiB
+_STREAM_LIMIT = 64 * 1024 * 1024
+# 全局并发会话上限（超出时回收最久未用）
+_MAX_SESSIONS = 20
 
 
 class PiSessionError(Exception):
@@ -44,28 +53,80 @@ class PiSessionClosed(PiSessionError):
     """pi 子进程已退出或未启动。"""
 
 
+class PiSessionAborted(PiSessionError):
+    """会话被显式中止（前端停止 / 客户端断开）。"""
+
+
+@dataclass
+class PiUsageStats:
+    """一轮/一会话累计的 LLM usage（来自 pi 事件的 usage 字段）。
+
+    cost 单位：美元（pi 事件 usage.cost.total 已是金额）。
+    """
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    cost: float = 0.0
+
+    def add_usage(self, usage: Any) -> None:
+        """累计一个 pi usage 对象（可能为 None / 缺失部分字段）。"""
+        if not isinstance(usage, dict):
+            return
+        u = usage.get("usage") if isinstance(usage.get("usage"), dict) else usage
+        if not isinstance(u, dict):
+            return
+        self.input_tokens += int(u.get("input") or 0)
+        self.output_tokens += int(u.get("output") or 0)
+        self.cache_read_tokens += int(u.get("cacheRead") or 0)
+        self.cache_write_tokens += int(u.get("cacheWrite") or 0)
+        cost = u.get("cost")
+        if isinstance(cost, dict):
+            self.cost += float(cost.get("total") or 0)
+        elif cost is not None:
+            self.cost += float(cost)
+
+    @property
+    def total_tokens(self) -> int:
+        return (
+            self.input_tokens
+            + self.output_tokens
+            + self.cache_read_tokens
+            + self.cache_write_tokens
+        )
+
+
 @dataclass
 class PiSession:
-    """一个聊天会话对应的 pi 子进程。
+    """一个 (project_id, session_id) 对应的 pi 子进程。
 
     Attributes:
-        session_id: 会话 ID（前端生成 UUID）。
+        project_id: 所属项目（进程隔离 + 审计归属）。
+        session_id: 会话 ID（前端生成 UUID，同窗口复用）。
         proc: asyncio 子进程句柄。
         event_queue: reader task 填充的 JSONL 事件队列。
         lock: 同一会话消息串行化的互斥锁。
+        abort_event: 置位后当前轮 prompt 中止（用户停止 / 客户端断开）。
+        failed: reader/stderr 循环异常置位（会话需清理重建）。
         created_at / last_used: 生命周期管理时间戳。
-        is_streaming: 当前是否正在 streaming（决定 prompt 是否带 streamingBehavior）。
+        is_streaming: 当前是否正在 streaming。
+        usage: 会话累计 usage（跨多轮）。
     """
 
+    project_id: int
     session_id: str
     proc: asyncio.subprocess.Process
     event_queue: asyncio.Queue[dict[str, Any]]
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    abort_event: asyncio.Event = field(default_factory=asyncio.Event)
     created_at: float = field(default_factory=time.time)
     last_used: float = field(default_factory=time.time)
     is_streaming: bool = False
+    failed: bool = False
     reader_task: asyncio.Task[None] | None = None
     stderr_task: asyncio.Task[None] | None = None
+    usage: PiUsageStats = field(default_factory=PiUsageStats)
 
     def touch(self) -> None:
         self.last_used = time.time()
@@ -73,6 +134,10 @@ class PiSession:
     @property
     def idle_seconds(self) -> float:
         return time.time() - self.last_used
+
+    @property
+    def alive(self) -> bool:
+        return self.proc.returncode is None and not self.failed
 
 
 class PiAgentService:
@@ -86,11 +151,19 @@ class PiAgentService:
         self._shutdown = False
 
     # ------------------------------------------------------------------
+    # key / 会话索引
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _key(project_id: int, session_id: str) -> str:
+        return f"{project_id}:{session_id}"
+
+    # ------------------------------------------------------------------
     # 子进程启动 / 回收
     # ------------------------------------------------------------------
 
     def _build_command(self) -> list[str]:
-        """构造 pi 启动命令（RPC 模式 + 禁用内置工具）。"""
+        """构造 pi 启动命令（RPC 模式 + 禁用内置工具 + 业务系统提示词）。"""
         cmd = [
             settings.pi_bin,
             "--mode",
@@ -107,6 +180,9 @@ class PiAgentService:
         ]
         for ext in settings.pi_extension_paths:
             cmd.extend(["--extension", ext])
+        system_prompt = settings.pi_system_prompt
+        if system_prompt:
+            cmd.extend(["--append-system-prompt", system_prompt])
         return cmd
 
     def _build_env(self) -> dict[str, str]:
@@ -121,10 +197,28 @@ class PiAgentService:
             env["PI_INTERNAL_TOKEN"] = settings.pi_internal_token
         return env
 
-    async def start_session(self, session_id: str) -> PiSession:
+    def _reap_idle_locked(self) -> None:
+        """回收空闲超时 / 已死会话（须在无锁上下文调用，避免自锁）。"""
+        for sid, session in list(self._sessions.items()):
+            if session.idle_seconds > _SESSION_IDLE_TTL or not session.alive:
+                asyncio.create_task(self.shutdown_session_silent(sid))
+
+    def _enforce_cap_locked(self) -> None:
+        """超出会话上限时回收最久未用的活会话。"""
+        overflow = len(self._sessions) - _MAX_SESSIONS
+        if overflow <= 0:
+            return
+        victims = sorted(self._sessions.items(), key=lambda kv: kv[1].last_used)[
+            :overflow
+        ]
+        for sid, _session in victims:
+            asyncio.create_task(self.shutdown_session_silent(sid))
+
+    async def start_session(self, project_id: int, session_id: str) -> PiSession:
         """启动（或复用）一个 pi 子进程会话。
 
         Args:
+            project_id: 项目 ID。
             session_id: 会话 ID；已存在则直接复用（touch）。
 
         Returns:
@@ -133,10 +227,18 @@ class PiAgentService:
         Raises:
             PiSessionError: 子进程启动失败。
         """
-        existing = self._sessions.get(session_id)
-        if existing is not None and existing.proc.returncode is None:
+        key = self._key(project_id, session_id)
+        existing = self._sessions.get(key)
+        if existing is not None and existing.alive:
             existing.touch()
             return existing
+        if existing is not None:
+            # 已死 / failed：先彻底回收旧进程再重建
+            await self.shutdown_session(key)
+
+        # 惰性回收空闲 + 上限控制
+        self._reap_idle_locked()
+        self._enforce_cap_locked()
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -145,6 +247,7 @@ class PiAgentService:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=self._build_env(),
+                limit=_STREAM_LIMIT,  # 防止大 JSON 行触发 readline ValueError
             )
         except FileNotFoundError as e:
             raise PiSessionError(
@@ -153,18 +256,19 @@ class PiAgentService:
             ) from e
 
         session = PiSession(
+            project_id=project_id,
             session_id=session_id,
             proc=proc,
             event_queue=asyncio.Queue(),
         )
         session.reader_task = asyncio.create_task(
-            self._read_loop(session), name=f"pi-reader-{session_id[:8]}"
+            self._read_loop(session), name=f"pi-reader-{key[:16]}"
         )
         session.stderr_task = asyncio.create_task(
-            self._stderr_loop(session), name=f"pi-stderr-{session_id[:8]}"
+            self._stderr_loop(session), name=f"pi-stderr-{key[:16]}"
         )
-        self._sessions[session_id] = session
-        logger.info("pi 会话 %s 已启动（pid=%s）", session_id[:8], proc.pid)
+        self._sessions[key] = session
+        logger.info("pi 会话 %s 已启动（pid=%s）", key[:16], proc.pid)
         return session
 
     async def _read_loop(self, session: PiSession) -> None:
@@ -176,34 +280,42 @@ class PiAgentService:
                 line = await proc.stdout.readline()
                 if not line:
                     break
-                if len(line) > _MAX_LINE_LEN:
-                    logger.warning(
-                        "pi 会话 %s 输出超长行，丢弃", session.session_id[:8]
-                    )
-                    continue
                 try:
                     event = json.loads(line)
                 except json.JSONDecodeError:
                     logger.warning(
                         "pi 会话 %s 输出非 JSON 行：%r",
-                        session.session_id[:8],
+                        self._key(session.project_id, session.session_id)[:16],
                         line[:200],
                     )
                     continue
                 etype = event.get("type")
                 if etype == "message_update":
                     session.is_streaming = True
+                    # 累计流式 usage（provider 在流式中报告时）
+                    session.usage.add_usage(event.get("usage"))
                 elif etype in ("agent_settled", "agent_end"):
-                    # 回合结束：重置流式标志，避免后续消息被误判为 followUp
                     session.is_streaming = False
+                    # agent_end 携带 messages（含 usage）；agent_settled 不常带
+                    if etype == "agent_end":
+                        session.usage.add_usage(event.get("usage"))
                 await session.event_queue.put(event)
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("pi 会话 %s 读取循环异常", session.session_id[:8])
+            # 读取异常（含 limit 过小等）→ 标记失败并触发自动清理
+            logger.exception(
+                "pi 会话 %s 读取循环异常",
+                self._key(session.project_id, session.session_id)[:16],
+            )
+            session.failed = True
         finally:
             session.is_streaming = False
             await session.event_queue.put({"type": "_eof"})
+            if session.failed:
+                await self.shutdown_session(
+                    self._key(session.project_id, session.session_id)
+                )
 
     async def _stderr_loop(self, session: PiSession) -> None:
         """转发 stderr 到日志（含扩展 console.error 输出）。"""
@@ -216,17 +328,20 @@ class PiAgentService:
                     break
                 logger.info(
                     "pi[%s] %s",
-                    session.session_id[:8],
+                    self._key(session.project_id, session.session_id)[:16],
                     line.decode(errors="replace").rstrip(),
                 )
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.debug("pi 会话 %s stderr 读取结束", session.session_id[:8])
+            logger.debug(
+                "pi 会话 %s stderr 读取结束",
+                self._key(session.project_id, session.session_id)[:16],
+            )
 
-    async def shutdown_session(self, session_id: str) -> None:
-        """终止并清理一个会话（向 pi 发送 abort 后 kill）。"""
-        session = self._sessions.pop(session_id, None)
+    async def shutdown_session(self, key: str) -> None:
+        """终止并清理一个会话（abort + kill）。key 为 ``{project_id}:{session_id}``。"""
+        session = self._sessions.pop(key, None)
         if session is None:
             return
         proc = session.proc
@@ -246,19 +361,46 @@ class PiAgentService:
             except asyncio.TimeoutError:
                 proc.kill()
                 await proc.wait()
-        logger.info("pi 会话 %s 已回收", session_id[:8])
+        logger.info("pi 会话 %s 已回收", key[:16])
+
+    async def shutdown_session_silent(self, key: str) -> None:
+        """后台静默回收（供 reap/cap 惰性调度，异常不冒泡）。"""
+        try:
+            await self.shutdown_session(key)
+        except Exception:
+            logger.exception("pi 会话 %s 后台回收失败", key[:16])
 
     async def shutdown_all(self) -> None:
         """终止全部会话（应用关闭时调用）。"""
         self._shutdown = True
-        for sid in list(self._sessions):
-            await self.shutdown_session(sid)
+        for key in list(self._sessions):
+            await self.shutdown_session(key)
 
-    def reap_idle(self) -> None:
-        """回收空闲超时的会话（惰性调用，避免额外后台循环）。"""
-        for sid, session in list(self._sessions.items()):
-            if session.idle_seconds > _SESSION_IDLE_TTL:
-                asyncio.create_task(self.shutdown_session(sid))
+    # ------------------------------------------------------------------
+    # 中断 / 释放
+    # ------------------------------------------------------------------
+
+    async def abort(self, project_id: int, session_id: str) -> bool:
+        """中止当前正在生成的轮次（向 pi 下发 abort），保留会话供下轮复用。
+
+        Returns:
+            会话是否存在。
+        """
+        session = self._sessions.get(self._key(project_id, session_id))
+        if session is None:
+            return False
+        session.abort_event.set()
+        if session.proc.stdin and session.proc.returncode is None:
+            try:
+                session.proc.stdin.write(b'{"type":"abort"}\n')
+                await session.proc.stdin.drain()
+            except Exception:
+                logger.debug("向 pi 会话 %s 下发 abort 失败", session_id[:8])
+        return True
+
+    async def release_session(self, project_id: int, session_id: str) -> None:
+        """彻底终止并移除一个会话（用户停止/前端断开后不再复用）。"""
+        await self.shutdown_session(self._key(project_id, session_id))
 
     # ------------------------------------------------------------------
     # 对话
@@ -266,6 +408,7 @@ class PiAgentService:
 
     async def chat(
         self,
+        project_id: int,
         session_id: str,
         message: str,
     ) -> AsyncIterator[dict[str, Any]]:
@@ -275,20 +418,27 @@ class PiAgentService:
         翻译成前端 SSE。同一会话的调用串行（asyncio.Lock）。
 
         Args:
+            project_id: 项目 ID（进程隔离）。
             session_id: 会话 ID。
             message: 用户消息（附件路径提示由调用方拼入）。
 
         Yields:
             pi RPC 事件 dict（type: message_update / tool_execution_* /
             agent_settled / response 等）。
+
+        Raises:
+            PiSessionClosed: 子进程退出。
+            PiSessionAborted: 被显式中止（abort / 断开）。
+            PiSessionError: 超时等。
         """
-        self.reap_idle()
-        session = await self.start_session(session_id)
-        if session.proc.returncode is not None:
+        session = await self.start_session(project_id, session_id)
+        if not session.alive:
             raise PiSessionClosed("pi 子进程已退出，请重试")
 
         async with session.lock:
             session.touch()
+            # 每轮开始时清 abort 标记（上一轮中止不影响本轮）
+            session.abort_event.clear()
 
             # prompt 命令；agent 正在 streaming 时排队为 followUp
             cmd: dict[str, Any] = {"type": "prompt", "message": message}
@@ -304,7 +454,18 @@ class PiAgentService:
             try:
                 async with asyncio.timeout(_PROMPT_TIMEOUT):
                     while True:
-                        event = await session.event_queue.get()
+                        # 等待下一事件或 abort 信号
+                        get_task = asyncio.ensure_future(session.event_queue.get())
+                        abort_task = asyncio.ensure_future(session.abort_event.wait())
+                        done, pending = await asyncio.wait(
+                            {get_task, abort_task},
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        if abort_task in done and abort_task.result():
+                            for t in pending:
+                                t.cancel()
+                            raise PiSessionAborted("已停止生成")
+                        event = get_task.result()
                         if event.get("type") == "_eof":
                             raise PiSessionClosed("pi 子进程异常退出")
                         yield event
@@ -313,6 +474,13 @@ class PiAgentService:
             except asyncio.TimeoutError as e:
                 logger.warning("pi 会话 %s 单轮超时", session_id[:8])
                 raise PiSessionError("AI 响应超时，请重试") from e
+
+    def get_session_usage(
+        self, project_id: int, session_id: str
+    ) -> PiUsageStats | None:
+        """读取某会话的累计 usage（供审计出口在会话结束后读取）。"""
+        session = self._sessions.get(self._key(project_id, session_id))
+        return session.usage if session is not None else None
 
 
 # ----------------------------------------------------------------------
@@ -333,7 +501,9 @@ def get_pi_agent_service() -> PiAgentService:
 __all__ = [
     "PiAgentService",
     "PiSession",
+    "PiSessionAborted",
     "PiSessionClosed",
     "PiSessionError",
+    "PiUsageStats",
     "get_pi_agent_service",
 ]

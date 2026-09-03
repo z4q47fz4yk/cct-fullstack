@@ -1,7 +1,9 @@
 import { computed, ref } from 'vue'
+import { useProjectContext } from '@/composables/useProjectContext'
+import { useProjectStorage } from '@/composables/useProjectStorage'
 
 /**
- * AI 对话 SSE 流式解析。
+ * AI 对话 SSE 流式解析 + 历史持久化。
  *
  * 后端 `/ai/chat` 返回 text/event-stream：
  * - event: start        → {session_id, attachment_paths}
@@ -12,8 +14,7 @@ import { computed, ref } from 'vue'
  * - event: done         → {}
  * - event: error        → {message}
  *
- * 该 composable 管理一次对话的状态机（session、增量文本、工具过程列表），
- * 并负责把附件 base64 化后随消息提交。
+ * 历史通过 localStorage（按 project 隔离）持久化，刷新/切页后可恢复。
  */
 
 export interface ChatToolCall {
@@ -33,7 +34,7 @@ export interface ChatTurn {
   id: string
   message: string
   attachments: string[]
-  /** 流式增量文本（临时缓冲） */
+  /** 流式增量文本（临时缓冲；恢复历史时已并回 finalText） */
   streamingText: string
   /** 最终文本（message_text 事件） */
   finalText: string
@@ -44,35 +45,59 @@ export interface ChatTurn {
 }
 
 export interface AiChatOptions {
-  /** 会话 ID；复用同一窗口上下文 */
-  sessionId?: string
   message: string
   attachments?: File[]
-  /** 网络请求 AbortSignal（用于停止生成） */
+  /** 网络请求 AbortSignal（本地即时停止，随后应调 stop() 通知后端） */
   signal?: AbortSignal
 }
 
-function toBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result as string
-      // 去掉 data:...;base64, 前缀
-      const comma = result.indexOf(',')
-      resolve(comma >= 0 ? result.slice(comma + 1) : result)
-    }
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
+interface ChatHistory {
+  sessionId: string | null
+  turns: ChatTurn[]
 }
 
-let turnSeq = 0
-
 export function useAiChat() {
-  const sessionId = ref<string | null>(null)
-  const turns = ref<ChatTurn[]>([])
+  const { currentProjectId } = useProjectContext()
+  const projectId = computed(() => currentProjectId.value)
+
+  // 历史持久化：localStorage，按项目隔离（ai:chat:{projectId}）
+  const history = useProjectStorage<ChatHistory>('ai:chat', {
+    sessionId: null,
+    turns: [],
+  })
+
+  const sessionId = ref<string | null>(history.value.sessionId)
+  const turns = ref<ChatTurn[]>(history.value.turns)
   const isStreaming = ref(false)
   const activeTurnId = ref<string | null>(null)
+  const abortController = ref<AbortController | null>(null)
+
+  // 恢复历史：刷新/中断残留的 streaming turn 归一为 done（不重放工具副作用）。
+  // 同时本地清空其增量缓冲（已无后续 delta 会到达）。
+  let restoredDirty = false
+  for (const t of turns.value) {
+    if (t.status === 'streaming') {
+      t.status = 'done'
+      t.error = t.error || '上次生成被中断，可重新发送'
+      t.streamingText = ''
+      restoredDirty = true
+    }
+  }
+
+  // 持久化：turns/sessionId 变更时写回（流式期间高频率写 localStorage——
+  // 用 debounce 避免卡顿；停止/结束时强制写一次）。
+  let persistTimer: ReturnType<typeof setTimeout> | null = null
+  function schedulePersist(force = false) {
+    if (persistTimer) clearTimeout(persistTimer)
+    const flush = () => {
+      persistTimer = null
+      history.value = { sessionId: sessionId.value, turns: turns.value }
+    }
+    if (force) flush()
+    else persistTimer = setTimeout(flush, 800)
+  }
+  // 首次载入若修复了残留 streaming → 立即落盘
+  if (restoredDirty) schedulePersist(true)
 
   const activeTurn = computed(() => turns.value.find((t) => t.id === activeTurnId.value) ?? null)
 
@@ -98,9 +123,13 @@ export function useAiChat() {
         break
       case 'message_delta':
         turn.streamingText += (payload.delta as string) ?? ''
+        schedulePersist()
         break
       case 'message_text':
         turn.finalText = (payload.text as string) ?? ''
+        // 增量缓冲可清理（最终文本已落地）
+        turn.streamingText = ''
+        schedulePersist()
         break
       case 'tool_call':
         turn.toolCalls.push({
@@ -132,8 +161,11 @@ export function useAiChat() {
   }
 
   async function send(options: AiChatOptions): Promise<ChatTurn> {
+    if (projectId.value == null) {
+      throw new Error('项目上下文不可用')
+    }
     const turn: ChatTurn = {
-      id: `turn-${++turnSeq}`,
+      id: `turn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       message: options.message,
       attachments: options.attachments?.map((f) => f.name) ?? [],
       streamingText: '',
@@ -146,6 +178,7 @@ export function useAiChat() {
     turns.value.push(turn)
     activeTurnId.value = turn.id
     isStreaming.value = true
+    schedulePersist(true)
 
     const attachmentPayload = []
     for (const file of options.attachments ?? []) {
@@ -153,18 +186,27 @@ export function useAiChat() {
       attachmentPayload.push({ file_name: file.name, content_base64: contentBase64 })
     }
 
+    // 首轮 session_id 为 null 时本地生成并写回（后端沿用），
+    // 保证生成期间/停止时总有会话 ID 可 abort
+    if (sessionId.value == null) {
+      sessionId.value = createSessionId()
+    }
+
     const body = {
-      session_id: options.sessionId ?? sessionId.value,
+      project_id: projectId.value,
+      session_id: sessionId.value,
       message: options.message,
       attachments: attachmentPayload,
     }
 
+    abortController.value = new AbortController()
+    const signal = options.signal ?? abortController.value.signal
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
-        signal: options.signal,
+        signal,
       })
       if (!res.ok || !res.body) {
         let detail = `HTTP ${res.status}`
@@ -200,7 +242,7 @@ export function useAiChat() {
         turn.status = 'done'
       }
     } catch (e) {
-      if (options.signal?.aborted) {
+      if (signal.aborted) {
         turn.status = 'done'
         turn.error = '已停止生成'
       } else {
@@ -210,15 +252,44 @@ export function useAiChat() {
     } finally {
       isStreaming.value = false
       activeTurnId.value = null
+      abortController.value = null
+      schedulePersist(true)
     }
     return turn
   }
 
+  /** 本地立即中断 fetch 流（前端即时反馈） */
+  function cancelLocal() {
+    abortController.value?.abort()
+  }
+
+  /** 通知后端中止 pi 生成（真正的停止：后端发 abort 给 pi 并释放） */
+  async function stop(): Promise<void> {
+    const pid = projectId.value
+    const sid = sessionId.value
+    if (pid == null || sid == null) return
+    // 先本地断流
+    cancelLocal()
+    try {
+      await fetch('/api/ai/abort', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ project_id: pid, session_id: sid }),
+      })
+    } catch {
+      // 后端不可达也不阻断本地停止
+    }
+  }
+
+  /** 清空对话（含历史） */
   function clear() {
     turns.value = []
     sessionId.value = null
     isStreaming.value = false
     activeTurnId.value = null
+    abortController.value?.abort()
+    abortController.value = null
+    schedulePersist(true)
   }
 
   return {
@@ -227,6 +298,30 @@ export function useAiChat() {
     isStreaming,
     activeTurn,
     send,
+    stop,
+    cancelLocal,
     clear,
   }
+}
+
+function toBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      // 去掉 data:...;base64, 前缀
+      const comma = result.indexOf(',')
+      resolve(comma >= 0 ? result.slice(comma + 1) : result)
+    }
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+}
+
+/** 生成会话 ID（crypto.randomUUID 可用时用之，否则回退） */
+function createSessionId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }

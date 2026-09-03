@@ -163,11 +163,12 @@ class TestInternalExtractPreview:
         assert resp.status_code == 403
 
     async def test_extract_preview_bad_path_type(self, client: AsyncClient):
+        """file_path 非字符串 → Pydantic 模型校验拒绝（422）。"""
         resp = await client.post(
             "/internal/ai/projects/1/extract-preview",
             json={"file_path": 123},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
 
 # ============================================================================
@@ -215,11 +216,12 @@ class TestInternalValidate:
         assert "items" in data["parsedPreview"]
 
     async def test_validate_rejects_non_object_config(self, client: AsyncClient):
+        """config_json 非对象 → Pydantic 模型校验拒绝（422）。"""
         resp = await client.post(
             "/internal/ai/projects/1/validate-config",
             json={"config_json": "not-a-dict"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
 
 # ============================================================================
@@ -302,7 +304,7 @@ class TestResolvePath:
 class TestAiChat:
     async def test_disabled_returns_503(self, client: AsyncClient):
         settings.pi_enabled = False
-        resp = await client.post("/ai/chat", json={"message": "hi"})
+        resp = await client.post("/ai/chat", json={"project_id": 1, "message": "hi"})
         assert resp.status_code == 503
         assert "未启用" in resp.json()["detail"]
 
@@ -363,7 +365,9 @@ class TestAiChat:
             lambda: FakeService(),
         )
 
-        resp = await client.post("/ai/chat", json={"message": "生成配置"})
+        resp = await client.post(
+            "/ai/chat", json={"project_id": 1, "message": "生成配置"}
+        )
         assert resp.status_code == 200
         assert resp.headers["content-type"].startswith("text/event-stream")
 
@@ -406,6 +410,7 @@ class TestAiChat:
         resp = await client.post(
             "/ai/chat",
             json={
+                "project_id": 1,
                 "message": "分析日报",
                 "attachments": [{"file_name": "日报.csv", "content_base64": csv_b64}],
             },
@@ -427,6 +432,7 @@ class TestAiChat:
         resp = await client.post(
             "/ai/chat",
             json={
+                "project_id": 1,
                 "message": "x",
                 "attachments": [
                     {"file_name": "a.csv", "content_base64": "!!!not-base64!!!"}
@@ -435,3 +441,105 @@ class TestAiChat:
         )
         assert resp.status_code == 400
         assert "base64" in resp.json()["detail"]
+
+
+# ============================================================================
+# /ai/abort 与成本审计端点
+# ============================================================================
+
+
+class TestAiAbort:
+    async def test_abort_unknown_session(self, client: AsyncClient):
+        """中止不存在的会话 → 200 + found=false（幂等）。"""
+        resp = await client.post(
+            "/ai/abort",
+            json={"project_id": 1, "session_id": "nope"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert data["found"] is False
+
+    async def test_abort_disabled(self, client: AsyncClient):
+        """PI_ENABLED=false 时 abort 也 503。"""
+        settings.pi_enabled = False
+        resp = await client.post(
+            "/ai/abort",
+            json={"project_id": 1, "session_id": "nope"},
+        )
+        assert resp.status_code == 503
+
+
+class TestAiUsage:
+    async def test_usage_endpoint_empty(self, client: AsyncClient):
+        """不存在的项目无记录 → 汇总为 0。"""
+        resp = await client.get("/projects/2147483647/ai-usage")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["recordCount"] == 0
+        assert data["totalCost"] == 0.0
+        assert data["totalInputTokens"] == 0
+        assert data["records"] == []
+
+    async def test_usage_record_written_on_chat(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ):
+        """正常 chat 结束后写一条审计记录（status=completed）。"""
+
+        class FakeService:
+            def get_session_usage(self, project_id: int, session_id: str):
+                from src.services.pi_agent import PiUsageStats
+
+                stats = PiUsageStats()
+                stats.input_tokens = 100
+                stats.output_tokens = 50
+                stats.cost = 0.005
+                return stats
+
+            async def chat(self, project_id: int, session_id: str, message: str):
+                yield {
+                    "type": "tool_execution_start",
+                    "toolCallId": "c1",
+                    "toolName": "get_project_context",
+                    "args": {"project_id": 1},
+                }
+                yield {
+                    "type": "tool_execution_end",
+                    "toolCallId": "c1",
+                    "toolName": "get_project_context",
+                    "result": {"content": [{"type": "text", "text": "{}"}]},
+                    "isError": False,
+                }
+                yield {"type": "agent_settled"}
+
+            async def abort(self, project_id: int, session_id: str) -> bool:
+                return True
+
+        monkeypatch.setattr(
+            "src.routers.ai.get_pi_agent_service", lambda: FakeService()
+        )
+
+        # 时间戳 session_id：避免与测试库历史残留冲突，可精确断言本次写入
+        import time
+
+        sess = f"audit-{int(time.time() * 1000)}"
+        resp = await client.post(
+            "/ai/chat",
+            json={"project_id": 1, "message": "生成配置", "session_id": sess},
+        )
+        assert resp.status_code == 200
+        assert "event: done" in resp.text
+
+        # 审计记录已落库（独立 engine 写入，不走嵌套事务回滚）
+        data = (await client.get("/projects/1/ai-usage")).json()
+        assert data["recordCount"] >= 1
+        mine = [r for r in data["records"] if r["sessionId"] == sess]
+        assert len(mine) == 1
+        rec = mine[0]
+        assert rec["status"] == "completed"
+        assert rec["inputTokens"] == 100
+        assert rec["outputTokens"] == 50
+        assert rec["cost"] == 0.005
+        assert rec["toolCallCount"] == 1
+        # 汇总反映
+        assert data["totalInputTokens"] >= 100
