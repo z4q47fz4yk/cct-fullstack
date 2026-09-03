@@ -71,14 +71,14 @@ def _dataframe_to_markdown(
     lines: list[str] = []
 
     # ── 概览 ──
-    lines.append(f"## 日报文件预览")
-    lines.append(f"")
+    lines.append("## 日报文件预览")
+    lines.append("")
     lines.append(f"- **行数**: {total_rows}，**列数**: {total_cols}")
     if total_cols > max_cols:
         lines.append(f"- **注意**: 仅展示前 {max_cols} 列（共 {total_cols} 列）")
     if total_rows > max_rows:
         lines.append(f"- **注意**: 仅展示前 {max_rows} 行（共 {total_rows} 行）")
-    lines.append(f"")
+    lines.append("")
 
     # ── Markdown 表格 ──
     # 表头
@@ -93,8 +93,8 @@ def _dataframe_to_markdown(
         lines.append("| " + " | ".join(cells) + " |")
 
     # ── 每列的非空值采样（帮助 AI 理解列内容） ──
-    lines.append(f"")
-    lines.append(f"### 每列非空值采样（最多 15 个）")
+    lines.append("")
+    lines.append("### 每列非空值采样（最多 15 个）")
     for ci, col_name in enumerate(display_cols):
         if ci >= max_cols:
             break
@@ -316,9 +316,24 @@ def _ignored(text: str, cleaning: CleaningSpec) -> bool:
     return False
 
 
-def parse_daily_report(filename: str, content: bytes) -> ParsedResult:
-    """解析施工日报文件"""
-    return parse_report(get_polars_df(filename, content))
+def parse_daily_report(
+    filename: str,
+    content: bytes,
+    *,
+    config: ParseEngineConfig | None = None,
+) -> ParsedResult:
+    """解析施工日报文件。
+
+    Args:
+        filename: 原始文件名（用于推断格式）。
+        content: 文件字节内容。
+        config: 解析引擎配置；``None`` 时使用默认 bundled 配置。
+            （AI 生成并保存到项目的配置通过此参数传入）
+
+    Returns:
+        解析结果。
+    """
+    return parse_report(get_polars_df(filename, content), config=config)
 
 
 __all__ = [

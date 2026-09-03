@@ -1,18 +1,22 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useProjectContext } from '@/composables/useProjectContext'
 import { useAiChat, type ChatTurn } from '@/composables/useAiChat'
 
 definePage({
   meta: {
-    title: 'AI 解析配置',
+    title: 'AI 生成解析配置',
     icon: 'auto_awesome',
-    showInNav: true,
+    // 从侧边栏隐藏：AI 配置生成是「导入日报」向导的前置步骤，
+    // 从导入日报页的引导卡片进入
+    showInNav: false,
     parentName: '/project/[projectId]/daily-report',
     navOrder: 0,
   },
 })
 
+const router = useRouter()
 const { currentProjectId } = useProjectContext()
 
 const { sessionId, turns, isStreaming, send, clear } = useAiChat()
@@ -25,6 +29,8 @@ const scrollAnchor = ref<HTMLElement | null>(null)
 
 // 配置产出状态：任一工具结果中出现 save_report_config 成功即置真
 const configSaved = ref(false)
+// 最新一次保存成功的配置 ID（回导入页时携带以自动选中）
+const savedConfigId = ref<string | null>(null)
 
 const projectReady = computed(() => currentProjectId.value !== null)
 
@@ -40,12 +46,32 @@ watch(
   },
 )
 
+function parseSavedConfigId(turn: ChatTurn): string | null {
+  for (const r of turn.toolResults) {
+    if (r.tool_name === 'save_report_config' && !r.is_error) {
+      try {
+        const parsed = JSON.parse(r.content) as { configId?: string; config_id?: string }
+        return parsed.configId ?? parsed.config_id ?? null
+      } catch {
+        return null
+      }
+    }
+  }
+  return null
+}
+
 watch(
   () => turns.value.length,
   () => {
-    configSaved.value = turns.value.some((t) =>
+    const saved = turns.value.some((t) =>
       t.toolResults.some((r) => r.tool_name === 'save_report_config' && !r.is_error),
     )
+    configSaved.value = saved
+    if (saved) {
+      // 取最后一条含成功保存的 turn 的 config_id
+      const lastSavedTurn = [...turns.value].reverse().find((t) => parseSavedConfigId(t) !== null)
+      savedConfigId.value = lastSavedTurn ? parseSavedConfigId(lastSavedTurn) : null
+    }
   },
 )
 
@@ -157,23 +183,43 @@ function handleClear() {
   clear()
   selectedFiles.value = []
   configSaved.value = false
+  savedConfigId.value = null
 }
 
 const SUGGESTIONS = ['帮我根据这份日报生成解析配置', '请先查看日报结构，再编写并校验配置']
+
+// ─── 导航 ────────────────────────────────────────────────────
+
+function goBackToImport() {
+  const id = currentProjectId.value
+  if (id == null) return
+  // 已保存新配置时携带 config_id，导入页自动选中并可直接用于解析
+  const query = savedConfigId.value ? `?config_id=${encodeURIComponent(savedConfigId.value)}` : ''
+  router.push(`/project/${id}/daily-report/import${query}`)
+}
 </script>
 
 <template>
   <div class="p-6 pb-24 max-w-4xl mx-auto flex flex-col gap-4 h-[calc(100dvh-7rem)]">
     <!-- 头部 -->
     <div class="flex items-center justify-between">
-      <div>
-        <h2 class="text-xl font-semibold text-base-content flex items-center gap-2">
-          <span class="material-symbols-outlined text-primary icon-lg">auto_awesome</span>
-          AI 解析配置
-        </h2>
-        <p class="text-sm text-fg-subtle">
-          上传施工日报，与 AI 对话生成日报解析配置（AI 仅使用受控工具，不访问文件系统）
-        </p>
+      <div class="flex items-center gap-3">
+        <button
+          class="btn btn-ghost btn-sm btn-circle"
+          title="返回导入日报"
+          @click="goBackToImport"
+        >
+          <span class="material-symbols-outlined">arrow_back</span>
+        </button>
+        <div>
+          <h2 class="text-xl font-semibold text-base-content flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary icon-lg">auto_awesome</span>
+            AI 生成解析配置
+          </h2>
+          <p class="text-sm text-fg-subtle">
+            上传施工日报，与 AI 对话生成解析配置（AI 仅使用受控工具，不访问文件系统）
+          </p>
+        </div>
       </div>
       <div class="flex items-center gap-2">
         <span v-if="isStreaming" class="text-xs text-info flex items-center gap-1">
@@ -193,9 +239,15 @@ const SUGGESTIONS = ['帮我根据这份日报生成解析配置', '请先查看
     </div>
 
     <!-- 配置保存成功横幅 -->
-    <div v-if="configSaved" class="alert alert-success alert-sm" role="alert">
-      <span class="material-symbols-outlined icon-sm">check_circle</span>
-      <span>解析配置已成功保存，可到「导入日报」步骤使用该配置解析</span>
+    <div v-if="configSaved" class="alert alert-success flex flex-wrap gap-2" role="alert">
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined icon-sm">check_circle</span>
+        <span>解析配置已成功保存，可直接用它解析日报</span>
+      </div>
+      <button class="btn btn-success btn-sm ml-auto" @click="goBackToImport">
+        <span class="material-symbols-outlined icon-sm">upload_file</span>
+        <span>去导入日报解析</span>
+      </button>
     </div>
 
     <!-- 聊天主体 -->

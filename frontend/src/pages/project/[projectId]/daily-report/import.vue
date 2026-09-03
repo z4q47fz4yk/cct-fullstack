@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useDailyReportStoreV2 } from '@/stores/report'
-import { useMutation } from '@pinia/colada'
-import { parseDailyReportMutation } from '@/client/@pinia/colada.gen'
+import { useMutation, useQuery } from '@pinia/colada'
+import { listConfigsQuery, parseDailyReportMutation } from '@/client/@pinia/colada.gen'
 import { useProjectContext } from '@/composables/useProjectContext'
 import { useUsageDateType } from '@/composables/useUsageDateType'
 
@@ -18,6 +18,7 @@ definePage({
   },
 })
 
+const route = useRoute()
 const router = useRouter()
 const storeV2 = useDailyReportStoreV2()
 const { currentProjectId } = useProjectContext()
@@ -27,6 +28,56 @@ const { usageDate, effectiveUsageType } = useUsageDateType()
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
+
+// ─── AI 生成解析配置入口 ─────────────────────────────────────
+function gotoAiConfig() {
+  const id = currentProjectId.value
+  if (id == null) return
+  // AI 页用于生成「新」配置；保存成功后回跳 import 并携带新 config_id 自动选中
+  router.push(`/project/${id}/daily-report/ai`)
+}
+
+// ─── 项目自定义解析配置（AI 生成）选择 ───────────────────────
+const { data: configs, isLoading: configsLoading } = useQuery(() => ({
+  ...listConfigsQuery({
+    path: { project_id: currentProjectId.value! },
+  }),
+  enabled: currentProjectId.value !== null,
+}))
+
+// 选中配置：优先 URL query（AI 页保存后回跳携带），其次手动选择
+const selectedConfigId = ref<string | null>(null)
+
+watch(
+  () => route.query.config_id as string | undefined,
+  (configId) => {
+    if (configId && configId !== selectedConfigId.value) {
+      selectedConfigId.value = configId
+    }
+  },
+  { immediate: true },
+)
+
+// 兜底：URL 携带的 config_id 在本项目配置列表中不存在时清除（防无效选中）
+watch(
+  () => configs.value,
+  (configList) => {
+    const cfgId = selectedConfigId.value
+    if (cfgId && configList && !configList.some((c) => c.configId === cfgId)) {
+      selectedConfigId.value = null
+      router.replace({ query: { config_id: undefined } })
+    }
+  },
+)
+
+const selectedConfigName = computed(
+  () => configs.value?.find((c) => c.configId === selectedConfigId.value)?.name ?? null,
+)
+
+function clearSelectedConfig() {
+  selectedConfigId.value = null
+  router.replace({ query: { config_id: undefined } })
+}
 
 const { mutateAsync: parseDailyReport, data, isLoading } = useMutation(parseDailyReportMutation())
 
@@ -48,6 +99,7 @@ async function handleParse() {
     body: {
       file: selectedFile.value,
       usage_date: usageDate.value,
+      config_id: selectedConfigId.value,
     },
   })
     .then((result) => {
@@ -82,6 +134,23 @@ function goToReview() {
         </p>
       </div>
 
+      <!-- AI 生成解析配置入口：日报结构特殊/首次导入时，可先用 AI 生成解析配置 -->
+      <div class="panel panel-hover p-4 flex flex-wrap items-center gap-3">
+        <div class="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+          <span class="material-symbols-outlined text-primary icon-lg">auto_awesome</span>
+        </div>
+        <div class="flex-1 min-w-48">
+          <p class="font-medium text-base-content">解析不理想？试试 AI 生成解析配置</p>
+          <p class="text-xs text-fg-subtle mt-0.5">
+            上传日报给 AI 对话，AI 会分析表格结构并生成、校验、保存解析配置
+          </p>
+        </div>
+        <button class="btn btn-primary btn-sm" :disabled="isLoading" @click="gotoAiConfig">
+          <span class="material-symbols-outlined icon-sm">auto_awesome</span>
+          <span>AI 生成配置</span>
+        </button>
+      </div>
+
       <!-- 计划口径提示：日报导入按实际口径落库 -->
       <div
         v-if="effectiveUsageType === 'PLANNED'"
@@ -97,6 +166,40 @@ function goToReview() {
       <fieldset class="fieldset">
         <legend class="fieldset-legend">使用日期</legend>
         <input v-model="usageDate" type="date" class="input w-full" :disabled="isLoading" />
+      </fieldset>
+
+      <!-- 解析配置选择：默认使用内置配置；有 AI 生成的配置时可选用 -->
+      <fieldset v-if="configs && configs.length > 0" class="fieldset">
+        <legend class="fieldset-legend flex items-center gap-1">
+          解析配置
+          <span class="text-xs text-fg-subtle font-normal">（留空 = 内置默认配置）</span>
+        </legend>
+        <div class="flex items-center gap-2">
+          <select
+            v-model="selectedConfigId"
+            class="select w-full"
+            :disabled="isLoading || configsLoading"
+          >
+            <option :value="null">内置默认配置</option>
+            <option v-for="cfg in configs" :key="cfg.configId" :value="cfg.configId">
+              {{ cfg.name ?? `配置 ${cfg.configId.slice(0, 8)}` }}（{{ cfg.blockCount }} 块 ·
+              {{ cfg.categories.join(' / ') }}）
+            </option>
+          </select>
+          <button
+            v-if="selectedConfigId"
+            class="btn btn-ghost btn-sm"
+            title="清除所选配置"
+            @click="clearSelectedConfig"
+          >
+            <span class="material-symbols-outlined icon-sm">close</span>
+          </button>
+        </div>
+        <p v-if="selectedConfigId" class="text-xs text-primary mt-1">
+          {{
+            selectedConfigName ? `将使用「${selectedConfigName}」解析` : '将使用所选 AI 配置解析'
+          }}
+        </p>
       </fieldset>
 
       <label

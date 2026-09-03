@@ -11,9 +11,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, File, HTTPException, UploadFile
 from sqlmodel import SQLModel
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.dependencies.public.project import CurrentProject
 from src.schemas.daily_report_config import (
@@ -21,7 +20,6 @@ from src.schemas.daily_report_config import (
     ConfigSummary,
     ConfigValidationResult,
     ExtractPreviewResponse,
-    ProjectResourcesInfo,
     SaveConfigRequest,
     SaveConfigResponse,
 )

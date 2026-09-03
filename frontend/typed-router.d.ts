@@ -53,6 +53,7 @@ declare module 'vue-router/auto-routes' {
       | '/project/[projectId]/'
       | '/project/[projectId]/daily-report'
       | '/project/[projectId]/daily-report/'
+      | '/project/[projectId]/daily-report/ai'
       | '/project/[projectId]/daily-report/allocate'
       | '/project/[projectId]/daily-report/import'
       | '/project/[projectId]/daily-report/review'
@@ -94,6 +95,7 @@ declare module 'vue-router/auto-routes' {
       { projectId: ParamValue<true> },
       { projectId: ParamValue<false> },
       | '/project/[projectId]/daily-report/'
+      | '/project/[projectId]/daily-report/ai'
       | '/project/[projectId]/daily-report/allocate'
       | '/project/[projectId]/daily-report/import'
       | '/project/[projectId]/daily-report/review'
@@ -101,6 +103,13 @@ declare module 'vue-router/auto-routes' {
     '/project/[projectId]/daily-report/': RouteRecordInfo<
       '/project/[projectId]/daily-report/',
       '/project/:projectId/daily-report',
+      { projectId: ParamValue<true> },
+      { projectId: ParamValue<false> },
+      | never
+    >,
+    '/project/[projectId]/daily-report/ai': RouteRecordInfo<
+      '/project/[projectId]/daily-report/ai',
+      '/project/:projectId/daily-report/ai',
       { projectId: ParamValue<true> },
       { projectId: ParamValue<false> },
       | never
@@ -346,6 +355,7 @@ declare module 'vue-router/auto-routes' {
         | '/project/[projectId]/'
         | '/project/[projectId]/daily-report'
         | '/project/[projectId]/daily-report/'
+        | '/project/[projectId]/daily-report/ai'
         | '/project/[projectId]/daily-report/allocate'
         | '/project/[projectId]/daily-report/import'
         | '/project/[projectId]/daily-report/review'
@@ -390,6 +400,7 @@ declare module 'vue-router/auto-routes' {
       routes:
         | '/project/[projectId]/daily-report'
         | '/project/[projectId]/daily-report/'
+        | '/project/[projectId]/daily-report/ai'
         | '/project/[projectId]/daily-report/allocate'
         | '/project/[projectId]/daily-report/import'
         | '/project/[projectId]/daily-report/review'
@@ -401,6 +412,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/project/[projectId]/daily-report/index.vue': {
       routes:
         | '/project/[projectId]/daily-report/'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/project/[projectId]/daily-report/ai.vue': {
+      routes:
+        | '/project/[projectId]/daily-report/ai'
       views:
         | never
       pathParamNames:

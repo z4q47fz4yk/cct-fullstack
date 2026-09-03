@@ -37,11 +37,24 @@ class DailyReportService:
         self.project_id = project_id
 
     async def parse_excel(
-        self, filename: str, usage_date: date, file_content: bytes
+        self,
+        filename: str,
+        usage_date: date,
+        file_content: bytes,
+        *,
+        config_id: str | None = None,
     ) -> tuple[ImportBatch, list[ParsedResourceItem]]:
+        from src.utils.daily_report_config import load_config_by_id
         from src.utils.daily_report_parser import ParsedResult
 
-        parsed_result: ParsedResult = parse_daily_report(filename, file_content)
+        # 解析配置：显式指定项目自定义配置（AI 生成）时加载之；否则用默认 bundled 配置
+        config = None
+        if config_id:
+            config = load_config_by_id(self.project_id, config_id)
+
+        parsed_result: ParsedResult = parse_daily_report(
+            filename, file_content, config=config
+        )
 
         mapped_items = await self._map_resources(parsed_result.items)
 

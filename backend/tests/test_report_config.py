@@ -12,32 +12,25 @@
 # pyright: reportCallIssue=false
 
 import json
-import uuid
 from io import BytesIO
 from pathlib import Path
 
 import polars as pl
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from pydantic import ValidationError
 
+from src.schemas.daily_report_config import (
+    SaveConfigRequest,
+)
+from src.services.report_config import ReportConfigService
 from src.utils.daily_report_config import (
-    BlockConfig,
     ParseEngineConfig,
     is_redos_safe,
-    load_config,
-    load_config_by_id,
     reset_cache,
-    save_project_config,
     validate_config_security,
 )
 from src.utils.daily_report_parser import extract_text_preview
-from src.services.report_config import ReportConfigService
-from src.schemas.daily_report_config import (
-    ConfigValidationResult,
-    SaveConfigRequest,
-)
-
 
 # ============================================================================
 # Fixtures
@@ -144,7 +137,7 @@ class TestRegexSafety:
 
     def test_too_many_groups(self):
         # 构建超过 20 个捕获组的正则
-        parts = [f"(\\d+)" for _ in range(21)]
+        parts = ["(\\d+)" for _ in range(21)]
         pattern = " ".join(parts)
         safe, reason = is_redos_safe(pattern)
         assert not safe

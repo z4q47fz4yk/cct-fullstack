@@ -1,8 +1,10 @@
 """Daily report API 测试（multipart 上传 + 4 步流水线）。"""
 # pyright: reportCallIssue=false
 
+import json
 import uuid
 from datetime import date
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -175,6 +177,83 @@ async def test_parse_returns_parsed_items(daily_report_csv: bytes, client: Async
         assert "mappingStatus" in item
         assert "resourceId" in item
         assert "resourceUnit" in item
+
+
+# =============================================================================
+# parse 端点 — 自定义配置（config_id）
+# =============================================================================
+
+
+@pytest.fixture
+def saved_labor_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    """把默认配置过滤为仅 labor 块并保存为项目自定义配置，返回 config_id。
+
+    覆盖 parse 传 config_id 的端到端链路（AI 生成配置 → 保存 → 解析选用）。
+    """
+    from src.models.resource import ResourceCategory as _RC
+    from src.utils.daily_report_config import ParseEngineConfig, save_project_config
+
+    # 劫持配置存储目录到 tmp_path
+    d = tmp_path / "configs"
+    d.mkdir()
+    monkeypatch.setattr("src.utils.daily_report_config._PROJECT_CONFIGS_DIR", d)
+
+    # 从默认配置派生仅 labor 块（与 _build_csv_bytes 的 labor 部分匹配）
+    cfg_path = (
+        Path(__file__).resolve().parent.parent / "src/utils/daily_report_config.json"
+    )
+    raw = json.loads(cfg_path.read_text(encoding="utf-8"))
+    raw["blocks"] = [b for b in raw["blocks"] if b["category"] == _RC.labor.value]
+
+    config = ParseEngineConfig.model_validate(raw)
+    save_project_config(PID, "aabbccddeeff", config)
+    return "aabbccddeeff"
+
+
+async def test_parse_with_custom_config(
+    client: AsyncClient,
+    daily_report_csv: bytes,
+    saved_labor_config: str,
+):
+    """传 config_id 时用项目自定义配置解析：仅 labor 块 → 只出 2 条"""
+    resp = await client.post(
+        _url() + "/parse",
+        files={"file": ("test.csv", daily_report_csv, "text/csv")},
+        data={"usage_date": USAGE_DATE, "config_id": saved_labor_config},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    # 自定义配置只含 labor 块 → 仅解析出 labor 条目（2 列 × 1 组 = 2 条）
+    assert len(data["parsedItems"]) == 2
+    assert all(item["category"] == "labor" for item in data["parsedItems"])
+
+
+async def test_parse_with_nonexistent_config(
+    client: AsyncClient,
+    daily_report_csv: bytes,
+):
+    """config_id 不存在 → 400"""
+    resp = await client.post(
+        _url() + "/parse",
+        files={"file": ("test.csv", daily_report_csv, "text/csv")},
+        data={"usage_date": USAGE_DATE, "config_id": "000000000000"},
+    )
+    assert resp.status_code == 400
+    assert "配置不存在" in resp.json()["detail"]
+
+
+async def test_parse_with_traversal_config(
+    client: AsyncClient,
+    daily_report_csv: bytes,
+):
+    """config_id 路径穿越/非法格式 → 400（防越权读文件）"""
+    resp = await client.post(
+        _url() + "/parse",
+        files={"file": ("test.csv", daily_report_csv, "text/csv")},
+        data={"usage_date": USAGE_DATE, "config_id": "../secret"},
+    )
+    assert resp.status_code == 400
+    assert "配置不存在" in resp.json()["detail"]
 
 
 # =============================================================================

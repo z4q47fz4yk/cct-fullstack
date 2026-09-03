@@ -20,6 +20,7 @@ from typing import Any, ClassVar
 from pydantic import (
     BaseModel,
     ConfigDict,
+    Field,
     PrivateAttr,
     field_validator,
     model_validator,
@@ -157,6 +158,8 @@ class ParseEngineConfig(BaseModel):
     # 版本号，用于未来迁移
     schema_version: str = "2.0"
     blocks: list[BlockConfig]
+    # 人类可读的配置名称（AI 生成时提供，列表展示用；解析引擎忽略）
+    name: str | None = Field(default=None, max_length=200, description="配置名称")
 
 
 # ============================================================================
@@ -376,7 +379,14 @@ _PROJECT_CONFIGS_DIR = Path(__file__).parent / "report_configs"
 
 
 def _project_config_path(project_id: int, config_id: str) -> Path:
-    """获取项目配置文件路径"""
+    """获取项目配置文件路径。
+
+    ``config_id`` 必须为受控格式（uuid4 hex，12 字符），防路径穿越：
+    由 :func:`save_project_config` 生成的 ID 天然满足；外部传入的
+    config_id（如日报解析的 Form 字段）也在此统一校验。
+    """
+    if not config_id or not re.fullmatch(r"[0-9a-f]{12}", config_id):
+        raise FileNotFoundError(f"配置 {config_id} 不存在")
     return _PROJECT_CONFIGS_DIR / str(project_id) / f"{config_id}.json"
 
 
@@ -448,6 +458,7 @@ def list_project_configs(project_id: int) -> list[dict[str, Any]]:
             cfg = ParseEngineConfig.model_validate(raw)
             result.append({
                 "config_id": f.stem,
+                "name": cfg.name,
                 "block_count": len(cfg.blocks),
                 "categories": [blk.category.value for blk in cfg.blocks],
                 "descriptions": [

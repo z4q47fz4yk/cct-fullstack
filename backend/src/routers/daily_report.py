@@ -45,6 +45,9 @@ async def parse_daily_report_endpoint(
     project: CurrentProject,
     usage_date: Annotated[date, Form(description="使用日期 (YYYY-MM-DD)")],
     file: Annotated[UploadFile, File(description="Excel 文件")],
+    config_id: Annotated[
+        str | None, Form(description="可选：项目自定义解析配置 ID（AI 生成）")
+    ] = None,
 ):
     service = DailyReportService(session, project.id)
     content = await file.read()
@@ -53,7 +56,10 @@ async def parse_daily_report_endpoint(
             filename=file.filename or "unknown.xlsx",
             usage_date=usage_date,
             file_content=content,
+            config_id=config_id,
         )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=400, detail=f"解析配置不存在: {e}") from e
     except FileParseError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return DailyReportParseResp(

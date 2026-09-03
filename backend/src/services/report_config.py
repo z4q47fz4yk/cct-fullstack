@@ -8,21 +8,17 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 import polars as pl
 from pydantic import ValidationError
 
-from src.schemas.daily_report import ParsedItem, ParseWarning
 from src.schemas.daily_report_config import (
     ConfigDetail,
     ConfigSummary,
     ConfigValidationError,
     ConfigValidationResult,
     ExtractPreviewResponse,
-    ProjectResourcesInfo,
     SaveConfigRequest,
     SaveConfigResponse,
 )
@@ -156,6 +152,9 @@ class ReportConfigService:
             raise ValueError(f"配置校验未通过: {error_msgs}")
 
         config = ParseEngineConfig.model_validate(request.config_json)
+        # 人类可读名称随配置落盘（列表/下拉展示用；AI 工具调用时可省略）
+        if request.name:
+            config = config.model_copy(update={"name": request.name})
         config_id = uuid.uuid4().hex[:12]
 
         save_project_config(project_id, config_id, config)
@@ -175,7 +174,7 @@ class ReportConfigService:
             result.append(
                 ConfigSummary(
                     config_id=raw["config_id"],
-                    name=None,  # 当前未存储 name，后续可扩展
+                    name=raw.get("name"),
                     block_count=raw["block_count"],
                     categories=raw["categories"],
                     descriptions=raw.get("descriptions", []),
@@ -189,7 +188,7 @@ class ReportConfigService:
         config = load_config_by_id(project_id, config_id)
         return ConfigDetail(
             config_id=config_id,
-            name=None,
+            name=config.name,
             config_json=json.loads(config.model_dump_json()),
             block_count=len(config.blocks),
             categories=[blk.category.value for blk in config.blocks],
