@@ -1,5 +1,11 @@
+from pathlib import Path
+
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# 仓库根目录（扩展路径相对解析基准：根 .env 中的路径按仓库根书写，
+# 如 backend/pi_extensions/daily-report-config.ts）
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 class OIDCProviderConfig(BaseModel):
@@ -86,6 +92,47 @@ class Settings(BaseSettings):
     oidc_providers: list[OIDCProviderConfig] = Field(
         default_factory=list, validation_alias="OIDC_PROVIDERS"
     )
+
+    # ---- Pi Agent（AI 对话 / 日报解析配置生成）----
+    # 本后端监听端口（根 .env 的 BACKEND_PORT），用于扩展工具回调内部端点
+    backend_port: int = Field(8000, validation_alias="BACKEND_PORT")
+    # pi 可执行文件路径（缺省 "pi"，按 PATH 解析）；RPC 模式由后端托管
+    pi_bin: str = Field("pi", validation_alias="PI_BIN")
+    # LLM Provider（传给 pi --provider），如 opencode-go
+    pi_provider: str = Field("opencode-go", validation_alias="PI_PROVIDER")
+    # LLM 模型（传给 pi --model），如 deepseek-v4-flash
+    pi_model: str = Field("deepseek-v4-flash", validation_alias="PI_MODEL")
+    # 自定义扩展文件路径（传给 pi -e，可多个）；内置工具（bash 等）一律禁用
+    pi_extensions: str = Field("", validation_alias="PI_EXTENSIONS")
+    # 扩展工具回调本后端（report-config 等）的内部端点基址，缺省按本机端口推导
+    pi_internal_base_url: str = Field("", validation_alias="PI_INTERNAL_BASE_URL")
+    # 内部端点鉴权令牌：为空时启动时自动生成（扩展工具仅原样透传）
+    pi_internal_token: str = Field("", validation_alias="PI_INTERNAL_TOKEN")
+    # LLM API Key（写入 pi 子进程环境变量 OPENCODE_API_KEY）；也支持系统环境变量直通
+    pi_api_key: str = Field("", validation_alias="PI_API_KEY")
+    # 是否启用 AI 对话功能（false 时 /ai 路由返回 503，避免未配置环境报错）
+    pi_enabled: bool = Field(False, validation_alias="PI_ENABLED")
+
+    @property
+    def pi_extension_paths(self) -> list[str]:
+        """解析逗号分隔的扩展文件路径列表（相对路径以仓库根为基准，返回绝对路径）。"""
+        result: list[str] = []
+        for raw in self.pi_extensions.split(","):
+            p = raw.strip()
+            if not p:
+                continue
+            path = Path(p)
+            if not path.is_absolute():
+                path = _REPO_ROOT / path
+            result.append(str(path.resolve()))
+        return result
+
+    @property
+    def pi_internal_url(self) -> str:
+        """扩展工具回调本后端内部端点的基址。"""
+        if self.pi_internal_base_url:
+            return self.pi_internal_base_url.rstrip("/")
+        return f"http://127.0.0.1:{self.backend_port}"
 
     model_config = SettingsConfigDict(
         env_file=".env",

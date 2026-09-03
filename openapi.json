@@ -2482,6 +2482,357 @@
         }
       }
     },
+    "/projects/{project_id}/report-config/extract-preview": {
+      "post": {
+        "tags": [
+          "report-config"
+        ],
+        "summary": "提取日报文件的文本预览（AI 阅读用）",
+        "description": "将上传的日报 Excel/CSV 文件的头部内容转为 Markdown 表格文本。AI agent 在编写配置前调用此接口，以便理解日报的结构。",
+        "operationId": "extract_preview",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_extract_preview"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractPreviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project_id}/report-config/validate": {
+      "post": {
+        "tags": [
+          "report-config"
+        ],
+        "summary": "校验日报解析配置（含可选的解析预览）",
+        "description": "对 AI 生成的配置 JSON 执行全量安全校验（Gate 0-3），可选地提供样例文件进行干跑解析预览（Gate 4）。此接口无副作用——不存储任何数据。",
+        "operationId": "validate_config",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_validate_config"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigValidationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project_id}/report-config": {
+      "post": {
+        "tags": [
+          "report-config"
+        ],
+        "summary": "保存日报解析配置",
+        "description": "校验并存储 AI 生成的配置。只有通过全量校验的配置才能入库。此接口是安全边界。",
+        "operationId": "save_config",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaveConfigResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "report-config"
+        ],
+        "summary": "列出项目的所有自定义配置",
+        "operationId": "list_configs",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConfigSummary"
+                  },
+                  "title": "Response List Configs"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project_id}/report-config/{config_id}": {
+      "get": {
+        "tags": [
+          "report-config"
+        ],
+        "summary": "获取单个配置详情",
+        "operationId": "get_config",
+        "parameters": [
+          {
+            "name": "config_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Config Id"
+            }
+          },
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "report-config"
+        ],
+        "summary": "删除配置",
+        "operationId": "delete_config",
+        "parameters": [
+          {
+            "name": "config_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Config Id"
+            }
+          },
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/projects/{project_id}/optimize": {
       "get": {
         "tags": [
@@ -6528,6 +6879,46 @@
           }
         }
       }
+    },
+    "/ai/chat": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "AI 对话（SSE 流式）",
+        "description": "发起 AI 对话并流式返回事件（text/event-stream）。\n\n事件格式（data 为 JSON）：\n- ``start``: {session_id, attachment_paths}\n- ``message_delta``: {delta}\n- ``tool_call``: {tool_call_id, tool_name, args}\n- ``tool_result``: {tool_call_id, tool_name, content, is_error}\n- ``done``: {}\n- ``error``: {message}",
+        "operationId": "ai_chat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6644,6 +7035,21 @@
         ],
         "title": "AuthErrorResp"
       },
+      "Body_extract_preview": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "日报 Excel/CSV 文件"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_extract_preview"
+      },
       "Body_parse_daily_report": {
         "properties": {
           "usage_date": {
@@ -6665,6 +7071,34 @@
           "file"
         ],
         "title": "Body_parse_daily_report"
+      },
+      "Body_validate_config": {
+        "properties": {
+          "config_json": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config Json",
+            "description": "ParseEngineConfig 的 JSON 表示"
+          },
+          "sample_file": {
+            "anyOf": [
+              {
+                "type": "string",
+                "contentMediaType": "application/octet-stream"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample File",
+            "description": "可选：样例日报文件，用于干跑解析预览"
+          }
+        },
+        "type": "object",
+        "required": [
+          "config_json"
+        ],
+        "title": "Body_validate_config"
       },
       "ChartCreate": {
         "properties": {
@@ -6896,6 +7330,65 @@
         "type": "object",
         "title": "ChartUpdate",
         "description": "更新图表请求。\n\nname / description / chart_type / slice_entity 在 DB 中为 NOT NULL，\n使用 ``Annotated[Alias, Field(default=None)]``，\n``reject_explicit_none`` 在显式 null 时 422。\nresource_categories 可空，显式 null 表示不过滤。"
+      },
+      "ChatAttachment": {
+        "properties": {
+          "file_name": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "File Name",
+            "description": "原始文件名（含扩展名）"
+          },
+          "content_base64": {
+            "type": "string",
+            "title": "Content Base64",
+            "description": "文件内容的 base64 编码（不包含 data: 前缀）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_name",
+          "content_base64"
+        ],
+        "title": "ChatAttachment",
+        "description": "聊天附件（日报 Excel 文件）。"
+      },
+      "ChatRequest": {
+        "properties": {
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id",
+            "description": "聊天会话 ID（前端生成 UUID，同一窗口复用）"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 20000,
+            "title": "Message",
+            "description": "用户发给 AI 的文本消息"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/ChatAttachment"
+            },
+            "type": "array",
+            "title": "Attachments",
+            "description": "可选：随消息上传的日报文件（base64）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "ChatRequest",
+        "description": "一次聊天请求。\n\n``session_id`` 可选：同一聊天窗口复用同一 ID 保持上下文；缺省时后端新建。"
       },
       "ComplianceMaterialDiff": {
         "properties": {
@@ -7157,6 +7650,196 @@
         "title": "ComplianceTaskRow",
         "description": "单工序计划 vs 实际。"
       },
+      "ConfigDetail": {
+        "properties": {
+          "configId": {
+            "type": "string",
+            "title": "Configid",
+            "description": "配置 ID"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "配置名称"
+          },
+          "configJson": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Configjson",
+            "description": "ParseEngineConfig 的完整 JSON"
+          },
+          "blockCount": {
+            "type": "integer",
+            "title": "Blockcount",
+            "description": "解析块数量"
+          },
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Categories",
+            "description": "各块覆盖的资源分类"
+          },
+          "descriptions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Descriptions",
+            "description": "各块的人类可读描述"
+          }
+        },
+        "type": "object",
+        "required": [
+          "configId",
+          "configJson",
+          "blockCount",
+          "categories"
+        ],
+        "title": "ConfigDetail",
+        "description": "配置详情（含完整 config_json）"
+      },
+      "ConfigSummary": {
+        "properties": {
+          "configId": {
+            "type": "string",
+            "title": "Configid",
+            "description": "配置 ID"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "配置名称"
+          },
+          "blockCount": {
+            "type": "integer",
+            "title": "Blockcount",
+            "description": "解析块数量"
+          },
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Categories",
+            "description": "各块覆盖的资源分类"
+          },
+          "descriptions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Descriptions",
+            "description": "各块的人类可读描述"
+          },
+          "createdAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Createdat",
+            "description": "文件创建时间"
+          },
+          "updatedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updatedat",
+            "description": "文件修改时间"
+          }
+        },
+        "type": "object",
+        "required": [
+          "configId",
+          "blockCount",
+          "categories"
+        ],
+        "title": "ConfigSummary",
+        "description": "配置摘要（列表展示用）"
+      },
+      "ConfigValidationError": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field",
+            "description": "出错字段路径，如 blocks[0].row_locator.label_regex"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "错误描述"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "message"
+        ],
+        "title": "ConfigValidationError",
+        "description": "单条校验错误"
+      },
+      "ConfigValidationResult": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "校验是否通过"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigValidationError"
+            },
+            "type": "array",
+            "title": "Errors",
+            "description": "校验错误列表"
+          },
+          "parsedPreview": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parsedpreview",
+            "description": "解析预览结果（仅当 success=true 且提供了样例文件时返回）。包含 summary 和 items 字段。"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success"
+        ],
+        "title": "ConfigValidationResult",
+        "description": "配置校验结果（tool: validate_daily_report_config 的返回体）"
+      },
       "DailyReportParseResp": {
         "properties": {
           "batchId": {
@@ -7251,6 +7934,27 @@
           "detail"
         ],
         "title": "ErrorResponse"
+      },
+      "ExtractPreviewResponse": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "原始文件名"
+          },
+          "markdownText": {
+            "type": "string",
+            "title": "Markdowntext",
+            "description": "Markdown 格式的文本预览"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "markdownText"
+        ],
+        "title": "ExtractPreviewResponse",
+        "description": "日报文件文本预览响应"
       },
       "HTTPValidationError": {
         "properties": {
@@ -11564,6 +12268,68 @@
         "type": "object",
         "title": "RunUpdate",
         "description": "部分更新优化运行（PUT /optimize/{id}，目前仅支持改名）。\n\n``name`` 对应的 DB 列可空，显式 null 表示清空标签。"
+      },
+      "SaveConfigRequest": {
+        "properties": {
+          "config_json": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config Json",
+            "description": "ParseEngineConfig 的 JSON 表示"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "人类可读的配置名称（可选）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "config_json"
+        ],
+        "title": "SaveConfigRequest",
+        "description": "保存配置请求（tool: save_daily_report_config 的输入）"
+      },
+      "SaveConfigResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "是否成功保存"
+          },
+          "configId": {
+            "type": "string",
+            "title": "Configid",
+            "description": "配置 ID（文件名不含扩展名）"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "配置名称"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "configId"
+        ],
+        "title": "SaveConfigResponse",
+        "description": "保存配置响应"
       },
       "ScheduleStats": {
         "properties": {

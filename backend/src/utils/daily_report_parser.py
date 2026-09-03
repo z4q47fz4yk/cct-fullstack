@@ -21,6 +21,109 @@ from src.utils.daily_report_config import (
     load_config,
 )
 
+# ── 文本预览器：将 DataFrame 转为 AI 可读的 Markdown ──────────────────
+
+
+def extract_text_preview(
+    filename: str,
+    content: bytes,
+    *,
+    max_rows: int = 30,
+    max_cols: int = 10,
+) -> str:
+    """将日报文件的头部内容序列化为 Markdown 表格文本。
+
+    供 AI 在编写配置前读取，以便 AI 能"看到"日报的结构
+    （行标签、列排布、样例数据等），而不需要理解二进制格式。
+
+    Args:
+        filename: 原始文件名（用于推断格式）。
+        content: 文件字节内容。
+        max_rows: 预览的最大行数。
+        max_cols: 预览的最大列数。
+
+    Returns:
+        Markdown 格式的文本预览。
+    """
+    df = get_polars_df(filename, content)
+    return _dataframe_to_markdown(df, max_rows=max_rows, max_cols=max_cols)
+
+
+def _dataframe_to_markdown(
+    df: pl.DataFrame,
+    *,
+    max_rows: int = 30,
+    max_cols: int = 10,
+) -> str:
+    """将 Polars DataFrame 转为人类/AI 友好的 Markdown 文本预览"""
+    total_rows = df.height
+    total_cols = df.width
+    col_names = df.columns
+
+    # 限制显示列数
+    display_cols = col_names[:max_cols]
+    display_df = df.select(display_cols)
+
+    # 限制显示行数
+    if display_df.height > max_rows:
+        display_df = display_df.head(max_rows)
+
+    lines: list[str] = []
+
+    # ── 概览 ──
+    lines.append(f"## 日报文件预览")
+    lines.append(f"")
+    lines.append(f"- **行数**: {total_rows}，**列数**: {total_cols}")
+    if total_cols > max_cols:
+        lines.append(f"- **注意**: 仅展示前 {max_cols} 列（共 {total_cols} 列）")
+    if total_rows > max_rows:
+        lines.append(f"- **注意**: 仅展示前 {max_rows} 行（共 {total_rows} 行）")
+    lines.append(f"")
+
+    # ── Markdown 表格 ──
+    # 表头
+    header_parts = [""] + [str(c) for c in display_cols]
+    lines.append("| " + " | ".join(header_parts) + " |")
+    lines.append("|" + "|".join(["---"] * len(header_parts)) + "|")
+
+    # 数据行
+    rows_data = display_df.rows()
+    for ri, row in enumerate(rows_data):
+        cells = [str(ri)] + [_safe_cell_str(cell) for cell in row]
+        lines.append("| " + " | ".join(cells) + " |")
+
+    # ── 每列的非空值采样（帮助 AI 理解列内容） ──
+    lines.append(f"")
+    lines.append(f"### 每列非空值采样（最多 15 个）")
+    for ci, col_name in enumerate(display_cols):
+        if ci >= max_cols:
+            break
+        try:
+            non_null = (
+                df.select(col_name)
+                .filter(pl.col(col_name).is_not_null())
+                .head(15)
+                .rows()
+            )
+            samples = [_safe_cell_str(r[0]) for r in non_null]
+            lines.append(f"- **列{ci} ({col_name})**: {samples}")
+        except Exception:
+            lines.append(f"- **列{ci} ({col_name})**: *(无法采样)*")
+
+    return "\n".join(lines)
+
+
+def _safe_cell_str(cell: Any) -> str:
+    """将单元格值转为安全的短字符串（最多 100 字符）"""
+    if cell is None:
+        return "(空)"
+    s = str(cell).strip()
+    if len(s) > 100:
+        s = s[:97] + "..."
+    # 转义 Markdown 保留字符
+    s = s.replace("|", "\\|")
+    return s
+
 
 def get_polars_df(filename: str, content: bytes) -> pl.DataFrame:
     """读取文件为 Polars DataFrame"""
@@ -223,6 +326,7 @@ __all__ = [
     "ParsedItem",
     "ParseWarning",
     "ParsedResult",
+    "extract_text_preview",
     "get_polars_df",
     "parse_report",
     "parse_daily_report",

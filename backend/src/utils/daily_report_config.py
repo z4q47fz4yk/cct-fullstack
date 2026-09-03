@@ -13,8 +13,9 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import (
     BaseModel,
@@ -59,11 +60,15 @@ class RowSpec(BaseModel):
 
     @field_validator("label_regex", "content_regex")
     @classmethod
-    def _check_compiles(cls, v: str) -> str:
+    def _check_compiles_and_safe(cls, v: str) -> str:
         try:
             re.compile(v)
         except re.error as e:
             raise ValueError(f"regex '{v}' 编译失败: {e}") from e
+        # 安全扫描（编译阶段即检测，坏正则直接拒绝）
+        safe, reason = is_redos_safe(v)
+        if not safe:
+            raise ValueError(f"regex '{v}' 不安全: {reason}")
         return v
 
     def model_post_init(self, context: Any) -> None:
@@ -93,11 +98,14 @@ class RowLocator(BaseModel):
 
     @field_validator("label_regex")
     @classmethod
-    def _check_compiles(cls, v: str) -> str:
+    def _check_compiles_and_safe(cls, v: str) -> str:
         try:
             re.compile(v)
         except re.error as e:
             raise ValueError(f"regex '{v}' 编译失败: {e}") from e
+        safe, reason = is_redos_safe(v)
+        if not safe:
+            raise ValueError(f"regex '{v}' 不安全: {reason}")
         return v
 
     def model_post_init(self, context: Any) -> None:
@@ -116,6 +124,8 @@ class BlockConfig(BaseModel):
     fields: dict[str, FieldSpec]
     # 运输类块：货物类别对应的标签维度名称（为空时按项目内同名标签匹配）
     cargo_dimension: str | None = None
+    # 人类可读的块注释（AI 编写时生成，帮助后续用户理解此块的用途）
+    description: str | None = None
 
     @model_validator(mode="after")
     def _validate(self) -> BlockConfig:
@@ -144,11 +154,230 @@ class ParseEngineConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # 版本号，用于未来迁移
+    schema_version: str = "2.0"
     blocks: list[BlockConfig]
+
+
+# ============================================================================
+# 配置安全校验
+# ============================================================================
+
+
+class _ConfigLimits:
+    """全局硬限制常量（不暴露给用户/agent，不可通过配置绕过）。
+
+    所有上限取保守值：当前合理用量 + 适当余量。超出这些值的配置
+    几乎一定是恶意或错误。
+    """
+
+    # 结构数量
+    MAX_BLOCKS: ClassVar[int] = 20
+    MAX_ROWS_PER_BLOCK: ClassVar[int] = 10
+    MAX_FIELDS_PER_BLOCK: ClassVar[int] = 10
+    MAX_PARTS_PER_FIELD: ClassVar[int] = 10
+    MAX_IGNORE_VALUES: ClassVar[int] = 50
+    MAX_IGNORE_VALUE_LENGTH: ClassVar[int] = 200
+
+    # 值域
+    MAX_COLUMN_INDEX: ClassVar[int] = 9
+    MAX_ROW_INDEX: ClassVar[int] = 9
+    MAX_GROUP_INDEX: ClassVar[int] = 9
+    MAX_STRING_LENGTH: ClassVar[int] = 2000
+
+    # 正则
+    MAX_REGEX_LENGTH: ClassVar[int] = 500
+    MAX_REGEX_GROUPS: ClassVar[int] = 20
+    MAX_REGEX_MATCH_TIMEOUT_MS: ClassVar[int] = 50
+
+    # 白名单
+    ALLOWED_SCAN_MODES: ClassVar[frozenset[str]] = frozenset({"columnar", "row"})
+
+
+# ReDoS 启发式检测：已知的指数回溯模式
+_REDOS_RISK_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    # 模式: (内容)* 或 (内容)+ 后面紧跟着 * 或 +（如 (a+)+, (a*)*）
+    (re.compile(r"\([^()]*(?:\*|\+)\)\s*[\*+]"), "嵌套量词可能导致指数回溯"),
+    # 模式: 含分支的括号组后跟重复量词（如 (a|b)+）
+    # 注意：在配置场景中，大量非捕获组如 (?:abc) 不是分支
+    (re.compile(r"\([^()]*\|[^()]*\)[\*+]"), "含分支的重复组可能导致指数回溯"),
+    # 模式: 连续的贪婪匹配
+    (re.compile(r"\.\*\.\*"), "连续的贪婪匹配可能导致性能问题"),
+    # 模式: 括号内任意匹配后跟重复（如 (.*)+）
+    (re.compile(r"\(\.\*\)\s*[\*+]"), "任意匹配的重复可能导致指数回溯"),
+]
+
+# 超时炸弹：用这些输入测试正则执行时间
+_REDOS_EVIL_INPUTS: list[str] = [
+    "a" * 200,
+    "a" * 200 + "!",
+    "0" * 50 + "人",
+    "测" * 200,
+]
+
+
+def is_redos_safe(pattern: str) -> tuple[bool, str]:
+    """检测正则表达式是否存在 ReDoS 风险。
+
+    在配置存储前调用，确保用户/AI 提交的正则不会在解析时报废 CPU。
+
+    Args:
+        pattern: 待检测的正则表达式字符串。
+
+    Returns:
+        ``(is_safe, reason)`` — safe 为 True 表示通过所有检查，
+        reason 为非空错误描述。
+    """
+    # 1. 长度限制
+    if len(pattern) > _ConfigLimits.MAX_REGEX_LENGTH:
+        return (
+            False,
+            f"正则长度 {len(pattern)} 超过上限 {_ConfigLimits.MAX_REGEX_LENGTH}",
+        )
+
+    # 2. 编译 + 捕获组数量
+    try:
+        compiled = re.compile(pattern)
+    except re.error as e:
+        return False, f"正则编译失败: {e}"
+    if compiled.groups > _ConfigLimits.MAX_REGEX_GROUPS:
+        return (
+            False,
+            f"捕获组数量 {compiled.groups} 超过上限 {_ConfigLimits.MAX_REGEX_GROUPS}",
+        )
+
+    # 3. 已知危险模式扫描
+    for risk_re, risk_desc in _REDOS_RISK_PATTERNS:
+        if risk_re.search(pattern):
+            return False, f"正则包含风险模式: {risk_desc}"
+
+    # 4. 超时炸弹测试
+    if not _match_timeout_check(pattern):
+        return False, "正则执行超时，可能存在性能问题"
+
+    return True, "OK"
+
+
+def _match_timeout_check(pattern: str) -> bool:
+    """用构造的恶意输入测试正则执行时间。
+
+    超时 = 有 ReDoS 风险。
+    """
+    result: dict[str, bool] = {"ok": True}
+
+    def _run():
+        try:
+            for test_input in _REDOS_EVIL_INPUTS:
+                re.match(pattern, test_input)
+        except Exception:
+            result["ok"] = False
+
+    t = threading.Thread(target=_run)
+    t.start()
+    t.join(timeout=_ConfigLimits.MAX_REGEX_MATCH_TIMEOUT_MS / 1000.0)
+    if t.is_alive():
+        return False
+    return result["ok"]
+
+
+def validate_config_security(config: ParseEngineConfig) -> list[str]:
+    """对配置执行完整的安全校验（Gate 1-3）。
+
+    此函数在配置存储前调用，确保 AI/用户提交的配置不会损害系统安全。
+
+    Args:
+        config: 已通过 Pydantic 校验的配置对象。
+
+    Returns:
+        错误列表；空列表表示通过所有检查。
+    """
+    errors: list[str] = []
+    L = _ConfigLimits
+
+    # ── Gate 1: 值域硬限制 ──
+
+    if len(config.blocks) == 0:
+        errors.append("配置必须包含至少一个解析块 (blocks)")
+    if len(config.blocks) > L.MAX_BLOCKS:
+        errors.append(f"解析块数量 {len(config.blocks)} 超过上限 {L.MAX_BLOCKS}")
+
+    for bi, blk in enumerate(config.blocks):
+        prefix = f"blocks[{bi}]"
+
+        # row_locator.column
+        if blk.row_locator.column < 0 or blk.row_locator.column > L.MAX_COLUMN_INDEX:
+            errors.append(
+                f"{prefix}.row_locator.column={blk.row_locator.column} 超出允许范围 [0, {L.MAX_COLUMN_INDEX}]"
+            )
+
+        # rows 数量
+        if len(blk.rows) == 0:
+            errors.append(f"{prefix}.rows 不能为空")
+        if len(blk.rows) > L.MAX_ROWS_PER_BLOCK:
+            errors.append(
+                f"{prefix}.rows 行数 {len(blk.rows)} 超过上限 {L.MAX_ROWS_PER_BLOCK}"
+            )
+
+        # fields 数量
+        if len(blk.fields) == 0:
+            errors.append(f"{prefix}.fields 不能为空")
+        if len(blk.fields) > L.MAX_FIELDS_PER_BLOCK:
+            errors.append(
+                f"{prefix}.fields 字段数 {len(blk.fields)} 超过上限 {L.MAX_FIELDS_PER_BLOCK}"
+            )
+        for fn, fs in blk.fields.items():
+            if len(fs.parts) > L.MAX_PARTS_PER_FIELD:
+                errors.append(
+                    f"{prefix}.fields.{fn}.parts 片段数 {len(fs.parts)} 超过上限 {L.MAX_PARTS_PER_FIELD}"
+                )
+
+        # cleaning
+        if len(blk.cleaning.ignore_values) > L.MAX_IGNORE_VALUES:
+            errors.append(
+                f"{prefix}.cleaning.ignore_values 项数 {len(blk.cleaning.ignore_values)} 超过上限 {L.MAX_IGNORE_VALUES}"
+            )
+        for vi, val in enumerate(blk.cleaning.ignore_values):
+            if len(val) > L.MAX_IGNORE_VALUE_LENGTH:
+                errors.append(
+                    f"{prefix}.cleaning.ignore_values[{vi}] 长度 {len(val)} 超过上限 {L.MAX_IGNORE_VALUE_LENGTH}"
+                )
+
+        # 字符串长度
+        if blk.cargo_dimension and len(blk.cargo_dimension) > L.MAX_STRING_LENGTH:
+            errors.append(f"{prefix}.cargo_dimension 过长")
+        if blk.description and len(blk.description) > L.MAX_STRING_LENGTH:
+            errors.append(f"{prefix}.description 过长")
+
+        # ── Gate 2: row/group 越界（部分已在 BlockConfig._validate 中覆盖，
+        #     此处做补充检查，确保不超过全局硬限制） ──
+        for fn, fs in blk.fields.items():
+            for pi, part in enumerate(fs.parts):
+                if part.group > L.MAX_GROUP_INDEX:
+                    errors.append(
+                        f"{prefix}.fields.{fn}.parts[{pi}].group={part.group} 超过上限 {L.MAX_GROUP_INDEX}"
+                    )
+
+    # ── Gate 3: 正则安全已在 RowSpec/RowLocator 的 field_validator 中执行 ──
+    #   注：若未来有更多 regex 字段，在此追加。
+
+    return errors
+
+
+# ============================================================================
+# 配置加载/存储
+# ============================================================================
 
 
 _CACHE: ParseEngineConfig | None = None
 _DEFAULT_CONFIG_PATH = Path(__file__).parent / "daily_report_config.json"
+
+# 项目自定义配置存储目录
+_PROJECT_CONFIGS_DIR = Path(__file__).parent / "report_configs"
+
+
+def _project_config_path(project_id: int, config_id: str) -> Path:
+    """获取项目配置文件路径"""
+    return _PROJECT_CONFIGS_DIR / str(project_id) / f"{config_id}.json"
 
 
 def load_config(
@@ -180,6 +409,66 @@ def load_config(
     return cfg
 
 
+def load_config_by_id(project_id: int, config_id: str) -> ParseEngineConfig:
+    """加载项目下某个配置"""
+    path = _project_config_path(project_id, config_id)
+    if not path.exists():
+        raise FileNotFoundError(f"配置 {config_id} 不存在")
+    return load_config(path)
+
+
+def save_project_config(
+    project_id: int,
+    config_id: str,
+    config: ParseEngineConfig,
+) -> Path:
+    """保存项目自定义配置到文件。
+
+    返回保存的文件路径。
+    """
+    target_dir = _project_config_path(project_id, config_id).parent
+    target_dir.mkdir(parents=True, exist_ok=True)
+    path = _project_config_path(project_id, config_id)
+    path.write_text(
+        config.model_dump_json(indent=2, exclude_none=True),
+        encoding="utf-8",
+    )
+    return path
+
+
+def list_project_configs(project_id: int) -> list[dict[str, Any]]:
+    """列出项目下所有自定义配置的摘要"""
+    target_dir = _PROJECT_CONFIGS_DIR / str(project_id)
+    if not target_dir.exists():
+        return []
+    result = []
+    for f in sorted(target_dir.glob("*.json")):
+        try:
+            raw = json.loads(f.read_text(encoding="utf-8"))
+            cfg = ParseEngineConfig.model_validate(raw)
+            result.append({
+                "config_id": f.stem,
+                "block_count": len(cfg.blocks),
+                "categories": [blk.category.value for blk in cfg.blocks],
+                "descriptions": [
+                    blk.description for blk in cfg.blocks if blk.description
+                ],
+            })
+        except Exception:
+            # 跳过损坏的配置文件
+            continue
+    return result
+
+
+def delete_project_config(project_id: int, config_id: str) -> bool:
+    """删除项目下某个配置。返回 True 表示找到并删除。"""
+    path = _project_config_path(project_id, config_id)
+    if not path.exists():
+        return False
+    path.unlink()
+    return True
+
+
 def reset_cache() -> None:
     """清空缓存（测试用）"""
     global _CACHE
@@ -194,6 +483,12 @@ __all__ = [
     "PartSpec",
     "RowLocator",
     "RowSpec",
+    "is_redos_safe",
     "load_config",
+    "load_config_by_id",
+    "save_project_config",
+    "list_project_configs",
+    "delete_project_config",
     "reset_cache",
+    "validate_config_security",
 ]

@@ -8,6 +8,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from src.routers import (
+    ai,
     auth,
     chart,
     daily_report,
@@ -18,6 +19,7 @@ from src.routers import (
     plan,
     progress,
     project,
+    report_config,
     resource,
     resource_public,
     resource_usage,
@@ -49,6 +51,13 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("启动回收遗留优化运行失败")
     yield
+    # 关闭时回收全部 pi 子进程（AI 对话会话）
+    try:
+        from src.services.pi_agent import get_pi_agent_service
+
+        await get_pi_agent_service().shutdown_all()
+    except Exception:
+        logger.exception("关闭 pi 会话失败")
 
 
 app = FastAPI(
@@ -63,6 +72,7 @@ app.include_router(resource.router)
 app.include_router(resource_public.router)
 app.include_router(resource_usage.router)
 app.include_router(daily_report.router)
+app.include_router(report_config.router)
 app.include_router(optimize.router)
 app.include_router(tag.router)
 app.include_router(chart.router)
@@ -72,6 +82,7 @@ app.include_router(progress.router)
 app.include_router(weather.router)
 app.include_router(evaluation.router)
 app.include_router(diagnostics.router)
+app.include_router(ai.router)
 
 # CORS 由环境变量控制（backend/src/config.py 的 Settings.cors_mode）：
 # - CORS_ALLOW_ALL=true（多 worktree 开发默认，见仓库根 .env / scripts/worktree-env.sh）
