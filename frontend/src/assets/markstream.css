@@ -1,0 +1,135 @@
+/* ========== markstream.css（自动生成，勿手改） ==========
+ * markstream-vue 流式 Markdown 渲染器主题桥接。
+ *
+ * 引入 markstream-vue/index.css 请走 main.ts 的 JS import（本文件不含 @import：
+ * css @layer 内的 @import 会被构建器提升为运行时请求）。
+ *
+ * 自研工程面板主题（starglass / starglass-light，见 base.css）只定义 oklch
+ * 色值，而 markstream-vue 需要 HSL 三元组变量（--ms-*）。此文件从 base.css
+ * 语义 token 精确转换（oklch→sRGB→HSL），以「语义映射 + 主题定制」对齐
+ * 两边，把 markstream 的浅色默认 palette 覆盖为工程主题。
+ *
+ * 重新生成：node scripts/markstream-hsl.mjs
+ * ============================================================ */
+
+/* 主题变量先于 .markstream-vue 覆盖规则定义（同层同优先级，后到者赢） */
+/* ── 深色：starglass ── */
+:root,
+[data-theme='starglass'] {
+  --markstream-ms-background: 219 42 5;
+  --markstream-ms-foreground: 217 17 88;
+  --markstream-ms-muted: 217 31 7;
+  --markstream-ms-muted-foreground: 217 5 63;
+  --markstream-ms-secondary: 217 31 7;
+  --markstream-ms-secondary-foreground: 217 17 88;
+  --markstream-ms-accent: 217 23 9;
+  --markstream-ms-accent-foreground: 217 17 88;
+  --markstream-ms-primary: 208 69 50;
+  --markstream-ms-primary-foreground: 211 64 96;
+  --markstream-ms-destructive: 355 72 58;
+  --markstream-ms-destructive-foreground: 2 60 97;
+  --markstream-ms-border: 217 23 9;
+  --markstream-ms-ring: 208 69 50;
+  --markstream-ms-popover: 219 42 5;
+  --markstream-ms-popover-foreground: 217 17 88;
+  --markstream-ms-info: 196 83 41;
+  --markstream-ms-info-foreground: 201 58 96;
+  --markstream-ms-success: 150 70 42;
+  --markstream-ms-success-foreground: 135 100 3;
+  --markstream-ms-warning: 36 77 61;
+  --markstream-ms-warning-foreground: 34 94 7;
+  --markstream-ms-diff-added: 150 70 42;
+  --markstream-ms-diff-removed: 355 72 58;
+  --markstream-ms-highlight: 50 60% 72%;
+  --markstream-ms-highlight-foreground: 0 0% 0%;
+}
+/* ── 亮色：starglass-light ── */
+[data-theme='starglass-light'] {
+  --markstream-ms-background: 217 28 97;
+  --markstream-ms-foreground: 217 17 13;
+  --markstream-ms-muted: 217 19 94;
+  --markstream-ms-muted-foreground: 217 5 39;
+  --markstream-ms-secondary: 217 19 94;
+  --markstream-ms-secondary-foreground: 217 17 13;
+  --markstream-ms-accent: 217 13 91;
+  --markstream-ms-accent-foreground: 217 17 13;
+  --markstream-ms-primary: 207 100 31;
+  --markstream-ms-primary-foreground: 211 64 96;
+  --markstream-ms-destructive: 353 64 44;
+  --markstream-ms-destructive-foreground: 2 60 97;
+  --markstream-ms-border: 217 13 91;
+  --markstream-ms-ring: 207 100 31;
+  --markstream-ms-popover: 217 28 97;
+  --markstream-ms-popover-foreground: 217 17 13;
+  --markstream-ms-info: 197 100 30;
+  --markstream-ms-info-foreground: 201 58 96;
+  --markstream-ms-success: 149 100 23;
+  --markstream-ms-success-foreground: 137 31 96;
+  --markstream-ms-warning: 40 96 36;
+  --markstream-ms-warning-foreground: 36 83 8;
+  --markstream-ms-diff-added: 149 100 23;
+  --markstream-ms-diff-removed: 353 64 44;
+  --markstream-ms-highlight: 50 60% 72%;
+  --markstream-ms-highlight-foreground: 0 0% 0%;
+}
+
+/* ── 应用到 markstream 容器（覆盖其默认值；两选择器优先级相同、后到者赢） ── */
+:root .markstream-vue,
+[data-theme='starglass'] .markstream-vue,
+[data-theme='starglass-light'] .markstream-vue {
+  --ms-background: var(--markstream-ms-background);
+  --ms-foreground: var(--markstream-ms-foreground);
+  --ms-muted: var(--markstream-ms-muted);
+  --ms-muted-foreground: var(--markstream-ms-muted-foreground);
+  --ms-secondary: var(--markstream-ms-secondary);
+  --ms-secondary-foreground: var(--markstream-ms-secondary-foreground);
+  --ms-accent: var(--markstream-ms-accent);
+  --ms-accent-foreground: var(--markstream-ms-accent-foreground);
+  --ms-primary: var(--markstream-ms-primary);
+  --ms-primary-foreground: var(--markstream-ms-primary-foreground);
+  --ms-destructive: var(--markstream-ms-destructive);
+  --ms-destructive-foreground: var(--markstream-ms-destructive-foreground);
+  --ms-border: var(--markstream-ms-border);
+  --ms-ring: var(--markstream-ms-ring);
+  --ms-popover: var(--markstream-ms-popover);
+  --ms-popover-foreground: var(--markstream-ms-popover-foreground);
+  --ms-info: var(--markstream-ms-info);
+  --ms-info-foreground: var(--markstream-ms-info-foreground);
+  --ms-success: var(--markstream-ms-success);
+  --ms-success-foreground: var(--markstream-ms-success-foreground);
+  --ms-warning: var(--markstream-ms-warning);
+  --ms-warning-foreground: var(--markstream-ms-warning-foreground);
+  --ms-diff-added: var(--markstream-ms-diff-added);
+  --ms-diff-removed: var(--markstream-ms-diff-removed);
+  --ms-highlight: var(--markstream-ms-highlight);
+  --ms-highlight-foreground: var(--markstream-ms-highlight-foreground);
+}
+
+/* 代码块 / 行内结构使用更沉的工程底色（面板上叠代码时仍可读） */
+:root .markstream-vue,
+[data-theme='starglass'] .markstream-vue,
+[data-theme='starglass-light'] .markstream-vue {
+  --code-bg: var(--markstream-code-bg, var(--color-surface-deep));
+  --code-header-bg: var(--markstream-code-header-bg, var(--color-base-200));
+  --code-border: var(--markstream-code-border, var(--color-base-300));
+  --code-fg: var(--markstream-code-fg, var(--color-base-content));
+  --inline-code-bg: var(--markstream-inline-code-bg, var(--color-base-200));
+  --inline-code-fg: var(--markstream-inline-code-fg, var(--color-base-content));
+  --inline-code-border: var(--markstream-inline-code-border, var(--color-base-300));
+  --link-color: var(--markstream-link-color, var(--color-info));
+  --focus-ring: var(--markstream-focus-ring, var(--color-primary));
+  --loading-spinner: var(--markstream-loading-spinner, var(--color-fg-muted));
+  --loading-shimmer: var(--markstream-loading-shimmer, var(--color-base-200));
+  --list-marker: var(--markstream-list-marker, var(--color-fg-muted));
+  --list-counter-marker: var(--markstream-list-counter-marker, var(--color-fg-muted));
+  --blockquote-border: var(--markstream-blockquote-border, var(--color-base-300));
+  --blockquote-fg: var(--markstream-blockquote-fg, var(--color-fg-muted));
+  --table-border: var(--markstream-table-border, var(--color-base-300));
+  --table-header-bg: var(--markstream-table-header-bg, var(--color-base-200));
+  --diagram-bg: var(--markstream-diagram-bg, var(--color-base-200));
+  --diagram-border: var(--markstream-diagram-border, var(--color-base-300));
+  --diagram-header-bg: var(--markstream-diagram-header-bg, var(--color-base-200));
+  --modal-overlay: var(--markstream-modal-overlay, var(--color-panel-shadow));
+  --modal-bg: var(--markstream-modal-bg, var(--color-panel));
+  --modal-fg: var(--markstream-modal-fg, var(--color-base-content));
+}

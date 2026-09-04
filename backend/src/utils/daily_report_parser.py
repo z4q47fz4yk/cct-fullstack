@@ -156,7 +156,7 @@ def _parse_block(
     n = len(blk.rows)
     if len(rows_data) % n != 0:
         raise FileParseError(
-            f"block '{blk.category}': matched {len(rows_data)} rows, "
+            f"block '{blk.category}': row_locator matched {len(rows_data)} rows, "
             f"expected a multiple of {n}"
         )
 

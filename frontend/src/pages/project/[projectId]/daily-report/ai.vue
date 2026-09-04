@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import MarkdownStream from '@/components/common/MarkdownStream.vue'
 import { useProjectContext } from '@/composables/useProjectContext'
-import { useAiChat, type ChatTurn } from '@/composables/useAiChat'
+import { useAiChat, type AiMessage, type AiToolCall } from '@/composables/useAiChat'
 import { useAiUsage } from '@/composables/useAiUsage'
 
 definePage({
@@ -20,18 +21,13 @@ definePage({
 const router = useRouter()
 const { currentProjectId } = useProjectContext()
 
-const { turns, isStreaming, send, stop, clear } = useAiChat()
+const { messages, isStreaming, send, stop, clear } = useAiChat()
 const { data: usageData, refresh: refreshUsage } = useAiUsage()
 
 const input = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFiles = ref<File[]>([])
 const scrollAnchor = ref<HTMLElement | null>(null)
-
-// 配置产出状态：任一工具结果中出现 save_report_config 成功即置真
-const configSaved = ref(false)
-// 最新一次保存成功的配置 ID（回导入页时携带以自动选中）
-const savedConfigId = ref<string | null>(null)
 
 const projectReady = computed(() => currentProjectId.value !== null)
 
@@ -44,42 +40,61 @@ onUnmounted(() => {
   if (isStreaming.value) void stop()
 })
 
+// 新消息加入时滚动到底部
 watch(
-  () => turns.value.map((t) => t.streamingText + t.finalText).join(''),
+  () => messages.value.length,
   async () => {
     await nextTick()
-    scrollAnchor.value?.scrollIntoView({ behavior: 'smooth' })
+    scrollToBottom()
   },
 )
 
-function parseSavedConfigId(turn: ChatTurn): string | null {
-  for (const r of turn.toolResults) {
-    if (r.tool_name === 'save_report_config' && !r.is_error) {
-      try {
-        const parsed = JSON.parse(r.content) as { configId?: string; config_id?: string }
-        return parsed.configId ?? parsed.config_id ?? null
-      } catch {
-        return null
-      }
+// AI 流式 reveal 由 MarkdownStream 子组件 rAF 驱动；这里 rAF 去重后跟随滚动，
+// 避免子组件每帧 reveal 触发大量 scrollIntoView 排队
+let scrollRaf: number | null = null
+function handleReveal() {
+  if (scrollRaf !== null) return
+  scrollRaf = requestAnimationFrame(async () => {
+    scrollRaf = null
+    await nextTick()
+    scrollToBottom()
+  })
+}
+function scrollToBottom() {
+  scrollAnchor.value?.scrollIntoView({ behavior: 'smooth' })
+}
+
+// ─── 配置产出状态（从消息数据派生） ─────────────────────────────
+
+function findSavedConfigId(msg: AiMessage): string | null {
+  const call = msg.toolCall
+  if (call && call.name === 'save_report_config' && !call.isError && call.result) {
+    try {
+      const parsed = JSON.parse(call.result) as { configId?: string; config_id?: string }
+      return parsed.configId ?? parsed.config_id ?? null
+    } catch {
+      return null
     }
   }
   return null
 }
 
-watch(
-  () => turns.value.length,
-  () => {
-    const saved = turns.value.some((t) =>
-      t.toolResults.some((r) => r.tool_name === 'save_report_config' && !r.is_error),
-    )
-    configSaved.value = saved
-    if (saved) {
-      // 取最后一条含成功保存的 turn 的 config_id
-      const lastSavedTurn = [...turns.value].reverse().find((t) => parseSavedConfigId(t) !== null)
-      savedConfigId.value = lastSavedTurn ? parseSavedConfigId(lastSavedTurn) : null
-    }
-  },
+/** 任一消息中 save_report_config 成功即置真 */
+const configSaved = computed(() =>
+  messages.value.some((m) => m.toolCall?.name === 'save_report_config' && !m.toolCall?.isError),
 )
+
+/** 最新一次保存成功的配置 ID（回导入页时携带以自动选中） */
+const savedConfigId = computed(() => {
+  if (!configSaved.value) return null
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    const msg = messages.value[i]
+    if (!msg) continue
+    const id = findSavedConfigId(msg)
+    if (id !== null) return id
+  }
+  return null
+})
 
 // ─── 工具过程展示辅助 ──────────────────────────────────────────
 
@@ -92,10 +107,6 @@ const TOOL_LABELS: Record<string, string> = {
 
 function toolLabel(name: string): string {
   return TOOL_LABELS[name] ?? name
-}
-
-function displayText(turn: ChatTurn): string {
-  return turn.finalText || turn.streamingText
 }
 
 function summarizeArgs(args: Record<string, unknown>): string {
@@ -114,33 +125,29 @@ function summarizeArgs(args: Record<string, unknown>): string {
   }
 }
 
-function toolResultOf(turn: ChatTurn, index: number) {
-  return turn.toolResults[index]
+function toolIsRunning(call: AiToolCall): boolean {
+  return call.result === undefined
 }
 
-function toolIsRunning(turn: ChatTurn, index: number): boolean {
-  return Boolean(turn.toolCalls[index] && !turn.toolResults[index])
+function toolIsError(call: AiToolCall): boolean {
+  return call.isError === true
 }
 
-function toolIsError(turn: ChatTurn, index: number): boolean {
-  return turn.toolResults[index]?.is_error === true
-}
-
-function resultSummary(turn: ChatTurn, index: number): string {
-  const r = turn.toolResults[index]
+function resultSummary(call: AiToolCall): string {
+  const r = call.result
   if (!r) return ''
-  if (r.tool_name === 'save_report_config' && !r.is_error) {
+  if (call.name === 'save_report_config' && !call.isError) {
     try {
-      const parsed = JSON.parse(r.content) as { configId?: string; config_id?: string }
+      const parsed = JSON.parse(r) as { configId?: string; config_id?: string }
       const id = parsed.configId ?? parsed.config_id
       return id ? `配置已保存（ID: ${id}）` : '配置已保存'
     } catch {
       return '配置已保存'
     }
   }
-  if (r.is_error) return `失败：${r.content.slice(0, 80)}`
+  if (call.isError) return `失败：${r.slice(0, 80)}`
   // 工具结果很长时截断展示
-  return r.content.length > 120 ? r.content.slice(0, 120) + '…' : r.content
+  return r.length > 120 ? r.slice(0, 120) + '…' : r
 }
 
 // ─── 输入与发送 ────────────────────────────────────────────────
@@ -176,7 +183,7 @@ async function handleSend() {
     // 本轮结束（含中止）后刷新成本审计
     refreshUsage()
   } catch {
-    // send 内部已把错误落到 turn，无需额外处理
+    // send 内部已把错误落到消息，无需额外处理
   }
 }
 
@@ -187,8 +194,6 @@ function handleStop() {
 function handleClear() {
   clear()
   selectedFiles.value = []
-  configSaved.value = false
-  savedConfigId.value = null
 }
 
 const SUGGESTIONS = ['帮我根据这份日报生成解析配置', '请先查看日报结构，再编写并校验配置']
@@ -240,7 +245,7 @@ function goBackToImport() {
           ≈ ${{ usageData.totalCost.toFixed(4) }}
         </span>
         <button
-          v-if="turns.length > 0"
+          v-if="messages.length > 0"
           class="btn btn-ghost btn-sm"
           :disabled="isStreaming"
           @click="handleClear"
@@ -269,7 +274,7 @@ function goBackToImport() {
       <div class="flex-1 overflow-y-auto p-4 space-y-4">
         <!-- 空状态 -->
         <div
-          v-if="turns.length === 0"
+          v-if="messages.length === 0"
           class="h-full flex flex-col items-center justify-center gap-4 text-center"
         >
           <div class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
@@ -294,17 +299,17 @@ function goBackToImport() {
           </div>
         </div>
 
-        <!-- 对话轮次 -->
-        <template v-for="(turn, ti) in turns" :key="turn.id">
+        <!-- 消息列表 -->
+        <template v-for="msg in messages" :key="msg.id">
           <!-- 用户消息 -->
-          <div class="flex justify-end">
+          <div v-if="msg.role === 'user'" class="flex justify-end">
             <div
               class="max-w-[85%] bg-primary/10 border border-primary/20 rounded-2xl rounded-br-sm px-4 py-2.5"
             >
-              <p class="text-sm text-base-content whitespace-pre-wrap">{{ turn.message }}</p>
-              <div v-if="turn.attachments.length" class="mt-1.5 flex flex-wrap gap-1.5">
+              <p class="text-sm text-base-content whitespace-pre-wrap">{{ msg.content }}</p>
+              <div v-if="(msg.attachments?.length ?? 0) > 0" class="mt-1.5 flex flex-wrap gap-1.5">
                 <span
-                  v-for="name in turn.attachments"
+                  v-for="name in msg.attachments"
                   :key="name"
                   class="inline-flex items-center gap-1 text-xs bg-primary/15 text-primary px-2 py-0.5 rounded-full"
                 >
@@ -316,84 +321,88 @@ function goBackToImport() {
           </div>
 
           <!-- AI 回复 -->
-          <div class="flex justify-start">
+          <div v-else class="flex justify-start">
             <div class="max-w-[92%] space-y-2">
-              <!-- 工具调用过程 -->
-              <template v-for="(tool, ti2) in turn.toolCalls" :key="tool.tool_call_id">
-                <div
-                  class="panel panel-hover p-2.5"
-                  :class="{
-                    'border-error/40': toolIsError(turn, ti2),
-                    'border-success/30': !toolIsError(turn, ti2),
-                  }"
-                >
-                  <div class="flex items-center gap-2 mb-1">
-                    <span
-                      class="w-5 h-5 rounded-md flex items-center justify-center"
-                      :class="toolIsError(turn, ti2) ? 'bg-error/10' : 'bg-primary/10'"
-                    >
-                      <span
-                        class="material-symbols-outlined icon-sm"
-                        :class="toolIsError(turn, ti2) ? 'text-error' : 'text-primary'"
-                      >
-                        {{ toolIsError(turn, ti2) ? 'error' : 'construction' }}
-                      </span>
-                    </span>
-                    <span class="text-sm font-medium text-base-content">
-                      {{ toolLabel(tool.tool_name) }}
-                    </span>
-                    <span
-                      v-if="toolIsRunning(turn, ti2)"
-                      class="text-xs text-info flex items-center gap-1 ml-auto"
-                    >
-                      <span class="loading loading-spinner loading-xs"></span>
-                      执行中
-                    </span>
-                    <span v-else-if="toolIsError(turn, ti2)" class="text-xs text-error ml-auto">
-                      失败
-                    </span>
-                    <span v-else class="text-xs text-success ml-auto">完成</span>
-                  </div>
-                  <p
-                    v-if="summarizeArgs(tool.args)"
-                    class="text-xs text-fg-subtle font-mono truncate"
-                  >
-                    {{ summarizeArgs(tool.args) }}
-                  </p>
-                  <p
-                    v-if="toolResultOf(turn, ti2)"
-                    class="text-xs text-fg-subtle mt-1 whitespace-pre-wrap line-clamp-3"
-                  >
-                    {{ resultSummary(turn, ti2) }}
-                  </p>
-                </div>
-              </template>
-
-              <!-- AI 文本 -->
+              <!-- 工具调用过程（每消息至多一个 toolCall） -->
               <div
-                class="bg-base-200/60 border border-base-300 rounded-2xl rounded-bl-sm px-4 py-2.5"
+                v-if="msg.toolCall"
+                class="panel panel-hover p-2.5"
                 :class="{
-                  'opacity-70': turn.status === 'streaming' && !displayText(turn),
+                  'border-error/40': toolIsError(msg.toolCall),
+                  'border-success/30': !toolIsError(msg.toolCall),
                 }"
               >
-                <div v-if="displayText(turn)" class="text-sm text-base-content whitespace-pre-wrap">
-                  {{ displayText(turn) }}
+                <div class="flex items-center gap-2 mb-1">
+                  <span
+                    class="w-5 h-5 rounded-md flex items-center justify-center"
+                    :class="toolIsError(msg.toolCall) ? 'bg-error/10' : 'bg-primary/10'"
+                  >
+                    <span
+                      class="material-symbols-outlined icon-sm"
+                      :class="toolIsError(msg.toolCall) ? 'text-error' : 'text-primary'"
+                    >
+                      {{ toolIsError(msg.toolCall) ? 'error' : 'construction' }}
+                    </span>
+                  </span>
+                  <span class="text-sm font-medium text-base-content">
+                    {{ toolLabel(msg.toolCall.name) }}
+                  </span>
+                  <span
+                    v-if="toolIsRunning(msg.toolCall)"
+                    class="text-xs text-info flex items-center gap-1 ml-auto"
+                  >
+                    <span class="loading loading-spinner loading-xs"></span>
+                    执行中
+                  </span>
+                  <span v-else-if="toolIsError(msg.toolCall)" class="text-xs text-error ml-auto">
+                    失败
+                  </span>
+                  <span v-else class="text-xs text-success ml-auto">完成</span>
                 </div>
-                <div
-                  v-else-if="turn.status === 'streaming'"
-                  class="flex items-center gap-2 text-sm text-fg-subtle"
+                <p
+                  v-if="summarizeArgs(msg.toolCall.args)"
+                  class="text-xs text-fg-subtle font-mono truncate"
                 >
-                  <span class="loading loading-dots loading-sm"></span>
-                  <span>AI 正在思考…</span>
-                </div>
-                <div
-                  v-if="turn.status === 'error'"
-                  class="mt-2 alert alert-error alert-sm"
-                  role="alert"
+                  {{ summarizeArgs(msg.toolCall.args) }}
+                </p>
+                <p
+                  v-if="msg.toolCall.result"
+                  class="text-xs text-fg-subtle mt-1 whitespace-pre-wrap line-clamp-3"
                 >
-                  <span class="material-symbols-outlined icon-sm">error</span>
-                  <span>{{ turn.error }}</span>
-                </div>
+                  {{ resultSummary(msg.toolCall) }}
+                </p>
+              </div>
+
+              <!-- AI 叙述气泡（每条消息最多一个 toolCall；纯工具/回显消息无叙述气泡） -->
+              <div
+                v-if="msg.text"
+                class="bg-base-200/60 border border-base-300 rounded-2xl rounded-bl-sm px-4 py-2.5"
+              >
+                <MarkdownStream
+                  class="ai-markdown"
+                  :content="msg.text"
+                  :final="msg.status === 'done' || msg.status === 'error'"
+                  @reveal="handleReveal"
+                />
+              </div>
+
+              <!-- 无叙述且仍在思考（尚未产出 delta）→ 提示占位 -->
+              <div
+                v-else-if="msg.status === 'streaming' && !msg.toolCall"
+                class="bg-base-200/60 border border-base-300 rounded-2xl rounded-bl-sm px-4 py-2.5 flex items-center gap-2 text-sm text-fg-subtle"
+              >
+                <span class="loading loading-dots loading-sm"></span>
+                <span>AI 正在思考…</span>
+              </div>
+
+              <!-- 错误提示（无论是否带叙述都展示） -->
+              <div
+                v-if="msg.status === 'error' && msg.error"
+                class="alert alert-error alert-sm"
+                role="alert"
+              >
+                <span class="material-symbols-outlined icon-sm">error</span>
+                <span>{{ msg.error }}</span>
               </div>
             </div>
           </div>
