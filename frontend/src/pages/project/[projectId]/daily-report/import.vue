@@ -6,6 +6,7 @@ import { useMutation, useQuery } from '@pinia/colada'
 import { listConfigsQuery, parseDailyReportMutation } from '@/client/@pinia/colada.gen'
 import { useProjectContext } from '@/composables/useProjectContext'
 import { useUsageDateType } from '@/composables/useUsageDateType'
+import { useCapabilities } from '@/composables/useCapabilities'
 
 definePage({
   meta: {
@@ -22,6 +23,7 @@ const route = useRoute()
 const router = useRouter()
 const storeV2 = useDailyReportStoreV2()
 const { currentProjectId } = useProjectContext()
+const { aiEnabled } = useCapabilities()
 
 // 使用日期与「资源使用量」页共享（页面级唯一日期）
 const { usageDate, effectiveUsageType } = useUsageDateType()
@@ -135,7 +137,7 @@ function goToReview() {
       </div>
 
       <!-- AI 生成解析配置入口：日报结构特殊/首次导入时，可先用 AI 生成解析配置 -->
-      <div class="panel panel-hover p-4 flex flex-wrap items-center gap-3">
+      <div v-if="aiEnabled" class="panel panel-hover p-4 flex flex-wrap items-center gap-3">
         <div class="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
           <span class="material-symbols-outlined text-primary icon-lg">auto_awesome</span>
         </div>

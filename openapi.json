@@ -180,6 +180,28 @@
         }
       }
     },
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "服务能力探测",
+        "description": "返回后端启用状态：前端据此动态注册登录 / AI 相关路由。\n\n该端点**始终可访问**（公共路径，未启用登录时也不需要凭据），\n用于前端一次性探测后端能力。",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResp"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/project": {
       "get": {
         "tags": [
@@ -7980,6 +8002,25 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HealthResp": {
+        "properties": {
+          "auth_enabled": {
+            "type": "boolean",
+            "title": "Auth Enabled"
+          },
+          "ai_enabled": {
+            "type": "boolean",
+            "title": "Ai Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "auth_enabled",
+          "ai_enabled"
+        ],
+        "title": "HealthResp",
+        "description": "健康检查响应体。\n\n- ``auth_enabled``：系统是否启用了登录功能（OIDC Provider 已配置）。\n  与 ``auth_required``（全局登录门槛）不同：即使未强制全站登录，\n  只要配了 Provider 即视为具备登录能力，前端可以展示登录入口。\n- ``ai_enabled``：是否启用 AI 对话（``PI_ENABLED``）。关闭时\n  ``/ai/chat`` 会返回 503，前端不应暴露 AI 相关入口。"
       },
       "ListResp_ChartResp_": {
         "properties": {

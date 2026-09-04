@@ -1,6 +1,7 @@
 import { client } from '@/client/client.gen'
 import { defaultTitleFor, normalizeHttpError } from '@/utils/error'
 import { notifyError } from '@/composables/useToast'
+import { loadCapabilities, useCapabilities } from '@/composables/useCapabilities'
 
 let registered = false
 
@@ -35,14 +36,20 @@ export function setupApiInterceptors(): void {
 
     // 会话失效（受保护业务接口 401）：整页跳转登录页并保留回跳目标。
     // /auth/ 端点与静默请求不触发（登录页自身的探测请求不得循环跳转）。
+    // 后端未启用登录时也跳过：避免跳到一个不存在的路由触发 404。
     if (
       status === 401 &&
       !silent &&
       !endpoint.startsWith('/auth/') &&
       !window.location.pathname.startsWith('/login')
     ) {
-      const redirect = encodeURIComponent(window.location.pathname + window.location.search)
-      window.location.assign(`/login?redirect=${redirect}`)
+      // 探测为异步：未拿到结果时 authEnabled=false（保守默认），正好不会跳。
+      await loadCapabilities()
+      const { authEnabled } = useCapabilities()
+      if (authEnabled.value) {
+        const redirect = encodeURIComponent(window.location.pathname + window.location.search)
+        window.location.assign(`/login?redirect=${redirect}`)
+      }
     }
 
     return apiErr

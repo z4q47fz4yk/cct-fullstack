@@ -14,6 +14,7 @@ from src.routers import (
     daily_report,
     diagnostics,
     evaluation,
+    health,
     measure,
     optimize,
     plan,
@@ -66,6 +67,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(auth.router)
+app.include_router(health.router)
 app.include_router(project.router)
 app.include_router(task.router)
 app.include_router(resource.router)
@@ -117,7 +119,7 @@ if settings.auth_required:
     # 全局登录门槛（AUTH_REQUIRED=true 时启用）：除公开路径外一律要求有效会话。
     # 默认关闭：业务路由保持开放，既有行为与测试不受影响；
     # 启用后由前端 401 拦截跳登录页。
-    _PUBLIC_PREFIXES = ("/auth/", "/docs", "/redoc", "/openapi.json")
+    _PUBLIC_PREFIXES = ("/auth/", "/health", "/docs", "/redoc", "/openapi.json")
 
     @app.middleware("http")
     async def auth_gate_middleware(request: Request, call_next):

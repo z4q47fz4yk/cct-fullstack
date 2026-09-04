@@ -45,6 +45,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/not-found': RouteRecordInfo<
+      '/not-found',
+      '/not-found',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/project/[projectId]': RouteRecordInfo<
       '/project/[projectId]',
       '/project/:projectId',
@@ -344,6 +351,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/login.vue': {
       routes:
         | '/login'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/not-found.vue': {
+      routes:
+        | '/not-found'
       views:
         | never
       pathParamNames:
