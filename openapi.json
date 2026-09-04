@@ -8254,7 +8254,7 @@
           "field": {
             "type": "string",
             "title": "Field",
-            "description": "出错字段路径，如 blocks[0].row_locator.label_regex"
+            "description": "出错字段路径，如 blocks[0].label_at_column"
           },
           "message": {
             "type": "string",

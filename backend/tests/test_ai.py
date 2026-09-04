@@ -47,14 +47,11 @@ def configs_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 def _minimal_config_dict() -> dict:
     """最小合法配置（labor 单块）。"""
     return {
-        "schema_version": "2.0",
+        "schema_version": "0.2",
         "blocks": [
             {
                 "category": "labor",
-                "row_locator": {
-                    "column": 0,
-                    "label_regex": "^(?:现场人员|人员数量)$",
-                },
+                "label_at_column": 0,
                 "rows": [
                     {"label_regex": "现场人员", "content_regex": "(.+)"},
                     {"label_regex": "人员数量", "content_regex": r"(\d+)"},

@@ -26,7 +26,7 @@ class _CamelCaseMixin(SQLModel):
 class ConfigValidationError(BaseModel):
     """单条校验错误"""
 
-    field: str = Field(description="出错字段路径，如 blocks[0].row_locator.label_regex")
+    field: str = Field(description="出错字段路径，如 blocks[0].label_at_column")
     message: str = Field(description="错误描述")
 
 

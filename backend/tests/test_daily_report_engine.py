@@ -32,10 +32,7 @@ def _labor_cfg() -> ParseEngineConfig:
         "blocks": [
             {
                 "category": "labor",
-                "row_locator": {
-                    "column": 0,
-                    "label_regex": "^(?:现场人员|人员数量)$",
-                },
+                "label_at_column": 0,
                 "rows": [
                     {"label_regex": "^(?:现场人员)$", "content_regex": "(.*)"},
                     {
@@ -69,10 +66,7 @@ def _machinery_cfg() -> ParseEngineConfig:
         "blocks": [
             {
                 "category": "machinery",
-                "row_locator": {
-                    "column": 0,
-                    "label_regex": "^(?:施工机械|数量|机械型号)$",
-                },
+                "label_at_column": 0,
                 "rows": [
                     {"label_regex": "^(?:施工机械)$", "content_regex": "(.*)"},
                     {
@@ -232,10 +226,7 @@ class TestErrorHandling:
             "blocks": [
                 {
                     "category": "labor",
-                    "row_locator": {
-                        "column": 0,
-                        "label_regex": "^(?:现场人员|人员数量)$",
-                    },
+                    "label_at_column": 0,
                     "rows": [
                         {
                             "label_regex": "^(?:现场人员)$",
@@ -296,10 +287,7 @@ class TestDedup:
             "blocks": [
                 {
                     "category": "labor",
-                    "row_locator": {
-                        "column": 0,
-                        "label_regex": "^(?:现场人员|人员数量)$",
-                    },
+                    "label_at_column": 0,
                     "rows": [
                         {
                             "label_regex": "^(?:现场人员)$",
@@ -327,10 +315,7 @@ class TestDedup:
                 },
                 {
                     "category": "machinery",
-                    "row_locator": {
-                        "column": 0,
-                        "label_regex": "^(?:施工机械|数量|机械型号)$",
-                    },
+                    "label_at_column": 0,
                     "rows": [
                         {
                             "label_regex": "^(?:施工机械)$",
@@ -487,3 +472,79 @@ class TestDefaultConfig:
         assert mach["挖机-SY135C"] == 2
         assert "总计" not in {i.name for i in result.items}
         assert not any("每台型号" in n for n in {i.name for i in result.items})
+
+
+class TestLabelAtColumn:
+    """label_at_column 任意列定位：标签不在第 0 列时也能正确定位与解析"""
+
+    def _cfg(self, label_at_column: int) -> ParseEngineConfig:
+        return ParseEngineConfig.model_validate({
+            "blocks": [
+                {
+                    "category": "labor",
+                    "label_at_column": label_at_column,
+                    "rows": [
+                        {"label_regex": "^现场人员$", "content_regex": "(.*)"},
+                        {
+                            "label_regex": "^人员数量$",
+                            "content_regex": r"(\d+)\s*人?",
+                        },
+                    ],
+                    "cleaning": {
+                        "break_on_empty": True,
+                        "ignore_values": ["总计", "0", "/"],
+                    },
+                    "fields": {
+                        "name": {"parts": [{"row": 0, "group": 0}], "sep": ""},
+                        "quantity": {"parts": [{"row": 1, "group": 1}], "sep": ""},
+                    },
+                }
+            ]
+        })
+
+    def test_label_in_second_column(self):
+        """标签在第 1 列（列0 是无关前缀文本），数据从第 2 列开始"""
+        df = pl.DataFrame({
+            "prefix": ["xxx", "yyy", "xxx", "yyy"],
+            "label": ["现场人员", "人员数量", "现场人员", "人员数量"],
+            "data1": ["木工", "181", "钢筋工", "83"],
+            "data2": ["泥工", "96", "小工", "12"],
+        })
+        result = parse_report(df, config=self._cfg(label_at_column=1))
+        assert {i.name: i.count for i in result.items} == {
+            "木工": 181,
+            "钢筋工": 83,
+            "泥工": 96,
+            "小工": 12,
+        }
+        assert result.warnings == []
+
+    def test_label_in_first_column_still_works(self):
+        """label_at_column=0 与旧行为一致（回归）"""
+        df = pl.DataFrame({
+            "label": ["现场人员", "人员数量"],
+            "data1": ["木工", "181"],
+        })
+        result = parse_report(df, config=self._cfg(label_at_column=0))
+        assert result.items == [ParsedItem(name="木工", count=181, category="labor")]
+
+    def test_prefix_column_ignored_when_label_later(self):
+        """label_at_column=1 时，第 0 列即使也含同名文本也不参与匹配/数据"""
+        df = pl.DataFrame({
+            "prefix": ["现场人员", "人员数量"],  # 干扰：与标签同文本但列不对
+            "label": ["现场人员", "人员数量"],
+            "data1": ["木工", "181"],
+        })
+        result = parse_report(df, config=self._cfg(label_at_column=1))
+        assert result.items == [ParsedItem(name="木工", count=181, category="labor")]
+
+    def test_label_in_third_column(self):
+        """标签在第 2 列、前两列是装饰列，验证一般化 k"""
+        df = pl.DataFrame({
+            "c0": ["a", "b"],
+            "c1": ["a", "b"],
+            "label": ["现场人员", "人员数量"],
+            "data": ["木工", "181"],
+        })
+        result = parse_report(df, config=self._cfg(label_at_column=2))
+        assert result.items == [ParsedItem(name="木工", count=181, category="labor")]

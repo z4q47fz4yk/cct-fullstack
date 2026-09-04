@@ -47,14 +47,11 @@ def _clear_config_cache():
 def _minimal_config_dict():
     """最小合法配置（labor 单块）"""
     return {
-        "schema_version": "2.0",
+        "schema_version": "0.2",
         "blocks": [
             {
                 "category": "labor",
-                "row_locator": {
-                    "column": 0,
-                    "label_regex": "^(?:现场人员|人员数量)$",
-                },
+                "label_at_column": 0,
                 "rows": [
                     {"label_regex": "现场人员", "content_regex": "(.+)"},
                     {"label_regex": "人员数量", "content_regex": r"(\d+)"},
@@ -157,7 +154,7 @@ class TestSchemaExtensions:
 
     def test_config_has_schema_version(self):
         cfg = ParseEngineConfig.model_validate(_minimal_config_dict())
-        assert cfg.schema_version == "2.0"
+        assert cfg.schema_version == "0.2"
 
     def test_block_has_description(self):
         cfg = ParseEngineConfig.model_validate(_minimal_config_dict())
@@ -204,7 +201,7 @@ class TestValidateConfigSecurity:
 
     def test_out_of_range_column(self):
         d = _minimal_config_dict()
-        d["blocks"][0]["row_locator"]["column"] = 99
+        d["blocks"][0]["label_at_column"] = 99
         cfg = ParseEngineConfig.model_validate(d)
         errors = validate_config_security(cfg)
         assert len(errors) > 0
@@ -252,9 +249,11 @@ class TestTextPreview:
         assert "行数" in preview
         assert "列数" in preview
 
-    def test_includes_column_samples(self, sample_csv: bytes):
+    def test_includes_csv_rows(self, sample_csv: bytes):
         preview = extract_text_preview("test.csv", sample_csv)
-        assert "每列非空值采样" in preview
+        # 预览为紧凑 CSV：含表头行与样例数据行
+        assert "现场人员" in preview
+        assert "5人" in preview
 
 
 # ============================================================================

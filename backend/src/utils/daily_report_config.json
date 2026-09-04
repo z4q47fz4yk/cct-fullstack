@@ -1,11 +1,9 @@
 {
+  "schema_version": "0.2",
   "blocks": [
     {
       "category": "labor",
-      "row_locator": {
-        "column": 0,
-        "label_regex": "^(?:现场人员|人员数量)$"
-      },
+      "label_at_column": 0,
       "rows": [
         { "label_regex": "^(?:现场人员)$", "content_regex": "(.*)" },
         { "label_regex": "^(?:人员数量)$", "content_regex": "(\\d+)\\s*人?" }
@@ -21,10 +19,7 @@
     },
     {
       "category": "machinery",
-      "row_locator": {
-        "column": 0,
-        "label_regex": "^(?:施工机械|数量|机械型号)$"
-      },
+      "label_at_column": 0,
       "rows": [
         { "label_regex": "^(?:施工机械)$", "content_regex": "(.*)" },
         { "label_regex": "^(?:数量)$", "content_regex": "(\\d+)\\s*(?:台|台班)?" },
@@ -50,10 +45,7 @@
     {
       "category": "transport",
       "cargo_dimension": "运输货物",
-      "row_locator": {
-        "column": 0,
-        "label_regex": "^(?:货物类别|运输类别|运输工具|车辆|车型|车次|运输数量)$"
-      },
+      "label_at_column": 0,
       "rows": [
         { "label_regex": "^(?:货物类别|运输类别)$", "content_regex": "(.*)" },
         { "label_regex": "^(?:运输工具|车辆|车型)$", "content_regex": "(.*)" },

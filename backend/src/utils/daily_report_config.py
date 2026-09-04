@@ -87,39 +87,19 @@ class CleaningSpec(BaseModel):
     ignore_case: bool = True
 
 
-class RowLocator(BaseModel):
-    """块起始行定位：第 ``column`` 列匹配 ``label_regex``"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    column: int
-    label_regex: str
-
-    _compiled_label: re.Pattern[str] = PrivateAttr()
-
-    @field_validator("label_regex")
-    @classmethod
-    def _check_compiles_and_safe(cls, v: str) -> str:
-        try:
-            re.compile(v)
-        except re.error as e:
-            raise ValueError(f"regex '{v}' 编译失败: {e}") from e
-        safe, reason = is_redos_safe(v)
-        if not safe:
-            raise ValueError(f"regex '{v}' 不安全: {reason}")
-        return v
-
-    def model_post_init(self, context: Any) -> None:
-        self._compiled_label = re.compile(self.label_regex)
-
-
 class BlockConfig(BaseModel):
-    """一个解析块（``labor`` / ``machinery`` / ``transport`` 等）"""
+    """一个解析块（``labor`` / ``machinery`` / ``transport`` 等）
+
+    行标签统一在第 ``label_at_column`` 列匹配；一个块覆盖的行 =
+    各 ``rows[*].label_regex`` 的并集（存为字符串 ``_label_union``）。
+    组内数据列从 ``label_at_column + 1`` 开始向右遍历。
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     category: ResourceCategory
-    row_locator: RowLocator
+    # 行标签所在列索引（0 起）。数据列从 label_at_column+1 开始遍历。
+    label_at_column: int = Field(default=0, ge=0)
     rows: list[RowSpec]
     cleaning: CleaningSpec = CleaningSpec()
     fields: dict[str, FieldSpec]
@@ -128,9 +108,20 @@ class BlockConfig(BaseModel):
     # 人类可读的块注释（AI 编写时生成，帮助后续用户理解此块的用途）
     description: str | None = None
 
+    _label_union: str = PrivateAttr()
+
+    def model_post_init(self, context: Any) -> None:
+        # rows 非空由 _validate 保证；每条 label_regex 已通过编译/ReDoS 校验，
+        # 并集整体再校验一次，确保传给 polars str.contains 的 pattern 合法。
+        union = "|".join(f"(?:{r.label_regex})" for r in self.rows)
+        re.compile(union)
+        self._label_union = union
+
     @model_validator(mode="after")
     def _validate(self) -> BlockConfig:
         n = len(self.rows)
+        if n == 0:
+            raise ValueError("rows 不能为空")
         if "name" not in self.fields:
             raise ValueError("fields 必须包含 'name'")
         if "quantity" not in self.fields:
@@ -155,8 +146,8 @@ class ParseEngineConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # 版本号，用于未来迁移
-    schema_version: str = "2.0"
+    # 版本号，用于未来迁移；0.x 表示 schema 尚未稳定
+    schema_version: str = "0.2"
     blocks: list[BlockConfig]
     # 人类可读的配置名称（AI 生成时提供，列表展示用；解析引擎忽略）
     name: str | None = Field(default=None, max_length=200, description="配置名称")
@@ -307,19 +298,19 @@ def validate_config_security(config: ParseEngineConfig) -> list[str]:
     for bi, blk in enumerate(config.blocks):
         prefix = f"blocks[{bi}]"
 
-        # row_locator.column
-        if blk.row_locator.column < 0 or blk.row_locator.column > L.MAX_COLUMN_INDEX:
-            errors.append(
-                f"{prefix}.row_locator.column={blk.row_locator.column} "
-                f"超出允许范围 [0, {L.MAX_COLUMN_INDEX}]"
-            )
-
         # rows 数量
         if len(blk.rows) == 0:
             errors.append(f"{prefix}.rows 不能为空")
         if len(blk.rows) > L.MAX_ROWS_PER_BLOCK:
             errors.append(
                 f"{prefix}.rows 行数 {len(blk.rows)} 超过上限 {L.MAX_ROWS_PER_BLOCK}"
+            )
+
+        # label_at_column
+        if blk.label_at_column < 0 or blk.label_at_column > L.MAX_COLUMN_INDEX:
+            errors.append(
+                f"{prefix}.label_at_column={blk.label_at_column} "
+                f"超出允许范围 [0, {L.MAX_COLUMN_INDEX}]"
             )
 
         # fields 数量
@@ -367,8 +358,8 @@ def validate_config_security(config: ParseEngineConfig) -> list[str]:
                         f"超过上限 {L.MAX_GROUP_INDEX}"
                     )
 
-    # ── Gate 3: 正则安全已在 RowSpec/RowLocator 的 field_validator 中执行 ──
-    #   注：若未来有更多 regex 字段，在此追加。
+    # ── Gate 3: 正则安全已在 RowSpec 的 field_validator 中执行，
+    #    行标签并集由 rows[*].label_regex 推导（编译期校验同上）──
 
     return errors
 
@@ -499,7 +490,6 @@ __all__ = [
     "FieldSpec",
     "ParseEngineConfig",
     "PartSpec",
-    "RowLocator",
     "RowSpec",
     "is_redos_safe",
     "load_config",

@@ -44,12 +44,13 @@ class TestDefaultConfig:
             assert "quantity" in blk.fields
 
     def test_compiled_patterns_cached(self):
-        """预编译 regex 已挂到实例上"""
+        """label 并集与各 row regex 已挂到实例上"""
         cfg = load_config()
         for blk in cfg.blocks:
-            locator_re = blk.row_locator._compiled_label.pattern
-            assert locator_re == blk.row_locator.label_regex
+            assert blk.label_at_column == 0
             for row in blk.rows:
+                # 并集必须能匹配每个 row 的标签（并集 = rows[*].label_regex 的 OR）
+                assert blk._label_union  # 非空字符串
                 assert row._compiled_label.pattern == row.label_regex
                 assert row._compiled_content.pattern == row.content_regex
 
@@ -63,13 +64,10 @@ class TestRegexValidation:
                 "blocks": [
                     {
                         "category": "labor",
-                        "row_locator": {
-                            "column": 0,
-                            "label_regex": "([",  # 未闭合
-                        },
+                        "label_at_column": 0,
                         "rows": [
                             {
-                                "label_regex": "现场人员",
+                                "label_regex": "([",  # 未闭合
                                 "content_regex": "(.+)",
                             },
                             {
@@ -93,10 +91,7 @@ class TestRegexValidation:
                 "blocks": [
                     {
                         "category": "labor",
-                        "row_locator": {
-                            "column": 0,
-                            "label_regex": "^(?:现场人员|人员数量)$",
-                        },
+                        "label_at_column": 0,
                         "rows": [
                             {
                                 "label_regex": "现场人员",
@@ -126,10 +121,7 @@ class TestFieldRequirements:
                 "blocks": [
                     {
                         "category": "labor",
-                        "row_locator": {
-                            "column": 0,
-                            "label_regex": "x",
-                        },
+                        "label_at_column": 0,
                         "rows": [
                             {"label_regex": "a", "content_regex": "(.+)"},
                             {"label_regex": "b", "content_regex": "(\\d+)"},
@@ -148,10 +140,7 @@ class TestFieldRequirements:
                 "blocks": [
                     {
                         "category": "labor",
-                        "row_locator": {
-                            "column": 0,
-                            "label_regex": "x",
-                        },
+                        "label_at_column": 0,
                         "rows": [
                             {"label_regex": "a", "content_regex": "(.+)"},
                             {"label_regex": "b", "content_regex": "(\\d+)"},
@@ -174,10 +163,7 @@ class TestRowIndexBounds:
                 "blocks": [
                     {
                         "category": "labor",
-                        "row_locator": {
-                            "column": 0,
-                            "label_regex": "^(?:a|b)$",
-                        },
+                        "label_at_column": 0,
                         "rows": [
                             {"label_regex": "a", "content_regex": "(.+)"},
                             {"label_regex": "b", "content_regex": "(\\d+)"},
@@ -200,10 +186,7 @@ class TestRowIndexBounds:
                 "blocks": [
                     {
                         "category": "labor",
-                        "row_locator": {
-                            "column": 0,
-                            "label_regex": "^(?:a|b)$",
-                        },
+                        "label_at_column": 0,
                         "rows": [
                             {"label_regex": "a", "content_regex": "(.+)"},
                             {"label_regex": "b", "content_regex": "(\\d+)"},
@@ -222,10 +205,7 @@ class TestRowIndexBounds:
                 "blocks": [
                     {
                         "category": "labor",
-                        "row_locator": {
-                            "column": 0,
-                            "label_regex": "^(?:a|b)$",
-                        },
+                        "label_at_column": 0,
                         "rows": [
                             {"label_regex": "a", "content_regex": "(.+)"},
                             {"label_regex": "b", "content_regex": "(\\d+)"},
@@ -248,7 +228,7 @@ class TestExtraKeys:
                 "blocks": [
                     {
                         "category": "labor",
-                        "row_locator": {"column": 0, "label_regex": "x"},
+                        "label_at_column": 0,
                         "rows": [
                             {"label_regex": "a", "content_regex": "(.+)"},
                             {"label_regex": "b", "content_regex": "(\\d+)"},
@@ -269,7 +249,7 @@ class TestExtraKeys:
                 "blocks": [
                     {
                         "category": "labor",
-                        "row_locator": {"column": 0, "label_regex": "x"},
+                        "label_at_column": 0,
                         "rows": [
                             {"label_regex": "a", "content_regex": "(.+)"},
                             {"label_regex": "b", "content_regex": "(\\d+)"},
@@ -291,7 +271,7 @@ class TestExtraKeys:
                 "blocks": [
                     {
                         "category": "labor",
-                        "row_locator": {"column": 0, "label_regex": "x"},
+                        "label_at_column": 0,
                         "rows": [
                             {"label_regex": "a", "content_regex": "(.+)"},
                             {"label_regex": "b", "content_regex": "(\\d+)"},
@@ -314,7 +294,7 @@ class TestCategoryValidation:
                 "blocks": [
                     {
                         "category": "vehicle",  # 不在 ResourceCategory 中
-                        "row_locator": {"column": 0, "label_regex": "x"},
+                        "label_at_column": 0,
                         "rows": [
                             {"label_regex": "a", "content_regex": "(.+)"},
                             {"label_regex": "b", "content_regex": "(\\d+)"},
@@ -352,10 +332,7 @@ class TestCaching:
                 "blocks": [
                     {
                         "category": "labor",
-                        "row_locator": {
-                            "column": 0,
-                            "label_regex": "^(?:a|b)$",
-                        },
+                        "label_at_column": 0,
                         "rows": [
                             {
                                 "label_regex": "a",

@@ -147,25 +147,29 @@ def _parse_block(
     key_count: dict[str | tuple[str, str], int],
     warnings: list[ParseWarning],
 ) -> None:
-    """解析单个 block：按 row_locator 过滤后按 rows 长度切片分组"""
-    col = df.columns[blk.row_locator.column]
+    """解析单个 block：label_at_column 列 + rows label 并集过滤后按 rows 长度切片分组"""
+    col = df.columns[blk.label_at_column]
     matched = df.filter(
-        pl.col(col).cast(pl.Utf8).str.contains(blk.row_locator.label_regex)
+        pl.col(col).cast(pl.Utf8).str.contains(blk._label_union)
     )
     rows_data = matched.rows()
     n = len(blk.rows)
     if len(rows_data) % n != 0:
         raise FileParseError(
-            f"block '{blk.category}': row_locator matched {len(rows_data)} rows, "
+            f"block '{blk.category}': label matched {len(rows_data)} rows, "
             f"expected a multiple of {n}"
         )
 
     for g in range(0, len(rows_data), n):
         group = rows_data[g : g + n]
-        # 防御性：每行 column 0 必须匹配对应 rows[i].label_regex，
+        # 防御性：每行 label 列必须匹配对应 rows[i].label_regex，
         # 避免未来配置调整时跨 block 错位
         for _i, (row, spec) in enumerate(zip(group, blk.rows, strict=True)):
-            label = "" if row[0] is None else str(row[0])
+            label = (
+                ""
+                if row[blk.label_at_column] is None
+                else str(row[blk.label_at_column])
+            )
             if not spec._compiled_label.search(label):
                 break
         else:
@@ -179,12 +183,13 @@ def _process_columns(
     name_count: dict[str | tuple[str, str], int],
     warnings: list[ParseWarning],
 ) -> None:
-    """列循环：从 column 1 开始，对每列提取每行的捕获组并组装字段"""
+    """列循环：从 label_at_column+1 列开始，对每列提取每行的捕获组并组装字段"""
+    data_start = blk.label_at_column + 1
     n_cols = max(len(r) for r in group) - 1
     qty_spec = blk.fields["quantity"].parts[0]
     qty_row = qty_spec.row
 
-    for c in range(1, n_cols + 1):
+    for c in range(data_start, n_cols + 1):
         captured: dict[int, re.Match[str]] = {}
         skip = False
         for i, row in enumerate(group):
