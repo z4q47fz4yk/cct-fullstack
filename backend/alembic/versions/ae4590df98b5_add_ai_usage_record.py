@@ -38,9 +38,7 @@ def upgrade() -> None:
         ),
         sa.Column("cost", sa.Float(), nullable=False, server_default="0"),
         sa.Column("message_count", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column(
-            "tool_call_count", sa.Integer(), nullable=False, server_default="0"
-        ),
+        sa.Column("tool_call_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column(
             "status",
             sa.String(length=16),

@@ -119,6 +119,7 @@ class DailyReportParseResponse:
     #   }
     # ]
 
+
 class ParsedResourceItem:
     row_index: int
     resource_name: str
@@ -145,6 +146,7 @@ class ConfirmMappingRequest:
     #   {"row_index": 2, "action": "CREATE_NEW", "new_resource": {"name": "木工", "category": "labor", "unit": "人天", ...}},
     #   {"row_index": 3, "action": "SKIP"}  # 跳过无法识别的行
     # ]
+
 
 class ResourceMappingItem:
     row_index: int
@@ -189,6 +191,7 @@ class AllocateRequest:
     #   {"row_index": 2, "task_id": 5, "quantity": 3.0}    # 木工 3 人天到工序5
     # ]
 
+
 class AllocationItem:
     row_index: int
     task_id: int
@@ -214,6 +217,7 @@ class AllocationResponse:
     #     ]
     #   }
     # ]
+
 
 class AllocationSummary:
     row_index: int
@@ -275,10 +279,14 @@ def fuzzy_match(resource_name: str) -> list[Resource]:
         return {"status": "FUZZY_MATCH", "candidates": exact}
 
     # 包含匹配
-    partial = db.query(Resource).filter(
-        Resource.name.contains(resource_name) |
-        Resource.description.contains(resource_name)
-    ).all()
+    partial = (
+        db.query(Resource)
+        .filter(
+            Resource.name.contains(resource_name)
+            | Resource.description.contains(resource_name)
+        )
+        .all()
+    )
 
     if partial:
         return {"status": "FUZZY_MATCH", "candidates": partial}
@@ -345,6 +353,7 @@ class ImportErrorResponse:
     error_code: str
     message: str
     details: list[ErrorDetail] | None
+
 
 class ErrorDetail:
     row_index: int | None
