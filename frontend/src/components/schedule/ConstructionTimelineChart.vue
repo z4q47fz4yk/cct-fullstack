@@ -48,23 +48,26 @@ export interface WeatherPoint {
   precipitationMm: number | null
 }
 
-const props = withDefaults(
-  defineProps<{
-    ganttItems: GanttChartItem<unknown>[]
-    ganttTooltipFormatter?: (item: GanttChartItem<unknown>) => string
-    ganttLabelWidth?: number
-    bands: EmissionBand[]
-    weather: WeatherPoint[]
-    totalDays: number
-    /** 时间轴锚点日期（YYYY-MM-DD），为空时 x 轴回退为「第 N 天」 */
-    anchorDate?: string | null
-  }>(),
-  {
-    ganttTooltipFormatter: undefined,
-    ganttLabelWidth: 190,
-    anchorDate: null,
-  },
-)
+// Vue 3.5+ Reactive Props Destructure：解构即响应式，默认值在解构处声明。
+const {
+  ganttItems,
+  ganttTooltipFormatter = undefined,
+  ganttLabelWidth = 190,
+  bands,
+  weather,
+  totalDays,
+  /** 时间轴锚点日期（YYYY-MM-DD），为空时 x 轴回退为「第 N 天」 */
+  anchorDate = null,
+} = defineProps<{
+  ganttItems: GanttChartItem<unknown>[]
+  ganttTooltipFormatter?: (item: GanttChartItem<unknown>) => string
+  ganttLabelWidth?: number
+  bands: EmissionBand[]
+  weather: WeatherPoint[]
+  totalDays: number
+  /** 时间轴锚点日期（YYYY-MM-DD），为空时 x 轴回退为「第 N 天」 */
+  anchorDate?: string | null
+}>()
 
 const C = getThemeColors()
 
@@ -75,33 +78,32 @@ const EMISSION_H = 220
 const GAP = 14
 
 const ganttHeight = computed(() => {
-  const raw = Math.max(props.ganttItems.length, 1) * GANTT_ROW + 30
+  const raw = Math.max(ganttItems.length, 1) * GANTT_ROW + 30
   return Math.min(Math.max(raw, 220), 480)
 })
 
 const chartHeight = computed(
-  () =>
-    ganttHeight.value + (props.weather.length > 0 ? WEATHER_H + GAP : 0) + EMISSION_H + GAP + 30,
+  () => ganttHeight.value + (weather.length > 0 ? WEATHER_H + GAP : 0) + EMISSION_H + GAP + 30,
 )
 
 // ──── 时间轴 ───────────────────────────────────────────────
 const xInterval = computed(() => {
-  if (props.totalDays <= 30) return 5
-  if (props.totalDays <= 60) return 10
-  if (props.totalDays <= 90) return 15
+  if (totalDays <= 30) return 5
+  if (totalDays <= 60) return 10
+  if (totalDays <= 90) return 15
   return 20
 })
 
 function fmtDay(day: number): string {
-  if (!props.anchorDate) return `第${day}天`
-  const d = new Date(new Date(props.anchorDate).getTime() + day * 86_400_000)
+  if (!anchorDate) return `第${day}天`
+  const d = new Date(new Date(anchorDate).getTime() + day * 86_400_000)
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
 const sharedXAxis = computed(() => ({
   type: 'value' as const,
   min: 0,
-  max: props.totalDays,
+  max: totalDays,
   interval: xInterval.value,
   axisLine: { lineStyle: { color: C.axis } },
   axisTick: { lineStyle: { color: C.axis } },
@@ -116,10 +118,10 @@ interface GanttBarData {
 }
 
 const ganttOffsetData = computed(() =>
-  props.ganttItems.map((i) => ({ value: i.startDay, itemStyle: { color: 'transparent' } })),
+  ganttItems.map((i) => ({ value: i.startDay, itemStyle: { color: 'transparent' } })),
 )
 const ganttBarData = computed<GanttBarData[]>(() =>
-  props.ganttItems.map((i) => ({
+  ganttItems.map((i) => ({
     value: i.duration,
     itemStyle: { color: i.color, borderRadius: 4 },
     item: i,
@@ -127,12 +129,12 @@ const ganttBarData = computed<GanttBarData[]>(() =>
 )
 
 // ──── 碳排放：custom series 月度色带 ────────────────────────
-const maxBandKg = computed(() => Math.max(...props.bands.map((b) => b.totalKg), 1))
+const maxBandKg = computed(() => Math.max(...bands.map((b) => b.totalKg), 1))
 
 const emissionYMax = computed(() => Math.ceil(maxBandKg.value / 1000) * 1000)
 
 const renderBand: CustomSeriesRenderItem = (params, api) => {
-  const band = props.bands[params.dataIndex ?? 0]
+  const band = bands[params.dataIndex ?? 0]
   if (!band) return null
   // 累计值按 kg 直接传给 coord（y 轴为真实数据刻度，非归一化比例）
   let acc = 0
@@ -158,7 +160,7 @@ const renderBand: CustomSeriesRenderItem = (params, api) => {
 
 // ──── 汇总 option ──────────────────────────────────────────
 const chartOption = computed(() => {
-  const hasWeather = props.weather.length > 0
+  const hasWeather = weather.length > 0
   const top = 8
   const ganttTop = top
   const weatherTop = ganttTop + ganttHeight.value + GAP
@@ -172,7 +174,7 @@ const chartOption = computed(() => {
         if (params.seriesIndex === 0) return ''
         if (params.seriesIndex === 1) {
           const d = params.data as GanttBarData | undefined
-          return props.ganttTooltipFormatter?.(d?.item as GanttChartItem<unknown>) ?? ''
+          return ganttTooltipFormatter?.(d?.item as GanttChartItem<unknown>) ?? ''
         }
         if (params.seriesIndex === 2) {
           const v = (params.value as [number, number | null])[1]
@@ -206,14 +208,14 @@ const chartOption = computed(() => {
       },
     },
     grid: [
-      { left: props.ganttLabelWidth, right: 24, top: ganttTop, height: ganttHeight.value },
+      { left: ganttLabelWidth, right: 24, top: ganttTop, height: ganttHeight.value },
       {
-        left: props.ganttLabelWidth,
+        left: ganttLabelWidth,
         right: 24,
         top: weatherTop,
         height: hasWeather ? WEATHER_H : 0,
       },
-      { left: props.ganttLabelWidth, right: 24, top: emissionTop, height: EMISSION_H },
+      { left: ganttLabelWidth, right: 24, top: emissionTop, height: EMISSION_H },
     ],
     xAxis: [
       // 0: 甘特（不显示刻度文字，日期统一由底部碳排区展示）
@@ -233,14 +235,14 @@ const chartOption = computed(() => {
     yAxis: [
       {
         type: 'category' as const,
-        data: props.ganttItems.map((i) => i.label),
+        data: ganttItems.map((i) => i.label),
         inverse: true,
         axisLine: { lineStyle: { color: C.axis } },
         axisTick: { show: false },
         axisLabel: {
           color: C.label,
           fontSize: 12,
-          width: props.ganttLabelWidth - 12,
+          width: ganttLabelWidth - 12,
           overflow: 'truncate',
         },
         gridIndex: 0,
@@ -295,7 +297,7 @@ const chartOption = computed(() => {
       {
         name: '平均气温',
         type: 'line' as const,
-        data: props.weather.map((w) => [w.day, w.temperatureC] as [number, number | null]),
+        data: weather.map((w) => [w.day, w.temperatureC] as [number, number | null]),
         smooth: true,
         showSymbol: true,
         symbolSize: 5,
@@ -308,7 +310,7 @@ const chartOption = computed(() => {
       {
         name: '降水',
         type: 'line' as const,
-        data: props.weather.map((w) => [w.day, w.precipitationMm] as [number, number | null]),
+        data: weather.map((w) => [w.day, w.precipitationMm] as [number, number | null]),
         smooth: true,
         showSymbol: true,
         symbolSize: 5,
@@ -321,7 +323,7 @@ const chartOption = computed(() => {
       {
         name: '碳排',
         type: 'custom' as const,
-        data: props.bands,
+        data: bands,
         renderItem: renderBand,
         xAxisIndex: 2,
         yAxisIndex: 3,

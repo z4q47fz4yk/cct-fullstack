@@ -525,10 +525,8 @@ interface ConfirmModalProps {
   title?: string
 }
 
-// ✅ 推荐: 使用 withDefaults 设置默认值
-const props = withDefaults(defineProps<ConfirmModalProps>(), {
-  title: '确认',
-})
+// ✅ 推荐: Vue 3.5+ Reactive Props Destructure，解构时声明默认值
+const { title = '确认' } = defineProps<ConfirmModalProps>()
 
 // ✅ 推荐: 显式定义 emits 参数类型
 defineEmits<{

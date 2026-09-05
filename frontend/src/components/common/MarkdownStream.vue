@@ -23,20 +23,20 @@ import { useTheme } from '@/composables/useTheme'
  * 的不可信 HTML；render-code-blocks-as-pre 避免需要 stream-diffs 增强代码块。
  * 主题色由 src/assets/markstream.css 桥接到 starglass token。
  */
-const props = withDefaults(
-  defineProps<{
-    content?: string
-    /** 流是否结束（服务端 done/error 后置真） */
-    final?: boolean
-    /** 每帧最多 reveal 的字符数（越大打字越快） */
-    charsPerFrame?: number
-  }>(),
-  {
-    content: '',
-    final: false,
-    charsPerFrame: 12,
-  },
-)
+// Vue 3.5+ Reactive Props Destructure：解构即响应式，默认值在解构处声明。
+const {
+  content = '',
+  /** 流是否结束（服务端 done/error 后置真） */
+  final = false,
+  /** 每帧最多 reveal 的字符数（越大打字越快） */
+  charsPerFrame = 12,
+} = defineProps<{
+  content?: string
+  /** 流是否结束（服务端 done/error 后置真） */
+  final?: boolean
+  /** 每帧最多 reveal 的字符数（越大打字越快） */
+  charsPerFrame?: number
+}>()
 
 const emit = defineEmits<{
   /** 每帧 reveal 出新字符后触发（父组件据此做滚动跟随） */
@@ -63,21 +63,21 @@ function stopRaf() {
 function tick() {
   rafId = null
   if (pending.value) {
-    const take = Math.min(props.charsPerFrame, pending.value.length)
+    const take = Math.min(charsPerFrame, pending.value.length)
     revealed.value += pending.value.slice(0, take)
     pending.value = pending.value.slice(take)
     emit('reveal')
   }
   if (pending.value) {
     rafId = requestAnimationFrame(tick)
-  } else if (props.final) {
+  } else if (final) {
     settled.value = true
   }
 }
 
 function syncTarget(next: string) {
   // final 已为真（如恢复的历史轮次挂载即 final）：整段即时显示，不逐帧
-  if (props.final) {
+  if (final) {
     revealed.value = next
     pending.value = ''
     settled.value = true
@@ -103,18 +103,18 @@ function syncTarget(next: string) {
 }
 
 watch(
-  () => props.content,
+  () => content,
   (v) => syncTarget(v ?? ''),
   { immediate: true },
 )
 
 watch(
-  () => props.final,
+  () => final,
   (v) => {
     if (!v) return
     // 结束（或挂载即 final）：不再逐帧，把剩余缓冲一次性补完并收敛
     if (pending.value) {
-      revealed.value = props.content
+      revealed.value = content
       pending.value = ''
     }
     settled.value = true

@@ -22,16 +22,18 @@ import { nextTick, ref, watch } from 'vue'
 
 defineOptions({ inheritAttrs: false })
 
-const props = withDefaults(
-  defineProps<{
-    title?: string
-    /** 点击遮罩是否关闭，默认 true */
-    closeOnOverlay?: boolean
-    /** Esc 是否关闭，默认 true */
-    closeOnEscape?: boolean
-  }>(),
-  { closeOnOverlay: true, closeOnEscape: true },
-)
+// Vue 3.5+ Reactive Props Destructure：解构即响应式，默认值在解构处声明。
+const {
+  title,
+  closeOnOverlay = true,
+  closeOnEscape = true,
+} = defineProps<{
+  title?: string
+  /** 点击遮罩是否关闭，默认 true */
+  closeOnOverlay?: boolean
+  /** Esc 是否关闭，默认 true */
+  closeOnEscape?: boolean
+}>()
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -46,11 +48,11 @@ function closeModal() {
 
 /** 遮罩点击：点击 dialog 自身（modal-box 之外）即遮罩 */
 function onClick(e: MouseEvent) {
-  if (props.closeOnOverlay && e.target === dialogEl.value) closeModal()
+  if (closeOnOverlay && e.target === dialogEl.value) closeModal()
 }
 
 function onCancel(e: Event) {
-  if (!props.closeOnEscape) e.preventDefault()
+  if (!closeOnEscape) e.preventDefault()
 }
 
 /** 原生关闭（Esc / close()）后同步状态 */

@@ -423,7 +423,7 @@ const kindOptions: ReadonlyArray<SegmentOption<MeasureKind>> = [
         <div
           v-for="m in measures"
           :key="m.id"
-          class="flex items-center gap-3 rounded-lg border border-base-content/10 bg-base-content/[0.02] px-3 py-2.5"
+          class="flex items-center gap-3 rounded-lg border border-base-content/10 bg-base-content/2 px-3 py-2.5"
         >
           <span
             class="text-xs font-medium px-2 py-0.5 rounded-full shrink-0"
