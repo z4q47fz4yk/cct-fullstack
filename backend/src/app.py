@@ -23,6 +23,7 @@ from src.routers import (
     report_config,
     resource,
     resource_public,
+    resource_stats,
     resource_usage,
     tag,
     task,
@@ -72,6 +73,7 @@ app.include_router(project.router)
 app.include_router(task.router)
 app.include_router(resource.router)
 app.include_router(resource_public.router)
+app.include_router(resource_stats.router)
 app.include_router(resource_usage.router)
 app.include_router(daily_report.router)
 app.include_router(report_config.router)

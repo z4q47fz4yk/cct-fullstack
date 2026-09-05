@@ -544,15 +544,19 @@ async def test_measure_actual_saving_implemented_date_window(
     assert data["savingDifference"] == pytest.approx(30.0)
 
 
-async def test_monthly_emissions_cost_bucket_and_baseline(
+async def test_carbon_stats_cost_bucket_and_negative_emission(
     client: AsyncClient, insight_project
 ):
-    """月度聚合：cost/水电桶/PLANNED 基线回退与读取。"""
+    """碳排统计（/resource-usage/stats/carbon）：cost/水电桶/负因子资源。
+
+    PLANNED 口径只读 usage 表（不读计划基线快照），负因子（光伏）在
+    usage 现场聚合中允许负排放。
+    """
     pid = insight_project["pid"]
 
-    # 无基线：PLANNED 回退读 usage 行
+    # ACTUAL：材料A(12×50=600) + 外购水(3×1=3，单价5 → cost 15)
     resp = await client.get(
-        f"/projects/{pid}/optimize/monthly-emissions?usageType=ACTUAL"
+        f"/projects/{pid}/resource-usage/stats/carbon?usageType=ACTUAL"
     )
     assert resp.status_code == 200
     actual_items = resp.json()["items"]
@@ -560,29 +564,31 @@ async def test_monthly_emissions_cost_bucket_and_baseline(
     water_item = next(item for item in actual_items if item["bucket"] == "water")
     assert water_item["cost"] == pytest.approx(15.0)
 
-    # 无基线：PLANNED 回退读 usage 行，并带 source 标识
+    # PLANNED：一律读 usage 行（无 source 字段，与基线解耦）
     resp = await client.get(
-        f"/projects/{pid}/optimize/monthly-emissions?usageType=PLANNED"
+        f"/projects/{pid}/resource-usage/stats/carbon?usageType=PLANNED"
     )
     assert resp.status_code == 200
-    assert resp.json()["source"] == "usage"
+    planned = resp.json()
+    assert "source" not in planned
 
-    # 保存基线后：PLANNED 读基线月度快照
+    # 保存基线不影响 PLANNED 口径（基线语义独立于碳排统计）
     await client.post(f"/projects/{pid}/plans", json={})
     resp = await client.get(
-        f"/projects/{pid}/optimize/monthly-emissions?usageType=PLANNED"
+        f"/projects/{pid}/resource-usage/stats/carbon?usageType=PLANNED"
     )
     assert resp.status_code == 200
-    assert resp.json()["source"] == "baseline"
-    items = resp.json()["items"]
+    data = resp.json()
+    assert "source" not in data
+    items = data["items"]
     assert len(items) >= 1
-    assert all(item["month"] == "2026-01-01" for item in items)
+    assert all(item["period"] == "2026-01-01" for item in items)
     assert any(
         item["resourceId"] == insight_project["resource_ids"]["外购水"]
         for item in items
     )
 
-    # 负因子资源在聚合中允许负排放
+    # 负因子资源在聚合中允许负排放（光伏 PLANNED 用量 2 × (-10) = -20）
     pv_item = next(
         item
         for item in items

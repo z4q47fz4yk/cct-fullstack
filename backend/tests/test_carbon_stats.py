@@ -1,9 +1,11 @@
-"""测试月度碳排放端点、usage_type 端到端往返、Project CRUD 烟雾。
+"""测试资源用量碳排放统计端点、usage_type 端到端往返、Project CRUD 烟雾。
 
 覆盖最近三个新功能：
 - 多项目管理（Project + CurrentProject 依赖）
 - usage_type 字段（ACTUAL/PLANNED）
-- GET /projects/{project_id}/optimize/monthly-emissions 端点
+- GET /projects/{project_id}/resource-usage/stats/carbon 端点
+  （原 /optimize/monthly-emissions 迁移而来；只聚合 usage 表，
+   PLANNED 仅支持月粒度，day/week 返回 422；响应为 period/periodIndex。）
 
 按 tests/AGENTS.md 规范，使用 tests/conftest.py 的现有 fixtures。
 """
@@ -292,86 +294,70 @@ async def test_list_usage_filters_by_type(
 
 
 # ============================================================
-# C. 月度碳排放端点
+# C. 碳排放统计端点（/resource-usage/stats/carbon）
 # ============================================================
 
 
-async def test_monthly_emissions_default_returns_all(
+async def test_carbon_stats_actual_required(
     client: AsyncClient,
     project: Project,
     usage_records: list[TaskResourceUsage],
 ):
-    """不传 usageType → 返回 ACTUAL+PLANNED 合并数据。"""
-    resp = await client.get(f"/projects/{project.id}/optimize/monthly-emissions")
-    assert resp.status_code == 200, resp.text
-    data = resp.json()
-
-    # ACTUAL(76.5) + PLANNED(274.5) = 351.0
-    total_emission = sum(item["emission"] for item in data["items"])
-    assert total_emission == pytest.approx(351.0)
-
-    # 同月同资源合并：Jan r1(10+5=15), Jan r2(20), Feb r1(15), Feb r2(100)
-    assert len(data["items"]) == 4
-
-    # 校验 start_month/end_month
-    assert data["startMonth"] == "2026-01-01"
-    assert data["endMonth"] == "2026-03-01"
+    """usageType 必填：缺省返回 422（不再有合并 ACTUAL+PLANNED 的暗分支）。"""
+    resp = await client.get(f"/projects/{project.id}/resource-usage/stats/carbon")
+    assert resp.status_code == 422
 
 
-async def test_monthly_emissions_explicit_actual(
+async def test_carbon_stats_month_actual_exact_values(
     client: AsyncClient,
     project: Project,
     usage_records: list[TaskResourceUsage],
 ):
-    """显式 ?usageType=ACTUAL，校验精确数值与字段。"""
+    """默认粒度 month + usageType=ACTUAL，精确数值与结构字段。"""
     resp = await client.get(
-        f"/projects/{project.id}/optimize/monthly-emissions?usageType=ACTUAL"
+        f"/projects/{project.id}/resource-usage/stats/carbon?usageType=ACTUAL"
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
 
     # 3 ACTUAL 条：Jan r1=9.0, Jan r2=54.0, Feb r1=13.5
-    assert data["totalMonths"] == 2
+    assert data["totalPeriods"] == 2
     assert data["totalResources"] == 2
     assert len(data["items"]) == 3
 
     total_emission = sum(item["emission"] for item in data["items"])
     assert total_emission == pytest.approx(76.5)
 
-    # 校验 start_month/end_month
-    assert data["startMonth"] == "2026-01-01"
-    assert data["endMonth"] == "2026-03-01"
+    # 响应无 startMonth/endMonth/source 旧字段
+    assert "startMonth" not in data
+    assert "endMonth" not in data
+    assert "source" not in data
 
-    # 校验 month_index 递增
-    months_seen = []
+    # period/periodIndex 递增（月粒度 period = 月初）
+    periods_seen = []
     for item in data["items"]:
-        m = item["month"]
-        idx = item["monthIndex"]
-        if m not in [x[0] for x in months_seen]:
-            months_seen.append((m, idx))
-    assert months_seen[0] == ("2026-01-01", 1)
-    assert months_seen[1] == ("2026-02-01", 2)
+        p = item["period"]
+        idx = item["periodIndex"]
+        if p not in [x[0] for x in periods_seen]:
+            periods_seen.append((p, idx))
+    assert periods_seen[0] == ("2026-01-01", 1)
+    assert periods_seen[1] == ("2026-02-01", 2)
 
 
-async def test_actusal_excludes_planned(
+async def test_carbon_stats_actual_excludes_planned(
     client: AsyncClient,
     project: Project,
     resources: list[Resource],
     usage_records: list[TaskResourceUsage],
 ):
-    """关键不变量：ACTUAL 聚合严格不包含 PLANNED 行。
-
-    数值差异：若 SQL 漏掉 WHERE usage_type='ACTUAL'，
-    ACTUAL 总 emission 会膨胀到 351.0 (76.5 + 274.5)，断言失败。
-    """
+    """关键不变量：ACTUAL 聚合严格不包含 PLANNED 行。"""
     r1_id = resources[0].id
     r2_id = resources[1].id
     assert r1_id is not None
     assert r2_id is not None
 
-    # ACTUAL
     resp_actual = await client.get(
-        f"/projects/{project.id}/optimize/monthly-emissions?usageType=ACTUAL"
+        f"/projects/{project.id}/resource-usage/stats/carbon?usageType=ACTUAL"
     )
     assert resp_actual.status_code == 200
     actual = resp_actual.json()
@@ -379,9 +365,8 @@ async def test_actusal_excludes_planned(
     assert actual_total == pytest.approx(76.5)
     assert len(actual["items"]) == 3
 
-    # PLANNED
     resp_planned = await client.get(
-        f"/projects/{project.id}/optimize/monthly-emissions?usageType=PLANNED"
+        f"/projects/{project.id}/resource-usage/stats/carbon?usageType=PLANNED"
     )
     assert resp_planned.status_code == 200
     planned = resp_planned.json()
@@ -389,102 +374,125 @@ async def test_actusal_excludes_planned(
     assert planned_total == pytest.approx(274.5)
     assert len(planned["items"]) == 2
 
-    # Feb r2 (qty=100, emission=270.0) 必须在 PLANNED 中、不在 ACTUAL 中
-    # Feb r2 (qty=100, emission=270.0) 必须在 PLANNED 中、不在 ACTUAL 中
-    # 注：同资源同月可同时有 ACTUAL 和 PLANNED（如 Jan r1），所以
-    # (month, resourceId) 交集非空是正常的。真正要验证的是：
-    # 1) emission 总量正确（已断言）
-    # 2) Feb r2（仅 PLANNED）不在 ACTUAL 结果中
-    actual_keys = {(i["month"], i["resourceId"]) for i in actual["items"]}
-    planned_keys = {(i["month"], i["resourceId"]) for i in planned["items"]}
+    actual_keys = {(i["period"], i["resourceId"]) for i in actual["items"]}
+    planned_keys = {(i["period"], i["resourceId"]) for i in planned["items"]}
     assert ("2026-02-01", r2_id) in planned_keys
     assert ("2026-02-01", r2_id) not in actual_keys
 
 
-async def test_monthly_emissions_planned_filter(
+async def test_carbon_stats_planned_month_reads_usage_only(
     client: AsyncClient,
     project: Project,
     usage_records: list[TaskResourceUsage],
 ):
-    """?usageType=PLANNED → 2 条 PLANNED 记录，精确数值。"""
+    """PLANNED 一律只读 usage 表（无 source 字段，不走基线快照）。"""
     resp = await client.get(
-        f"/projects/{project.id}/optimize/monthly-emissions?usageType=PLANNED"
+        f"/projects/{project.id}/resource-usage/stats/carbon?usageType=PLANNED"
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data["items"]) == 2
-    for item in data["items"]:
-        assert item["quantity"] > 0
-        assert item["emission"] > 0
-
-
-async def test_monthly_emissions_date_window(
-    client: AsyncClient,
-    project: Project,
-    resources: list[Resource],
-    usage_records: list[TaskResourceUsage],
-):
-    """startMonth/endMonth 限定窗口：[2026-02-01, 2026-03-01) → 仅 Feb 资源。"""
-    r1_id = resources[0].id
-    assert r1_id is not None
-
-    resp = await client.get(
-        f"/projects/{project.id}/optimize/monthly-emissions"
-        "?startMonth=2026-02-01&endMonth=2026-03-01"
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    # Feb: r1 ACTUAL(15) + r2 PLANNED(100) = 2 条
-    assert len(data["items"]) == 2
-
-
-async def test_monthly_emissions_end_exclusive(
-    client: AsyncClient,
-    project: Project,
-    usage_records: list[TaskResourceUsage],
-):
-    """endMonth 不含：窗口 [2026-02-01, 2026-02-05) 不含 Feb 5 的 ACTUAL。"""
-    resp = await client.get(
-        f"/projects/{project.id}/optimize/monthly-emissions"
-        "?startMonth=2026-02-01&endMonth=2026-02-05&usageType=ACTUAL"
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["items"] == []
-
-
-async def test_monthly_emissions_empty_project(client: AsyncClient, project: Project):
-    """无 usage_records fixture → 空响应。"""
-    resp = await client.get(
-        f"/projects/{project.id}/optimize/monthly-emissions?usageType=ACTUAL"
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["items"] == []
-    assert data["totalMonths"] == 0
-    assert data["totalResources"] == 0
-    assert data["startMonth"] is None
-    assert data["endMonth"] is None
-
-
-async def test_monthly_emissions_returns_planned_filter(
-    client: AsyncClient,
-    project: Project,
-    usage_records: list[TaskResourceUsage],
-):
-    """?usageType=PLANNED → 仅 PLANNED 记录。"""
-    resp = await client.get(
-        f"/projects/{project.id}/optimize/monthly-emissions?usageType=PLANNED"
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    # fixture 中 2 条 PLANNED：Jan r1 (4.5) 和 Feb r2 (270.0)
+    assert "source" not in data
     assert len(data["items"]) == 2
     total = sum(item["emission"] for item in data["items"])
     assert total == pytest.approx(274.5)
 
 
-async def test_monthly_emissions_unknown_project_404(client: AsyncClient):
+async def test_carbon_stats_planned_day_week_422(
+    client: AsyncClient,
+    project: Project,
+    usage_records: list[TaskResourceUsage],
+):
+    """PLANNED 仅支持月粒度：granularity=day/week 返回 422。"""
+    for gran in ("day", "week"):
+        resp = await client.get(
+            f"/projects/{project.id}/resource-usage/stats/carbon"
+            f"?usageType=PLANNED&granularity={gran}"
+        )
+        assert resp.status_code == 422, resp.text
+
+
+async def test_carbon_stats_invalid_granularity_422(
+    client: AsyncClient,
+    project: Project,
+    usage_records: list[TaskResourceUsage],
+):
+    """非法 granularity → 422。"""
+    resp = await client.get(
+        f"/projects/{project.id}/resource-usage/stats/carbon"
+        "?usageType=ACTUAL&granularity=year"
+    )
+    assert resp.status_code == 422
+
+
+async def test_carbon_stats_date_window(
+    client: AsyncClient,
+    project: Project,
+    resources: list[Resource],
+    usage_records: list[TaskResourceUsage],
+):
+    """startDate/endDate 限定窗口：[2026-02-01, 2026-03-01) → 仅 Feb 资源。"""
+    resp = await client.get(
+        f"/projects/{project.id}/resource-usage/stats/carbon"
+        "?usageType=ACTUAL&startDate=2026-02-01&endDate=2026-03-01"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    # Feb: r1 ACTUAL(15) = 1 条（r2 PLANNED 已按 usageType 排除）
+    assert len(data["items"]) == 1
+    assert data["items"][0]["quantity"] == pytest.approx(15.0)
+
+
+async def test_carbon_stats_end_exclusive(
+    client: AsyncClient,
+    project: Project,
+    usage_records: list[TaskResourceUsage],
+):
+    """endDate 不含：窗口 [2026-02-01, 2026-02-05) 不含 Feb 5 的 ACTUAL。"""
+    resp = await client.get(
+        f"/projects/{project.id}/resource-usage/stats/carbon"
+        "?usageType=ACTUAL&startDate=2026-02-01&endDate=2026-02-05"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["items"] == []
+
+
+async def test_carbon_stats_day_granularity(
+    client: AsyncClient,
+    project: Project,
+    usage_records: list[TaskResourceUsage],
+):
+    """ACTUAL 日粒度：period 精确到日，逐日分组。"""
+    resp = await client.get(
+        f"/projects/{project.id}/resource-usage/stats/carbon"
+        "?usageType=ACTUAL&granularity=day"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    # 3 ACTUAL 行在不同日：Jan15 r1 / Jan10 r2 / Feb5 r1 → 3 个 period
+    assert data["totalPeriods"] == 3
+    assert len(data["items"]) == 3
+    periods = {item["period"] for item in data["items"]}
+    assert periods == {"2026-01-10", "2026-01-15", "2026-02-05"}
+    total = sum(item["emission"] for item in data["items"])
+    assert total == pytest.approx(76.5)
+
+
+async def test_carbon_stats_empty_project(client: AsyncClient, project: Project):
+    """无 usage_records fixture → 空响应。"""
+    resp = await client.get(
+        f"/projects/{project.id}/resource-usage/stats/carbon?usageType=ACTUAL"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["items"] == []
+    assert data["totalPeriods"] == 0
+    assert data["totalResources"] == 0
+
+
+async def test_carbon_stats_unknown_project_404(client: AsyncClient):
     """GET 不存在的 project_id → 404。"""
-    resp = await client.get("/projects/9999/optimize/monthly-emissions")
+    resp = await client.get(
+        "/projects/9999/resource-usage/stats/carbon?usageType=ACTUAL"
+    )
     assert resp.status_code == 404

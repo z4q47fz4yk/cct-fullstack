@@ -1,4 +1,3 @@
-from datetime import date
 from enum import Enum
 from typing import Annotated
 from uuid import UUID
@@ -8,7 +7,6 @@ from pydantic import Field, field_validator
 
 from src.schemas.public.mixin import CamelCaseRespMixin, TimeStampRespMixin
 from src.schemas.public.validators import reject_explicit_none
-from src.schemas.resource import ResourceCategory
 from src.schemas.task import DependencyType
 
 
@@ -225,30 +223,3 @@ class OptimizeSolution(CamelCaseRespMixin):
     violations: list[ResourceConstraintViolation] = Field(description="资源限制违反量")
     peak_personnel: int = Field(description="峰值施工人数")
     housing_rooms: int = Field(description="临时用房间数")
-
-
-class MonthlyResourceEmission(CamelCaseRespMixin):
-    """一个月内某个资源的碳排放量"""
-
-    month: date = Field(description="月份（每月1日）")
-    month_index: int = Field(ge=1, description="从起始月起的月份序号（1-based）")
-    resource_id: int = Field(description="资源ID")
-    resource_name: str = Field(description="资源名称")
-    category: ResourceCategory = Field(description="资源类别")
-    quantity: float = Field(ge=0, description="本月用量")
-    cost: float = Field(description="本月成本（用量 × 有效单价）")
-    emission: float = Field(description="本月碳排放量（kgCO2e，可为负）")
-    bucket: str | None = Field(default=None, description="水电桶标记 water/electricity")
-
-
-class MonthlyEmissionResp(CamelCaseRespMixin):
-    """月度碳排放响应：按资源 × 月份聚合"""
-
-    items: list[MonthlyResourceEmission] = Field(description="逐月逐资源的碳排放记录")
-    total_months: int = Field(ge=0, description="覆盖的月份数")
-    total_resources: int = Field(ge=0, description="涉及的资源数")
-    start_month: date | None = Field(default=None, description="实际起始月")
-    end_month: date | None = Field(default=None, description="实际结束月（不包含该月）")
-    source: str | None = Field(
-        default=None, description="PLANNED 数据来源：baseline=计划基线 / usage=用量行"
-    )

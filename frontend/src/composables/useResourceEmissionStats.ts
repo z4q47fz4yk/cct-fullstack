@@ -1,8 +1,8 @@
 import { computed } from 'vue'
 import { useQuery } from '@pinia/colada'
-import { getMonthlyEmissionsQuery } from '@/client/@pinia/colada.gen'
+import { getResourceUsageCarbonStatsQuery } from '@/client/@pinia/colada.gen'
 import { useProjectContext } from '@/composables/useProjectContext'
-import type { MonthlyResourceEmission, ResourceCategory } from '@/client/types.gen'
+import type { CarbonUsageStat, ResourceCategory } from '@/client/types.gen'
 
 /**
  * 单个资源在某维度（实际 / 计划）下的总排放（单位 kgCO₂e）
@@ -18,13 +18,15 @@ export interface ResourceEmissionSplit {
 }
 
 /**
- * 并行拉取 ACTUAL 和 PLANNED 两个维度的月度排放，客户端按 (resourceId) 合并
+ * 并行拉取 ACTUAL 和 PLANNED 两个维度的周期碳排，客户端按 (resourceId) 合并
  *
- * 后端限制：单次 GET /monthly-emissions 只能按一种 usageType 过滤。
- * 原 ResourceUsageChart 展示的「预计 vs 实际」分组条形图需要两份数据并排渲染。
+ * 数据源：GET /resource-usage/stats/carbon（usage 表按 usage_type 过滤聚合）。
+ * 后端限制：单次请求只能按一种 usageType 过滤，故 ACTUAL/PLANNED 各请求一次。
+ * 两个维度语义均为「用量表口径」：实际 = usage_type=ACTUAL，计划 = usage_type=PLANNED，
+ * 不读取计划基线（baseline）快照。
  *
  * 与 useCarbonStats 的区别：
- * - useCarbonStats 仅取 ACTUAL，用于 insights 页
+ * - useCarbonStats 仅取 ACTUAL（月粒度），用于 insights/settings 碳排分析页
  * - 本 composable 同时取 ACTUAL + PLANNED，专供「分组对比」视图
  *
  * 缓存隔离：`@pinia/colada` 按 query 入参生成 cache key，
@@ -35,29 +37,27 @@ export function useResourceEmissionStats() {
 
   // 实际用量
   const actualQuery = useQuery(() =>
-    getMonthlyEmissionsQuery({
+    getResourceUsageCarbonStatsQuery({
       path: { project_id: currentProjectId.value! },
-      query: { usageType: 'ACTUAL' },
+      query: { usageType: 'ACTUAL', granularity: 'month' },
     }),
   )
 
   // 计划用量
   const plannedQuery = useQuery(() =>
-    getMonthlyEmissionsQuery({
+    getResourceUsageCarbonStatsQuery({
       path: { project_id: currentProjectId.value! },
-      query: { usageType: 'PLANNED' },
+      query: { usageType: 'PLANNED', granularity: 'month' },
     }),
   )
 
-  // ─── 原始数据 ───────────────────────────────────────────
-  const actualItems = computed<MonthlyResourceEmission[]>(
-    () => actualQuery.state.value?.data?.items ?? [],
-  )
-  const plannedItems = computed<MonthlyResourceEmission[]>(
+  // ─── 原始数据（忽略周期，仅按资源合并） ─────────────────
+  const actualItems = computed<CarbonUsageStat[]>(() => actualQuery.state.value?.data?.items ?? [])
+  const plannedItems = computed<CarbonUsageStat[]>(
     () => plannedQuery.state.value?.data?.items ?? [],
   )
 
-  // ─── 按资源合并（不区分月份）────────────────────────────
+  // ─── 按资源合并（不区分周期）────────────────────────────
   const byResource = computed<ResourceEmissionSplit[]>(() => {
     const m = new Map<
       number,
@@ -100,10 +100,7 @@ export function useResourceEmissionStats() {
 
   const isNotFound = computed(() => {
     const a = actualQuery.error.value as { status?: number; response?: { status?: number } } | null
-    const p = plannedQuery.error.value as {
-      status?: number
-      response?: { status?: number }
-    } | null
+    const p = plannedQuery.error.value as { status?: number; response?: { status?: number } } | null
     return (
       a?.status === 404 ||
       a?.response?.status === 404 ||

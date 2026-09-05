@@ -1,8 +1,8 @@
 import { computed } from 'vue'
 import { useQuery } from '@pinia/colada'
 import { useProjectContext } from '@/composables/useProjectContext'
-import { getMonthlyEmissionsQuery } from '@/client/@pinia/colada.gen'
-import type { MonthlyResourceEmission, ResourceCategory } from '@/client/types.gen'
+import { getResourceUsageCarbonStatsQuery } from '@/client/@pinia/colada.gen'
+import type { CarbonUsageStat, ResourceCategory } from '@/client/types.gen'
 
 export interface CategoryEmission {
   category: ResourceCategory
@@ -30,10 +30,27 @@ export interface MonthCategoryEmission {
 }
 
 /**
+ * 报表条目（月粒度视图投影）。
+ *
+ * 后端新聚合端点返回 period/periodIndex（随颗粒度 day/week/month 自描述）；
+ * 既有页面全部按「月」消费，故在 composable 层把 period 投影为 month、
+ * periodIndex 投影为 monthIndex，其余字段（resourceId/name/category/
+ * quantity/cost/emission/bucket）原样保留。
+ */
+export interface CarbonMonthItem extends CarbonUsageStat {
+  /** 周期首日（月粒度 = 月初）ISO 日期串 */
+  month: string
+  /** 从首期起的序号（1-based） */
+  monthIndex: number
+}
+
+/**
  * 碳排放统计 composable
  *
- * 直接使用后端聚合接口 GET /projects/{project_id}/optimize/monthly-emissions
- * 服务端 SQL 聚合（按资源 × 月份），客户端仅做二次分组（按类别 / 按月 / 按资源 / 交叉）。
+ * 数据源：GET /projects/{project_id}/resource-usage/stats/carbon
+ * 服务端按 (资源 × 粒度) SQL 聚合（只读 usage 表，ACTUAL/PLANNED 独立），
+ * 客户端仅做二次分组（类别 / 按月 / 资源 / 交叉）。当前消费方均为月粒度，
+ * 由本层做 period → month 投影，页面零改动。
  *
  * 404 检测：接口返回 404 时 isNotFound 为 true（页面层负责跳转）
  */
@@ -41,16 +58,22 @@ export function useCarbonStats() {
   const { currentProjectId } = useProjectContext()
 
   const { state, asyncStatus, error, refresh } = useQuery(() =>
-    getMonthlyEmissionsQuery({
+    getResourceUsageCarbonStatsQuery({
       path: { project_id: currentProjectId.value! },
-      query: { usageType: 'ACTUAL' },
+      query: { usageType: 'ACTUAL', granularity: 'month' },
     }),
   )
 
   const resp = computed(() => state.value?.data)
 
-  // ─── 原始数据 ───────────────────────────────────────────
-  const items = computed<MonthlyResourceEmission[]>(() => resp.value?.items ?? [])
+  // ─── 原始数据（period → month 投影，兼容既有月粒度视图） ───
+  const items = computed<CarbonMonthItem[]>(() =>
+    (resp.value?.items ?? []).map((x) => ({
+      ...x,
+      month: x.period,
+      monthIndex: x.periodIndex,
+    })),
+  )
 
   // ─── 总量 ────────────────────────────────────────────────
   const totalEmissionKg = computed(() => {
@@ -68,8 +91,8 @@ export function useCarbonStats() {
     return sum
   })
 
-  // ─── 元信息（来自响应顶层） ─────────────────────────────
-  const totalMonths = computed(() => resp.value?.totalMonths ?? 0)
+  // ─── 元信息（来自响应顶层；月粒度下即覆盖月份数） ─────────
+  const totalMonths = computed(() => resp.value?.totalPeriods ?? 0)
   const totalResources = computed(() => resp.value?.totalResources ?? 0)
 
   // ─── 按资源类别聚合 ──────────────────────────────────────

@@ -6,11 +6,11 @@
  * - 'line'：单/多资源折线图，数据源为 useCarbonStats.items
  */
 import { computed, type Ref } from 'vue'
-import type { MonthlyResourceEmission, ResourceCategory } from '@/client/types.gen'
+import type { ResourceCategory } from '@/client/types.gen'
 import { categoryConfigMap } from '@/types/resource'
 import { getThemeColors, getCategoryColor, withOpacity } from '@/utils/themeColors'
 import { fmtNumber } from '@/utils/format'
-import type { MonthCategoryEmission } from './useCarbonStats'
+import type { CarbonMonthItem, MonthCategoryEmission } from './useCarbonStats'
 
 export interface EChartsOption {
   [key: string]: unknown
@@ -23,7 +23,7 @@ interface UseEmissionTrendChartOptions {
   /** stacked 模式数据源（按月 × 类别） */
   byMonthCategory: Ref<MonthCategoryEmission[]>
   /** line 模式数据源（原始资源月度记录） */
-  items: Ref<MonthlyResourceEmission[]>
+  items: Ref<CarbonMonthItem[]>
   /** line 模式下要展示的资源 id 列表 */
   selectedResourceIds: Ref<number[]>
 }
@@ -117,7 +117,7 @@ function generateStackedOption(data: MonthCategoryEmission[]): EChartsOption {
 }
 
 function generateLineOption(
-  items: MonthlyResourceEmission[],
+  items: CarbonMonthItem[],
   selectedResourceIds: number[],
 ): EChartsOption {
   const C = getThemeColors()

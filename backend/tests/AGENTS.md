@@ -31,7 +31,7 @@ pytest + pytest-asyncio suite. Nested transactions for isolation (rollback after
 | `test_project.py`             | 5     | ~30                | CRUD, land_area/building_area fields                   |
 | `test_optimize.py`            | 8     | ~30                | Run CRUD, constraint CRUD, status-dependent responses  |
 | `test_resource_public.py`     | 10    | ~15                | Read-only list, batch copy (by IDs, by category)       |
-| `test_monthly_emissions.py`   | 12    | 12                 | ACTUAL vs PLANNED filtering, date windows, aggregation |
+| `test_carbon_stats.py`        | 14    | 14                 | Carbon stats endpoint (ACTUAL/PLANNED filtering, day/week/month granularity, date windows, usage-only) |
 | `test_db_errors.py`           | 8     | 8                  | Unit tests for SQLSTATE violation detection utilities  |
 
 ## Conventions

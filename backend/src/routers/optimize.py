@@ -17,7 +17,6 @@ import asyncio
 import logging
 import uuid
 from asyncio import Queue
-from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -40,7 +39,6 @@ from src.models.resource_usage import UsageType
 from src.schemas.optimize import (
     DependencySnapshot,
     MergeOptimizeRequest,
-    MonthlyEmissionResp,
     OptimizeSolution,
     ResourceConstraintCreate,
     ResourceConstraintResp,
@@ -58,7 +56,6 @@ from src.schemas.resource_reuse_config import (
     ResourceReuseConfigResp,
     ResourceReuseConfigUpdate,
 )
-from src.services.monthly_emissions import MonthlyEmissionService
 from src.services.optimization_adapter import (
     OptimizationAdapter,
     load_optimization_data,
@@ -121,48 +118,6 @@ async def list_optimize_records(
     total = (await session.exec(stmt_count)).one()
 
     return ListResp(items=list(items), total=total)
-
-
-@router.get(
-    "/monthly-emissions",
-    response_model=MonthlyEmissionResp,
-    status_code=200,
-    summary="按月按资源的碳排放",
-    description=(
-        "聚合指定 usage_type (ACTUAL/PLANNED) 的资源用量，"
-        "按月按资源返回碳排放量。直接 SQL 聚合，不调度、不跑优化。"
-        "可选 startMonth/endMonth 限定月份窗口（endMonth 不含）。"
-    ),
-)
-async def get_monthly_emissions(
-    session: Annotated[AsyncSession, Depends(get_session)],
-    project: CurrentProject,
-    usage_type: Annotated[
-        str | None,
-        Query(
-            description="使用类型过滤：ACTUAL/PLANNED，不传返回全部", alias="usageType"
-        ),
-    ] = None,
-    start_month: Annotated[
-        date | None, Query(description="起始月（每月1日，含）", alias="startMonth")
-    ] = None,
-    end_month: Annotated[
-        date | None, Query(description="结束月（不含；传下月1日）", alias="endMonth")
-    ] = None,
-) -> MonthlyEmissionResp:
-    # 显式转 UsageType，绕过 FastAPI StrEnum 解析问题；None 时不过滤
-    parsed: UsageType | None = None
-    if usage_type is not None:
-        try:
-            parsed = UsageType(usage_type)
-        except ValueError as e:
-            raise HTTPException(status_code=422, detail=str(e)) from e
-    service = MonthlyEmissionService(session, project.id)
-    return await service.get_monthly_emissions(
-        usage_type=parsed,
-        start_month=start_month,
-        end_month=end_month,
-    )
 
 
 @router.get(

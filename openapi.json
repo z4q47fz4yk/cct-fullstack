@@ -1772,6 +1772,110 @@
         }
       }
     },
+    "/projects/{project_id}/resource-usage/stats/carbon": {
+      "get": {
+        "tags": [
+          "carbon"
+        ],
+        "summary": "资源用量碳排放统计",
+        "description": "对指定 usage_type（ACTUAL/PLANNED）的资源用量做现场聚合，按粒度（day/week/month）× 资源返回 quantity/cost/emission。PLANNED 为计划口径，业务上一天代指一月，仅支持月粒度（day/week 返回 422）。数据只来自用量表，不读取计划基线快照。",
+        "operationId": "get_resource_usage_carbon_stats",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "usageType",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "使用类型过滤：ACTUAL / PLANNED",
+              "title": "Usagetype"
+            },
+            "description": "使用类型过滤：ACTUAL / PLANNED"
+          },
+          {
+            "name": "granularity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "聚合粒度：day/week/month，默认 month",
+              "default": "month",
+              "title": "Granularity"
+            },
+            "description": "聚合粒度：day/week/month，默认 month"
+          },
+          {
+            "name": "startDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "起始日期（含）",
+              "title": "Startdate"
+            },
+            "description": "起始日期（含）"
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "结束日期（不含）",
+              "title": "Enddate"
+            },
+            "description": "结束日期（不含）"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CarbonStatsResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/projects/{project_id}/resource-usage/batch": {
       "post": {
         "tags": [
@@ -2955,105 +3059,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RunCreateResp"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/projects/{project_id}/optimize/monthly-emissions": {
-      "get": {
-        "tags": [
-          "optimize"
-        ],
-        "summary": "按月按资源的碳排放",
-        "description": "聚合指定 usage_type (ACTUAL/PLANNED) 的资源用量，按月按资源返回碳排放量。直接 SQL 聚合，不调度、不跑优化。可选 startMonth/endMonth 限定月份窗口（endMonth 不含）。",
-        "operationId": "get_monthly_emissions",
-        "parameters": [
-          {
-            "name": "project_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Project Id"
-            }
-          },
-          {
-            "name": "usageType",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "使用类型过滤：ACTUAL/PLANNED，不传返回全部",
-              "title": "Usagetype"
-            },
-            "description": "使用类型过滤：ACTUAL/PLANNED，不传返回全部"
-          },
-          {
-            "name": "startMonth",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "date"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "起始月（每月1日，含）",
-              "title": "Startmonth"
-            },
-            "description": "起始月（每月1日，含）"
-          },
-          {
-            "name": "endMonth",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "date"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "结束月（不含；传下月1日）",
-              "title": "Endmonth"
-            },
-            "description": "结束月（不含；传下月1日）"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MonthlyEmissionResp"
                 }
               }
             }
@@ -7409,6 +7414,109 @@
         ],
         "title": "Body_validate_config"
       },
+      "CarbonStatsResp": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CarbonUsageStat"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "按周期 × 资源的碳排放记录"
+          },
+          "totalPeriods": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Totalperiods",
+            "description": "覆盖的周期数"
+          },
+          "totalResources": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Totalresources",
+            "description": "涉及的资源数"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "totalPeriods",
+          "totalResources"
+        ],
+        "title": "CarbonStatsResp",
+        "description": "资源用量碳排放统计响应。"
+      },
+      "CarbonUsageStat": {
+        "properties": {
+          "period": {
+            "type": "string",
+            "format": "date",
+            "title": "Period",
+            "description": "粒度周期首日：day=当天 / week=周一 / month=月初"
+          },
+          "periodIndex": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Periodindex",
+            "description": "从首个周期起的周期序号（1-based）"
+          },
+          "resourceId": {
+            "type": "integer",
+            "title": "Resourceid",
+            "description": "资源ID"
+          },
+          "resourceName": {
+            "type": "string",
+            "title": "Resourcename",
+            "description": "资源名称"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ResourceCategory",
+            "description": "资源类别"
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Quantity",
+            "description": "本期用量"
+          },
+          "cost": {
+            "type": "number",
+            "title": "Cost",
+            "description": "本期成本（用量 × 有效单价）"
+          },
+          "emission": {
+            "type": "number",
+            "title": "Emission",
+            "description": "本期碳排放量（kgCO2e，可为负）"
+          },
+          "bucket": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bucket",
+            "description": "水电桶标记 water/electricity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "period",
+          "periodIndex",
+          "resourceId",
+          "resourceName",
+          "category",
+          "quantity",
+          "cost",
+          "emission"
+        ],
+        "title": "CarbonUsageStat",
+        "description": "一个粒度周期内某个资源的用量 / 成本 / 碳排放。"
+      },
       "ChartCreate": {
         "properties": {
           "name": {
@@ -9113,147 +9221,6 @@
         ],
         "title": "MergeOptimizeRequest",
         "description": "合并多个优化运行结果（POST /optimize/merge）。\n\n参与合并的运行须属于同一项目且均为 SUCCESS；\n各运行所覆盖的任务 id 集合必须一致，否则返回 422。"
-      },
-      "MonthlyEmissionResp": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/MonthlyResourceEmission"
-            },
-            "type": "array",
-            "title": "Items",
-            "description": "逐月逐资源的碳排放记录"
-          },
-          "totalMonths": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Totalmonths",
-            "description": "覆盖的月份数"
-          },
-          "totalResources": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Totalresources",
-            "description": "涉及的资源数"
-          },
-          "startMonth": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Startmonth",
-            "description": "实际起始月"
-          },
-          "endMonth": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Endmonth",
-            "description": "实际结束月（不包含该月）"
-          },
-          "source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source",
-            "description": "PLANNED 数据来源：baseline=计划基线 / usage=用量行"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "totalMonths",
-          "totalResources"
-        ],
-        "title": "MonthlyEmissionResp",
-        "description": "月度碳排放响应：按资源 × 月份聚合"
-      },
-      "MonthlyResourceEmission": {
-        "properties": {
-          "month": {
-            "type": "string",
-            "format": "date",
-            "title": "Month",
-            "description": "月份（每月1日）"
-          },
-          "monthIndex": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Monthindex",
-            "description": "从起始月起的月份序号（1-based）"
-          },
-          "resourceId": {
-            "type": "integer",
-            "title": "Resourceid",
-            "description": "资源ID"
-          },
-          "resourceName": {
-            "type": "string",
-            "title": "Resourcename",
-            "description": "资源名称"
-          },
-          "category": {
-            "$ref": "#/components/schemas/ResourceCategory",
-            "description": "资源类别"
-          },
-          "quantity": {
-            "type": "number",
-            "minimum": 0.0,
-            "title": "Quantity",
-            "description": "本月用量"
-          },
-          "cost": {
-            "type": "number",
-            "title": "Cost",
-            "description": "本月成本（用量 × 有效单价）"
-          },
-          "emission": {
-            "type": "number",
-            "title": "Emission",
-            "description": "本月碳排放量（kgCO2e，可为负）"
-          },
-          "bucket": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Bucket",
-            "description": "水电桶标记 water/electricity"
-          }
-        },
-        "type": "object",
-        "required": [
-          "month",
-          "monthIndex",
-          "resourceId",
-          "resourceName",
-          "category",
-          "quantity",
-          "cost",
-          "emission"
-        ],
-        "title": "MonthlyResourceEmission",
-        "description": "一个月内某个资源的碳排放量"
       },
       "OptimizeSolution": {
         "properties": {

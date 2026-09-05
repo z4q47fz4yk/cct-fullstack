@@ -14,7 +14,7 @@ services/
 ├── daily_report.py            # DailyReportService (multi-step Excel import pipeline)
 ├── resource_public.py         # ResourcePublicService (global dictionary copy)
 ├── resource_usage.py          # ResourceUsageService (CRUD for manual submissions)
-├── monthly_emissions.py       # MonthlyEmissionService (carbon aggregation)
+├── carbon_stats.py           # CarbonStatsService (usage carbon aggregation, usage-only, day/week/month)
 ├── optimization_adapter.py    # load_optimization_data + OptimizationAdapter (data → NSGA2 types)
 ├── optimization_consumer.py   # QueueBackedCallback + _event_consumer (async DB writer)
 └── public/
@@ -33,7 +33,7 @@ services/
 - `DailyReportService(session, project_id)` — 4-step pipeline: parse → confirm_mapping → allocate → submit
 - `ResourceUsageService(session, project_id)` — CRUD with batch-create support
 - `ResourcePublicService(session)` — global dictionary, `project_id` passed per-call for copy
-- `MonthlyEmissionService(session, project_id)` — SQL aggregation by month + resource
+- `CarbonStatsService(session, project_id)` — usage-only carbon aggregation by period (day/week/month) + resource; PLANNED restricted to month granularity
 
 **Async/Special**:
 - `optimization_adapter.py` — module-level `load_optimization_data(session, project_id)` loads project data; `OptimizationAdapter` class converts to NSGA2 input types

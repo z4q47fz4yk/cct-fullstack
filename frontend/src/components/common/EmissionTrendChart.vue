@@ -11,9 +11,9 @@ import { use } from 'echarts/core'
 import { BarChart, LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
-import type { MonthlyResourceEmission, ResourceCategory } from '@/client/types.gen'
+import type { ResourceCategory } from '@/client/types.gen'
 import { categoryConfigMap } from '@/types/resource'
-import type { MonthCategoryEmission } from '@/composables/useCarbonStats'
+import type { CarbonMonthItem, MonthCategoryEmission } from '@/composables/useCarbonStats'
 import { useEmissionTrendChart, type TrendMode } from '@/composables/useEmissionTrendChart'
 import ChartEmptyState from './ChartEmptyState.vue'
 
@@ -22,7 +22,7 @@ use([BarChart, LineChart, GridComponent, TooltipComponent, LegendComponent, Canv
 const { mode, byMonthCategory, items, selectedResourceIds, availableResources } = defineProps<{
   mode: TrendMode
   byMonthCategory: MonthCategoryEmission[]
-  items: MonthlyResourceEmission[]
+  items: CarbonMonthItem[]
   selectedResourceIds: number[]
   availableResources: Array<{ id: number; name: string; category: ResourceCategory }>
 }>()
