@@ -23,7 +23,7 @@
     "oxfmt": {
       "initialization_options": {
         "settings": {
-          "configPath": "./vite.config.ts",
+          "configPath": "./.oxfmtrc.json",
           "run": "onSave"
         }
       }
@@ -31,7 +31,7 @@
   },
   "languages": {
     "Python": {
-      "language_servers": ["ty", "basedpyright", "ruff"],
+      "language_servers": ["ty", "basedpyright", "ruff"]
     },
     "CSS": {
       "format_on_save": "on",
@@ -47,19 +47,6 @@
       ]
     },
     "GraphQL": {
-      "format_on_save": "on",
-      "prettier": {
-        "allowed": false
-      },
-      "formatter": [
-        {
-          "language_server": {
-            "name": "oxfmt"
-          }
-        }
-      ]
-    },
-    "Handlebars": {
       "format_on_save": "on",
       "prettier": {
         "allowed": false
@@ -96,36 +83,9 @@
             "name": "oxfmt"
           }
         }
-      ],
-      "code_action": "source.fixAll.oxc"
-    },
-    "JSX": {
-      "format_on_save": "on",
-      "prettier": {
-        "allowed": false
-      },
-      "formatter": [
-        {
-          "language_server": {
-            "name": "oxfmt"
-          }
-        }
       ]
     },
     "JSON": {
-      "format_on_save": "on",
-      "prettier": {
-        "allowed": false
-      },
-      "formatter": [
-        {
-          "language_server": {
-            "name": "oxfmt"
-          }
-        }
-      ]
-    },
-    "JSON5": {
       "format_on_save": "on",
       "prettier": {
         "allowed": false
@@ -151,46 +111,7 @@
         }
       ]
     },
-    "Less": {
-      "format_on_save": "on",
-      "prettier": {
-        "allowed": false
-      },
-      "formatter": [
-        {
-          "language_server": {
-            "name": "oxfmt"
-          }
-        }
-      ]
-    },
     "Markdown": {
-      "format_on_save": "on",
-      "prettier": {
-        "allowed": false
-      },
-      "formatter": [
-        {
-          "language_server": {
-            "name": "oxfmt"
-          }
-        }
-      ]
-    },
-    "MDX": {
-      "format_on_save": "on",
-      "prettier": {
-        "allowed": false
-      },
-      "formatter": [
-        {
-          "language_server": {
-            "name": "oxfmt"
-          }
-        }
-      ]
-    },
-    "SCSS": {
       "format_on_save": "on",
       "prettier": {
         "allowed": false
@@ -229,7 +150,7 @@
         }
       ]
     },
-    "Vue": {
+    "Vue.js": {
       "format_on_save": "on",
       "prettier": {
         "allowed": false

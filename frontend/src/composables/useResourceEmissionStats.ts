@@ -100,7 +100,10 @@ export function useResourceEmissionStats() {
 
   const isNotFound = computed(() => {
     const a = actualQuery.error.value as { status?: number; response?: { status?: number } } | null
-    const p = plannedQuery.error.value as { status?: number; response?: { status?: number } } | null
+    const p = plannedQuery.error.value as {
+      status?: number
+      response?: { status?: number }
+    } | null
     return (
       a?.status === 404 ||
       a?.response?.status === 404 ||
