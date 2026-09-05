@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# 由 frontend/.vite-hooks/_/post-rewrite stub（vite-plus 分发器）调用。
+# rebase / commit --amend / cherry-pick 成功后同步依赖与契约快照；详见 scripts/post-rewrite-sync.sh。
+[ -x "$(git rev-parse --show-toplevel)/scripts/post-rewrite-sync.sh" ] || exit 0
+exec bash "$(git rev-parse --show-toplevel)/scripts/post-rewrite-sync.sh"

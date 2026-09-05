@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# 由 frontend/.vite-hooks/_/post-merge stub（vite-plus 分发器）调用。
+# merge/pull 成功后同步依赖与契约快照；详见 scripts/post-merge-sync.sh。
+[ -x "$(git rev-parse --show-toplevel)/scripts/post-merge-sync.sh" ] || exit 0
+exec bash "$(git rev-parse --show-toplevel)/scripts/post-merge-sync.sh"

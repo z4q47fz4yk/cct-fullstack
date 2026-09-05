@@ -1,1 +1,10 @@
+#!/usr/bin/env sh
+# pre-commit 运行文件（已入库；底层 _/ stub 与 core.hooksPath 由 vp install 提供）：
+# 1) `vp staged` —— lint-staged 分发（oxfmt/oxlint/ruff/废弃类拦截，见根 vite.config.ts）；
+# 2) 契约配套 —— 暂存含 backend/src 时自动重导出 openapi.json 并入提交。
 vp staged
+root="$(git rev-parse --show-toplevel)"
+if [ -x "$root/scripts/pre-commit-contract.sh" ]; then
+  bash "$root/scripts/pre-commit-contract.sh"
+fi
+exit 0
