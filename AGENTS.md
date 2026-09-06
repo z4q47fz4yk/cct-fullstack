@@ -14,6 +14,8 @@ frontend/     Vue 3 + Vite 前端（详见 frontend/AGENTS.md）
 backend/      FastAPI + SQLModel 后端（详见 backend/AGENTS.md）
 scripts/      多 worktree 开发工具（端口分配、启动、契约校验）
 openapi.json  后端契约快照（入库；前端客户端离线生成源）
+legacy/*      合并前各仓库历史（legacy/backend、legacy/frontend、legacy/rust-server）
+              考古保留，不入 main；如需继续 Rust 版开发，从 legacy/rust-server 开分支
 ```
 
 ## Git 规则
