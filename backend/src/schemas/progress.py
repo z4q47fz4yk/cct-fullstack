@@ -62,10 +62,47 @@ class TaskProgressSummaryResp(CamelCaseRespMixin):
     record_count: int = Field(description="记录条数")
 
 
+class ProgressPointResp(CamelCaseRespMixin):
+    """单工序每日进度点（当日累计值，已按每日取最后一条去重）。"""
+
+    date: date_type = Field(description="进度日期")
+    percent: float = Field(description="当日累计完成百分比 0-100")
+
+
+class TaskProgressTimelineItemResp(CamelCaseRespMixin):
+    """单工序进度时间线（用于施工进度甘特的每日累计/增量）。"""
+
+    task_id: int = Field(description="工序ID")
+    task_code: str = Field(description="工序编码")
+    task_name: str = Field(description="工序名称")
+    actual_start_date: date_type | None = Field(
+        default=None, description="实际开始日期（首个最新值>0 的日期）"
+    )
+    actual_completion_date: date_type | None = Field(
+        default=None, description="实际完成日期（最新记录=100% 的日期）"
+    )
+    current_percent: float = Field(description="当前进度（最新记录）")
+    is_completed: bool = Field(description="是否完成（最新记录=100%）")
+    series: list[ProgressPointResp] = Field(
+        description="逐日累计进度（按日期升序，每日取最后一条）"
+    )
+
+
+class ProgressTimelineResp(CamelCaseRespMixin):
+    """项目全部工序的逐日进度时间线。"""
+
+    items: list[TaskProgressTimelineItemResp] = Field(
+        description="全部工序（无进度记录的工序含空 series）"
+    )
+
+
 __all__ = [
     "TaskProgressCreate",
     "TaskProgressBatchItem",
     "TaskProgressBatchCreate",
     "TaskProgressResp",
     "TaskProgressSummaryResp",
+    "ProgressPointResp",
+    "TaskProgressTimelineItemResp",
+    "ProgressTimelineResp",
 ]

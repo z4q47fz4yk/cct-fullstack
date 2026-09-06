@@ -30,6 +30,7 @@
     "markstream-vue": "^2.0.7",
     "material-symbols": "^0.40.2",
     "pinia": "^3.0.4",
+    "plotly.js": "^4.0.0",
     "tailwindcss": "^4.3.3",
     "valibot": "^1.4.2",
     "vee-validate": "^4.15.1",

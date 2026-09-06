@@ -10,6 +10,7 @@ from src.dependencies.public.project import CurrentProject
 from src.dependencies.public.session import get_db_session
 from src.models.task import Task
 from src.schemas.progress import (
+    ProgressTimelineResp,
     TaskProgressBatchCreate,
     TaskProgressCreate,
     TaskProgressResp,
@@ -50,6 +51,24 @@ async def batch_create_progress_endpoint(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     return [TaskProgressResp.model_validate(r) for r in rows]
+
+
+@router.get(
+    "/progress/timeline",
+    response_model=ProgressTimelineResp,
+    status_code=200,
+    summary="项目全部工序逐日进度时间线",
+    description=(
+        "返回全部工序的每日累计进度序列（按日期升序、每日取最后一条，"
+        "与汇总口径一致），含无进度记录的工序（空 series）。"
+        "供施工进度 Plotly 主图绘制每日累计进度线与每日增量。"
+    ),
+)
+async def progress_timeline_endpoint(
+    service: Annotated[TaskProgressService, Depends(get_progress_service)],
+) -> ProgressTimelineResp:
+    """项目级逐日进度时间线。"""
+    return await service.timeline()
 
 
 @router.get(

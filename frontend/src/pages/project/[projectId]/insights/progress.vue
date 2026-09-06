@@ -1,27 +1,39 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+/**
+ * 施工进度（分析洞察）页
+ *
+ * 主图 = Plotly 三区（ProgressTimelinePlot）：
+ *   上 甘特（日历日期 x 轴：计划/实际横道 + 每日累计进度线）
+ *   中 碳排柱（ACTUAL，粒度 day/week/month 可切，按维度堆叠）
+ *   下 天气折线（气温/降水）
+ * 计划数据来自基线 tasks 快照（start/duration 相对锚点偏移），
+ * 逐日进度来自 /task/progress/timeline，碳排来自 /resource-usage/stats/carbon。
+ */
+import { computed, reactive, ref, watch } from 'vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import ChartEmptyState from '@/components/common/ChartEmptyState.vue'
 import SegmentControl, { type SegmentOption } from '@/components/common/SegmentControl.vue'
-import ConstructionTimelineChart, {
-  type EmissionBand,
-  type EmissionSegment,
-  type WeatherPoint,
-} from '@/components/schedule/ConstructionTimelineChart.vue'
-import type { GanttChartItem } from '@/components/common/GanttChart.vue'
+import ProgressTimelinePlot from '@/components/schedule/ProgressTimelinePlot.vue'
+import type {
+  CarbonBarDatum,
+  PlotGranularity,
+  ProgressPlotData,
+  TimelineTaskRow,
+  WeatherDatum,
+} from '@/composables/useProgressPlotFigure'
 import { useInsightsStore } from '@/stores/insights'
 import { useProjectApi } from '@/composables/useProjectApi'
 import { usePlanApi } from '@/composables/usePlanApi'
 import { useProgressApi } from '@/composables/useProgressApi'
 import { useWeatherApi } from '@/composables/useWeatherApi'
-import { useCarbonStats } from '@/composables/useCarbonStats'
+import { useCarbonStats, type CarbonGranularity } from '@/composables/useCarbonStats'
 import { useConfirm } from '@/composables/useConfirm'
 import { notifySuccess } from '@/composables/useToast'
 import { fmtEmission, fmtWanYuan, fmtNumber } from '@/utils/format'
 import { getThemeColors, getCategoryColor, getSliceColor } from '@/utils/themeColors'
 import { todayIsoLocal } from '@/utils/date'
 import { formatHttpError } from '@/utils/error'
-import type { TaskProgressSummaryResp, WeatherResp } from '@/client/types.gen'
+import type { WeatherResp } from '@/client/types.gen'
 import { categoryConfigMap, type ResourceCategory } from '@/types/resource'
 
 definePage({
@@ -38,33 +50,28 @@ definePage({
 const store = useInsightsStore()
 const { project } = useProjectApi()
 const { plan } = usePlanApi()
-const { projectSummaries, isLoadingProjectSummaries } = useProgressApi()
+const { projectSummaries, isLoadingProjectSummaries, progressTimeline } = useProgressApi()
 const { weather, createRecord, updateRecord, deleteRecord, refresh } = useWeatherApi()
-const { items, byMonthCategory, totalEmissionTon, totalCost } = useCarbonStats()
 const { confirmDanger } = useConfirm()
 const C = getThemeColors()
 
-// ──── 锚点：实际开工（空回退拟开工 / 最早碳排月份） ───────
+const MS_DAY = 86_400_000
+// 本地时区“今天”（toISOString 为 UTC，跨时区会取到昨天）
+const todayIso = todayIsoLocal
+
+// ──── 锚点：实际开工（空回退拟开工） ───────────────────────
 const anchorDate = computed<string | null>(
   () => project.value?.actual_start_date ?? project.value?.planned_start_date ?? null,
 )
 
-/** 时间轴锚点：项目日期优先，缺失时回退到最早碳排月份（保证月度色带仍能对齐） */
-const timelineAnchor = computed<string | null>(() => {
-  if (anchorDate.value) return anchorDate.value
-  const months = byMonthCategory.value.map((m) => m.month).sort()
-  return months.length > 0 ? monthFirst(months[0]!) : null
-})
-
-function dayIndex(date: string): number {
-  if (!timelineAnchor.value) return 0
-  const a = new Date(timelineAnchor.value).getTime()
-  const d = new Date(date).getTime()
-  return Math.round((d - a) / 86_400_000)
+/** 锚点 + 偏移天数 → YYYY-MM-DD */
+function anchorPlusDays(days: number): string {
+  const a = new Date(anchorDate.value ?? todayIso())
+  const d = new Date(a.getTime() + days * MS_DAY)
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mm}-${dd}`
 }
-
-// 本地时区“今天”（toISOString 为 UTC，跨时区会取到昨天）
-const todayIso = todayIsoLocal
 
 // ──── 顶部统计 ─────────────────────────────────────────────
 const summaryByTask = computed(() => new Map(projectSummaries.value.map((s) => [s.taskId, s])))
@@ -77,10 +84,18 @@ const taskRows = computed(() => {
     code: string
     name: string
     planned?: { start: number; duration: number }
-    actual?: TaskProgressSummaryResp
+    summary?: {
+      currentPercent: number
+      isCompleted: boolean
+      actualStartDate: string | null
+      actualCompletionDate: string | null
+      series: { date: string; percent: number }[]
+    }
   }[] = []
+  const tlMap = new Map((progressTimeline.value?.items ?? []).map((s) => [s.taskId, s]))
   for (const t of store.tasks) {
     seen.add(t.id)
+    const tl = tlMap.get(t.id)
     rows.push({
       taskId: t.id,
       code: t.code,
@@ -88,17 +103,34 @@ const taskRows = computed(() => {
       planned: planMap.get(t.id)
         ? { start: planMap.get(t.id)!.start, duration: planMap.get(t.id)!.duration }
         : undefined,
-      actual: summaryByTask.value.get(t.id),
+      summary: tl
+        ? {
+            currentPercent: tl.currentPercent,
+            isCompleted: tl.isCompleted,
+            actualStartDate: tl.actualStartDate ?? null,
+            actualCompletionDate: tl.actualCompletionDate ?? null,
+            series: tl.series.map((p) => ({ date: p.date, percent: p.percent })),
+          }
+        : undefined,
     })
   }
   for (const p of plan.value?.tasks ?? []) {
     if (seen.has(p.taskId)) continue
+    const tl = tlMap.get(p.taskId)
     rows.push({
       taskId: p.taskId,
       code: p.code,
       name: p.name,
       planned: { start: p.start, duration: p.duration },
-      actual: summaryByTask.value.get(p.taskId),
+      summary: tl
+        ? {
+            currentPercent: tl.currentPercent,
+            isCompleted: tl.isCompleted,
+            actualStartDate: tl.actualStartDate ?? null,
+            actualCompletionDate: tl.actualCompletionDate ?? null,
+            series: tl.series.map((s) => ({ date: s.date, percent: s.percent })),
+          }
+        : undefined,
     })
   }
   return rows
@@ -113,66 +145,64 @@ const overallPercent = computed(() => {
 
 const plannedDuration = computed(() => plan.value?.totalDuration ?? null)
 
-// ──── 甘特：计划 + 实际双行 ────────────────────────────────
-interface GanttMeta {
-  label: string
-  kind: 'planned' | 'actual'
-  percent: number
-}
+// ──── 时间粒度（日/周/月）：用户可切，按跨度自动收紧默认 ────
+const granOptions: ReadonlyArray<SegmentOption<PlotGranularity>> = [
+  { value: 'day', label: '日' },
+  { value: 'week', label: '周' },
+  { value: 'month', label: '月' },
+]
+const granularity = ref<CarbonGranularity>('month')
 
-const ganttItems = computed<GanttChartItem<GanttMeta>[]>(() => {
-  const items: GanttChartItem<GanttMeta>[] = []
-  for (const row of taskRows.value) {
-    if (row.planned) {
-      items.push({
-        label: `${row.code} ${row.name}（计划）`,
-        startDay: row.planned.start,
-        duration: row.planned.duration,
-        color: C.label,
-        meta: { label: row.name, kind: 'planned', percent: 0 },
-      })
-    }
-    const a = row.actual
-    if (a && timelineAnchor.value && a.actualStartDate) {
-      const end = a.actualCompletionDate ?? todayIso()
-      items.push({
-        label: `${row.code} ${row.name}（实际）`,
-        startDay: dayIndex(a.actualStartDate),
-        duration: Math.max(dayIndex(end) - dayIndex(a.actualStartDate), 0.5),
-        color: a.isCompleted ? C.success : C.indigo,
-        meta: { label: row.name, kind: 'actual', percent: a.currentPercent },
-      })
+// 收集全部日期做跨度和 x 轴范围
+const allDates = computed<string[]>(() => {
+  const out = new Set<string>()
+  for (const t of plan.value?.tasks ?? []) {
+    if (anchorDate.value) {
+      out.add(anchorPlusDays(t.start))
+      out.add(anchorPlusDays(t.start + t.duration))
     }
   }
-  return items
-})
-
-const ganttTotalDays = computed(() => {
-  let max = 0
-  for (const row of taskRows.value) {
-    const pEnd = row.planned ? row.planned.start + row.planned.duration : 0
-    const a = row.actual
-    const aEnd = a && a.actualStartDate ? dayIndex(a.actualCompletionDate ?? todayIso()) : 0
-    max = Math.max(max, pEnd, aEnd)
+  for (const tl of progressTimeline.value?.items ?? []) {
+    if (tl.actualStartDate) out.add(tl.actualStartDate)
+    if (tl.actualCompletionDate) out.add(tl.actualCompletionDate)
+    for (const p of tl.series) out.add(p.date)
   }
-  if (timelineAnchor.value) max = Math.max(max, dayIndex(todayIso()))
-  return max || 1
+  out.add(todayIso())
+  return Array.from(out).sort()
 })
 
-function formatGanttTooltip(item: GanttChartItem<GanttMeta>): string {
-  const m = item.meta!
-  return `
-    <div style="font-size:12px; line-height:1.6;">
-      <div style="font-weight:600; margin-bottom:4px;">${m.label}</div>
-      <div>${m.kind === 'planned' ? '计划' : '实际'} · 第 ${item.startDay} 天起，共 ${item.duration} 天</div>
-      ${m.kind === 'actual' ? `<div>当前进度 ${m.percent}%</div>` : ''}
-    </div>
-  `
+const spanDays = computed<number>(() => {
+  const ds = allDates.value
+  if (ds.length === 0) return 0
+  const a = new Date(ds[0]!).getTime()
+  const b = new Date(ds[ds.length - 1]!).getTime()
+  return (b - a) / MS_DAY
+})
+
+const defaultGranularity = computed<CarbonGranularity>(() => {
+  const d = spanDays.value
+  if (d <= 40) return 'day'
+  if (d <= 40 * 7) return 'week'
+  return 'month'
+})
+let userPickedGranularity = false
+watch(
+  defaultGranularity,
+  (g) => {
+    if (!userPickedGranularity) granularity.value = g
+  },
+  { immediate: true },
+)
+function pickGranularity(g: CarbonGranularity) {
+  userPickedGranularity = true
+  granularity.value = g
 }
 
-// ──── 碳排放维度切换 ───────────────────────────────────────
+// ──── 碳排（粒度随切换变化） ───────────────────────────────
+const { periodItems, totalEmissionTon, totalCost } = useCarbonStats(() => granularity.value)
+
+// ──── 碳排维度切换 ─────────────────────────────────────────
 type EmissionDim = 'total' | 'category' | 'resource'
-
 const emissionDim = ref<EmissionDim>('total')
 const dimOptions: ReadonlyArray<SegmentOption<EmissionDim>> = [
   { value: 'total', label: '总量', icon: 'co2' },
@@ -182,10 +212,10 @@ const dimOptions: ReadonlyArray<SegmentOption<EmissionDim>> = [
 
 const CATEGORY_ORDER: ResourceCategory[] = ['labor', 'machinery', 'material', 'transport', 'others']
 
-/** 全局碳排 Top 5 资源（其他归入「其他」段） */
+// 碳排 Top 5 资源（其他归入「其他」段）
 const resourceTop = computed(() => {
   const m = new Map<number, { name: string; kg: number }>()
-  for (const x of items.value) {
+  for (const x of periodItems.value) {
     const cur = m.get(x.resourceId) ?? { name: x.resourceName, kg: 0 }
     cur.kg += x.emission
     m.set(x.resourceId, cur)
@@ -196,55 +226,47 @@ const resourceTop = computed(() => {
     .map(([id, v]) => ({ id, ...v }))
 })
 
-function monthParts(month: string): { y: number; m: number } {
-  const parts = month.split('-').map(Number)
-  return { y: parts[0] ?? 0, m: parts[1] ?? 0 }
-}
-
-function monthFirst(month: string): string {
-  const { y, m } = monthParts(month)
-  return `${y}-${String(m).padStart(2, '0')}-01`
-}
-
-function monthNext(month: string): string {
-  const { y, m } = monthParts(month)
-  const ny = m === 12 ? y + 1 : y
-  const nm = m === 12 ? 1 : m + 1
-  return `${ny}-${String(nm).padStart(2, '0')}-01`
-}
-
-function monthRange(month: string): { start: number; end: number } {
-  const start = dayIndex(monthFirst(month))
-  const end = dayIndex(monthNext(month))
-  return { start: Math.max(0, start), end: Math.min(ganttTotalDays.value, end) }
-}
-
-function monthLabel(month: string): string {
-  return `${monthParts(month).m}月`
-}
-
-/** 月度碳排色带（按当前维度切分） */
-const bands = computed<EmissionBand[]>(() => {
-  const out: EmissionBand[] = []
-  if (emissionDim.value === 'resource') {
-    const byMonth = new Map<string, Map<number, number>>()
-    for (const x of items.value) {
-      if (!byMonth.has(x.month)) byMonth.set(x.month, new Map())
-      const mm = byMonth.get(x.month)!
-      mm.set(x.resourceId, (mm.get(x.resourceId) ?? 0) + x.emission)
+/** 碳排柱：按 period 分桶，桶内按当前维度切段 */
+const carbonBars = computed<CarbonBarDatum[]>(() => {
+  const byPeriod = new Map<
+    string,
+    { total: number; cats: Map<ResourceCategory, number>; res: Map<number, number> }
+  >()
+  for (const x of periodItems.value) {
+    let b = byPeriod.get(x.period)
+    if (!b) {
+      b = { total: 0, cats: new Map(), res: new Map() }
+      byPeriod.set(x.period, b)
     }
-    const topIds = new Set(resourceTop.value.map((r) => r.id))
-    const nameOf = new Map(resourceTop.value.map((r) => [r.id, r.name]))
-    for (const [month, mm] of byMonth) {
-      const range = monthRange(month)
-      if (range.start >= range.end) continue
-      const segments: EmissionSegment[] = []
-      let others = 0
-      let idx = 0
-      for (const [id, kg] of mm) {
-        if (topIds.has(id)) {
+    b.total += x.emission
+    b.cats.set(x.category, (b.cats.get(x.category) ?? 0) + x.emission)
+    b.res.set(x.resourceId, (b.res.get(x.resourceId) ?? 0) + x.emission)
+  }
+  const topIds = new Set(resourceTop.value.map((r) => r.id))
+  const nameOf = new Map(resourceTop.value.map((r) => [r.id, r.name]))
+  const periods = Array.from(byPeriod.keys()).sort()
+
+  return periods.map((period) => {
+    const b = byPeriod.get(period)!
+    const segments: CarbonBarDatum['segments'] = []
+    if (emissionDim.value === 'category') {
+      for (const cat of CATEGORY_ORDER) {
+        const kg = b.cats.get(cat) ?? 0
+        if (kg !== 0) {
           segments.push({
-            name: nameOf.get(id) ?? `资源#${id}`,
+            name: categoryConfigMap[cat].label,
+            value: kg,
+            color: getCategoryColor(cat),
+          })
+        }
+      }
+    } else if (emissionDim.value === 'resource') {
+      let idx = 0
+      let others = 0
+      for (const [rid, kg] of Array.from(b.res.entries()).sort((a, b2) => b2[1] - a[1])) {
+        if (topIds.has(rid)) {
+          segments.push({
+            name: nameOf.get(rid) ?? `资源#${rid}`,
             value: kg,
             color: getSliceColor(idx++),
           })
@@ -252,55 +274,17 @@ const bands = computed<EmissionBand[]>(() => {
           others += kg
         }
       }
-      segments.sort((a, b) => b.value - a.value)
-      if (others > 0) segments.push({ name: '其他', value: others, color: C.label })
-      const total = Array.from(mm.values()).reduce((s, v) => s + v, 0)
-      if (total > 0) {
-        out.push({
-          label: monthLabel(month),
-          startDay: range.start,
-          endDay: range.end,
-          totalKg: total,
-          segments,
-        })
-      }
+      if (others !== 0) segments.push({ name: '其他', value: others, color: C.label })
+    } else {
+      segments.push({ name: '碳排', value: b.total, color: C.violet })
     }
-  } else {
-    for (const m of byMonthCategory.value) {
-      const range = monthRange(m.month)
-      if (range.start >= range.end) continue
-      const segments: EmissionSegment[] = []
-      if (emissionDim.value === 'category') {
-        for (const cat of CATEGORY_ORDER) {
-          const kg = m.byCategory[cat]
-          if (kg > 0) {
-            segments.push({
-              name: categoryConfigMap[cat].label,
-              value: kg,
-              color: getCategoryColor(cat),
-            })
-          }
-        }
-      } else {
-        const total = CATEGORY_ORDER.reduce((s, cat) => s + m.byCategory[cat], 0)
-        segments.push({ name: '碳排', value: total, color: C.violet })
-      }
-      const total = segments.reduce((s, x) => s + x.value, 0)
-      if (total > 0) {
-        out.push({
-          label: monthLabel(m.month),
-          startDay: range.start,
-          endDay: range.end,
-          totalKg: total,
-          segments,
-        })
-      }
-    }
-  }
-  return out
+    // 稳定顺序：按 value 降序（总量单段不受影响）
+    if (emissionDim.value !== 'total') segments.sort((a, b2) => b2.value - a.value)
+    return { period, segments }
+  })
 })
 
-/** 碳排维度图例（页面层渲染，组件不感知维度） */
+/** 碳排图例（页面层展示） */
 const emissionLegend = computed<{ name: string; color: string }[]>(() => {
   if (emissionDim.value === 'category') {
     return CATEGORY_ORDER.map((c) => ({
@@ -317,17 +301,58 @@ const emissionLegend = computed<{ name: string; color: string }[]>(() => {
   return [{ name: '碳排', color: C.violet }]
 })
 
-// ──── 天气折线（月份中点） ─────────────────────────────────
-const weatherPoints = computed<WeatherPoint[]>(() =>
-  weather.value.map((w) => {
-    const { y, m } = monthParts(w.month)
-    const mid = dayIndex(`${y}-${String(m).padStart(2, '0')}-15`)
+// ──── 天气点（月份 → 日历 x） ──────────────────────────────
+const weatherDatum = computed<WeatherDatum[]>(() =>
+  weather.value.map((w) => ({
+    month: w.month,
+    temperatureC: w.temperatureC ?? null,
+    precipitationMm: w.precipitationMm ?? null,
+  })),
+)
+
+// ──── 组装 Plotly 主图数据 ─────────────────────────────────
+const plotRows = computed<TimelineTaskRow[]>(() =>
+  taskRows.value.map((r) => {
+    const planStart = r.planned ? anchorPlusDays(r.planned.start) : null
+    const planEnd = r.planned ? anchorPlusDays(r.planned.start + r.planned.duration) : null
+    const s = r.summary
     return {
-      day: Math.min(Math.max(mid, 0), ganttTotalDays.value),
-      temperatureC: w.temperatureC ?? null,
-      precipitationMm: w.precipitationMm ?? null,
+      taskId: r.taskId,
+      code: r.code,
+      name: r.name,
+      planStart,
+      planEnd,
+      actualStart: s?.actualStartDate ?? null,
+      actualEnd: s?.actualCompletionDate ?? (s?.actualStartDate ? todayIso() : null),
+      series: (s?.series ?? []).map((p) => [p.date, p.percent] as [string, number]),
+      currentPercent: s?.currentPercent ?? 0,
+      isCompleted: s?.isCompleted ?? false,
     }
   }),
+)
+
+const xMin = computed<string>(() => allDates.value[0] ?? todayIso())
+const xMax = computed<string>(() => {
+  const last = allDates.value[allDates.value.length - 1] ?? todayIso()
+  // 末尾留一点 padding（+3 天）
+  return new Date(new Date(last).getTime() + 3 * MS_DAY).toISOString().slice(0, 10)
+})
+
+const plotData = computed<ProgressPlotData>(() => ({
+  tasks: plotRows.value,
+  carbon: carbonBars.value,
+  weather: weatherDatum.value,
+  granularity: granularity.value,
+  minDate: xMin.value,
+  maxDate: xMax.value,
+  colors: C,
+  todayIso: todayIso(),
+}))
+
+const hasAnyData = computed(
+  () =>
+    !isLoadingProjectSummaries.value &&
+    (plotRows.value.length > 0 || carbonBars.value.length > 0 || weatherDatum.value.length > 0),
 )
 
 // ──── 天气录入弹窗 ─────────────────────────────────────────
@@ -402,6 +427,8 @@ async function handleDeleteWeather(w: WeatherResp) {
     console.error('Delete weather failed:', e)
   }
 }
+
+const emissionLegendVisible = computed(() => emissionDim.value !== 'total')
 </script>
 
 <template>
@@ -437,7 +464,14 @@ async function handleDeleteWeather(w: WeatherResp) {
     <!-- 全景主图 -->
     <div class="panel p-3 flex flex-col gap-3">
       <div class="flex items-center justify-between gap-4 flex-wrap">
-        <SegmentControl v-model="emissionDim" :options="dimOptions" />
+        <div class="flex items-center gap-3 flex-wrap">
+          <SegmentControl v-model="emissionDim" :options="dimOptions" />
+          <SegmentControl
+            :model-value="granularity"
+            :options="granOptions"
+            @update:model-value="pickGranularity"
+          />
+        </div>
         <div class="flex items-center gap-4 flex-wrap">
           <!-- 甘特图例 -->
           <div class="flex items-center gap-3 text-xs">
@@ -446,10 +480,7 @@ async function handleDeleteWeather(w: WeatherResp) {
               >计划</span
             >
             <span class="flex items-center gap-1.5"
-              ><i
-                class="w-2.5 h-2.5 rounded-full inline-block"
-                :style="{ background: C.indigo }"
-              ></i
+              ><i class="w-2.5 h-2.5 rounded-full inline-block" :style="{ background: C.info }"></i
               >实际进行中</span
             >
             <span class="flex items-center gap-1.5"
@@ -459,9 +490,13 @@ async function handleDeleteWeather(w: WeatherResp) {
               ></i
               >实际完成</span
             >
+            <span class="flex items-center gap-1.5"
+              ><i class="w-2.5 h-2.5 rounded-full inline-block" :style="{ background: C.accel }"></i
+              >每日进度</span
+            >
           </div>
-          <!-- 碳排维度图例 -->
-          <div class="flex items-center gap-3 text-xs">
+          <!-- 碳排维度图例，在 plotly 图中已存在 -->
+          <div v-if="false" class="flex items-center gap-3 text-xs">
             <span v-for="item in emissionLegend" :key="item.name" class="flex items-center gap-1.5">
               <i
                 class="w-2.5 h-2.5 rounded-full inline-block"
@@ -478,21 +513,12 @@ async function handleDeleteWeather(w: WeatherResp) {
       </div>
 
       <ChartEmptyState
-        v-if="ganttItems.length === 0 && bands.length === 0 && !isLoadingProjectSummaries"
+        v-if="!hasAnyData"
         icon="timeline"
         title="暂无施工数据"
-        description="录入工序进度与资源用量后展示全景时间线"
+        description="录入工序进度、资源用量或天气数据后展示全景时间线"
       />
-      <ConstructionTimelineChart
-        v-else
-        :gantt-items="ganttItems"
-        :gantt-tooltip-formatter="formatGanttTooltip as (item: GanttChartItem<unknown>) => string"
-        :gantt-label-width="190"
-        :bands="bands"
-        :weather="weatherPoints"
-        :total-days="ganttTotalDays"
-        :anchor-date="timelineAnchor"
-      />
+      <ProgressTimelinePlot v-else :data="plotData" :height="640" />
     </div>
 
     <!-- 天气录入弹窗 -->

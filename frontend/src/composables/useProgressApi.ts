@@ -15,6 +15,8 @@ import {
   taskProgressSummaryQuery,
   projectProgressSummariesQuery,
   projectProgressSummariesQueryKey,
+  progressTimelineQuery,
+  progressTimelineQueryKey,
 } from '@/client/@pinia/colada.gen'
 
 export function useProgressApi() {
@@ -32,11 +34,23 @@ export function useProgressApi() {
     () => projectSummariesQuery.asyncStatus.value === 'loading',
   )
 
+  // ──── 逐日进度时间线（施工进度 Plotly 主图数据源） ───────
+  const timelineQuery = useQuery(() => ({
+    ...progressTimelineQuery({ path: { project_id: currentProjectId.value! } }),
+    enabled: !!currentProjectId.value,
+  }))
+
+  const progressTimeline = computed(() => timelineQuery.state.value?.data ?? null)
+  const isLoadingTimeline = computed(() => timelineQuery.asyncStatus.value === 'loading')
+
   async function invalidateAll() {
     await queryCache.invalidateQueries({
       key: projectProgressSummariesQueryKey({
         path: { project_id: currentProjectId.value! },
       }),
+    })
+    await queryCache.invalidateQueries({
+      key: progressTimelineQueryKey({ path: { project_id: currentProjectId.value! } }),
     })
   }
 
@@ -67,10 +81,13 @@ export function useProgressApi() {
   return {
     projectSummaries,
     isLoadingProjectSummaries,
+    progressTimeline,
+    isLoadingTimeline,
     recordProgress,
     recordProgressBatch,
     isRecording: createMutation.isLoading.value || batchMutation.isLoading.value,
     refresh: projectSummariesQuery.refresh,
+    refreshTimeline: timelineQuery.refresh,
   }
 }
 
