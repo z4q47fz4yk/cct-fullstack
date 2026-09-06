@@ -27,7 +27,7 @@ has_change() { # has_change <old> <new> <path...>
 }
 
 # ---- 1) 依赖锁文件变化 → 自动安装 ----
-if has_change "$OLD" "$NEW" pnpm-lock.yaml; then
+if has_change "$OLD" "$NEW" frontend/pnpm-lock.yaml; then
   echo "[toolchain] 检测到 frontend/pnpm-lock.yaml 变化，运行 vp install ..."
   ( cd "$ROOT/frontend" && vp install ) || echo "[toolchain] warn: vp install 失败（依赖可能未装全，请手动重试）" >&2
 fi
@@ -41,11 +41,14 @@ fi
 if has_change "$OLD" "$NEW" backend/src openapi.json; then
   if [ -x "$ROOT/backend/.venv/bin/python" ]; then
     echo "[toolchain] 后端代码或快照变化，重新导出 openapi.json ..."
-    bash "$ROOT/scripts/openapi-export.sh"
-    if ! git diff --exit-code -- openapi.json >/dev/null; then
-      echo "[toolchain] 提示：openapi.json 已与合并/改写后的代码重新同步（工作区变更，未提交，建议随下一个 commit 并入）。"
+    if bash "$ROOT/scripts/openapi-export.sh"; then
+      if ! git diff --exit-code -- openapi.json >/dev/null; then
+        echo "[toolchain] 提示：openapi.json 已与合并/改写后的代码重新同步（工作区变更，未提交，建议随下一个 commit 并入）。"
+      else
+        echo "[toolchain] openapi.json 与代码一致，无需变更。"
+      fi
     else
-      echo "[toolchain] openapi.json 与代码一致，无需变更。"
+      echo "[toolchain] warn: 契约重导出失败，请手动执行 scripts/openapi-export.sh 排查" >&2
     fi
   else
     echo "[toolchain] warn: backend/.venv 缺失，跳过快照重导出（合并前 check-contract.sh 会兜底校验）" >&2
