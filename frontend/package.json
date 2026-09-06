@@ -50,6 +50,7 @@
     "npm-run-all2": "^8.0.4",
     "typescript": "~5.9.3",
     "vite": "npm:@voidzero-dev/vite-plus-core@0.2.4",
+    "vite-plugin-compression2": "^2.5.3",
     "vite-plugin-vue-devtools": "^8.2.1",
     "vite-plus": "catalog:",
     "vitepress": "2.0.0-alpha.19",

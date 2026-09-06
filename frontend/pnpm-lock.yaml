@@ -109,6 +109,9 @@ importers:
       vite:
         specifier: npm:@voidzero-dev/vite-plus-core@0.2.4
         version: '@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(jiti@2.7.0)(typescript@5.9.3)(yaml@2.9.0)'
+      vite-plugin-compression2:
+        specifier: ^2.5.3
+        version: 2.5.3
       vite-plugin-vue-devtools:
         specifier: ^8.2.1
         version: 8.2.1(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(jiti@2.7.0)(typescript@5.9.3)(yaml@2.9.0))(vue@3.5.41(typescript@5.9.3))
@@ -725,6 +728,15 @@ packages:
 
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
+
+  '@rollup/pluginutils@5.4.0':
+    resolution: {integrity: sha512-MfPp06CjRLfXQ3wY0R8vJDYBy/MvVcc9OulEfR0B8Iv9ko+GCNaRZ+EpJYFl27LhKsZK0o420sYCRHCjfCgeUg==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      rollup: ^1.20.0||^2.0.0||^3.0.0||^4.0.0
+    peerDependenciesMeta:
+      rollup:
+        optional: true
 
   '@shikijs/core@4.4.3':
     resolution: {integrity: sha512-QCR4q2ZO/ILJEuwiBMel4wdcTDb1JGwfjKTxPDF6x8ixOaluPrVqIn06C99AcRPhmYlBR56d/Fb+GN58GzExpg==}
@@ -2755,6 +2767,9 @@ packages:
     resolution: {integrity: sha512-uxc/zpqFg6x7C8vOE7lh6Lbda8eEL9zmVm/PLeTPBRhh1xCgdWaQ+J1CUieGpIfm2HdtsUpRv+HshiasBMcc6A==}
     engines: {node: '>=6'}
 
+  tar-mini@0.2.0:
+    resolution: {integrity: sha512-+qfUHz700DWnRutdUsxRRVZ38G1Qr27OetwaMYTdg8hcPxf46U0S1Zf76dQMWRBmusOt2ZCK5kbIaiLkoGO7WQ==}
+
   through2@0.6.5:
     resolution: {integrity: sha512-RkK/CCESdTKQZHdmKICijdKKsCRVHs5KsLZ6pACAmF/1GPUQhonHSXWNERctxEp7RmvjdNbZTL5z9V7nSCXKcg==}
 
@@ -2928,6 +2943,9 @@ packages:
     resolution: {integrity: sha512-76Zs9zrHbH7M7wqeyooGQKdX+yg0pQ0xuQ1PbFp4z5a0Lzn2e5IPFoCswnmqZ4GiwqB4Jo3WcDAMO9jARTJl8w==}
     peerDependencies:
       vite: ^2.6.0 || ^3.0.0 || ^4.0.0 || ^5.0.0-0 || ^6.0.0-0 || ^7.0.0-0 || ^8.0.0
+
+  vite-plugin-compression2@2.5.3:
+    resolution: {integrity: sha512-ItPgqQWkcnBbVw7is9OKwiZ8v6+ju9rYROl5Lp6QfQDEx/d55AwJQb/KLpsQqsU9HoigYBsZ8tK6I02UwJNvEw==}
 
   vite-plugin-inspect@11.4.1:
     resolution: {integrity: sha512-ShOFe2PURXGvRS5OrgmOLZOCwDTD7dEBVt0tMpFPKb9AsvqXKCRGM8QgKrUbRbJYFXScHvDPpGRd28rYidC0tA==}
@@ -3696,6 +3714,12 @@ snapshots:
   '@polka/url@1.0.0-next.29': {}
 
   '@rolldown/pluginutils@1.0.1': {}
+
+  '@rollup/pluginutils@5.4.0':
+    dependencies:
+      '@types/estree': 1.0.9
+      estree-walker: 2.0.2
+      picomatch: 4.0.5
 
   '@shikijs/core@4.4.3':
     dependencies:
@@ -5716,6 +5740,8 @@ snapshots:
 
   tapable@2.3.3: {}
 
+  tar-mini@0.2.0: {}
+
   through2@0.6.5:
     dependencies:
       readable-stream: 1.0.34
@@ -5855,6 +5881,13 @@ snapshots:
   vite-hot-client@2.2.0(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(jiti@2.7.0)(typescript@5.9.3)(yaml@2.9.0)):
     dependencies:
       vite: '@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(jiti@2.7.0)(typescript@5.9.3)(yaml@2.9.0)'
+
+  vite-plugin-compression2@2.5.3:
+    dependencies:
+      '@rollup/pluginutils': 5.4.0
+      tar-mini: 0.2.0
+    transitivePeerDependencies:
+      - rollup
 
   vite-plugin-inspect@11.4.1(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(jiti@2.7.0)(typescript@5.9.3)(yaml@2.9.0)):
     dependencies:

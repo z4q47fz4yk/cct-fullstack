@@ -78,7 +78,6 @@ export default defineConfig(({ mode }) => {
           },
         },
       ],
-      // TODO: 解决 lint 问题
       options: {
         typeAware: true,
         typeCheck: true,
