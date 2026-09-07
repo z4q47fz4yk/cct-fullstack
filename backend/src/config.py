@@ -126,6 +126,19 @@ class Settings(BaseSettings):
     # 是否启用 AI 对话功能（false 时 /ai 路由返回 503，避免未配置环境报错）
     pi_enabled: bool = Field(False, validation_alias="PI_ENABLED")
 
+    # ---- Open-Meteo 天气同步（可选，见 services/weather_sync.py）----
+    # 历史天气归档 API（免费、无需 API key；本机经代理实测可达）
+    weather_archive_url: str = Field(
+        "https://archive-api.open-meteo.com/v1/archive",
+        validation_alias="WEATHER_ARCHIVE_URL",
+    )
+    # 单次请求超时（秒），网络/响应超时后同步端点返回 502
+    weather_sync_timeout_s: float = Field(
+        30.0, validation_alias="WEATHER_SYNC_TIMEOUT_S"
+    )
+    # 单次同步最大天数跨度（防误填超大范围拖垮请求）
+    weather_sync_max_days: int = Field(370, validation_alias="WEATHER_SYNC_MAX_DAYS")
+
     @property
     def pi_extension_paths(self) -> list[str]:
         """解析逗号分隔的扩展文件路径列表（相对路径以仓库根为基准，返回绝对路径）。"""

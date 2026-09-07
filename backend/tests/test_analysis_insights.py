@@ -224,12 +224,12 @@ async def test_project_status_and_water_fields(client: AsyncClient, insight_proj
 
 
 async def test_weather_crud(client: AsyncClient, insight_project):
-    """天气月度记录 CRUD。"""
+    """天气日记录 CRUD。"""
     pid = insight_project["pid"]
     resp = await client.post(
         f"/projects/{pid}/weather",
         json={
-            "month": "2026-01-01",
+            "date": "2026-01-05",
             "precipitationMm": 12.5,
             "temperatureC": 3.2,
             "sunshineHours": 4.0,
@@ -237,25 +237,34 @@ async def test_weather_crud(client: AsyncClient, insight_project):
     )
     assert resp.status_code == 201
     record = resp.json()
-    assert record["month"] == "2026-01-01"
+    assert record["date"] == "2026-01-05"
+    assert record["isSynced"] is False
 
     resp = await client.post(
         f"/projects/{pid}/weather",
-        json={"month": "2026-01-01", "precipitationMm": 1.0},
+        json={"date": "2026-01-05", "precipitationMm": 1.0},
     )
     assert resp.status_code == 409
 
+    # 任意自然日均合法（不再限定每月 1 日）
     resp = await client.post(
         f"/projects/{pid}/weather",
-        json={"month": "2026-02-15"},
+        json={"date": "2026-02-15", "precipitationMm": 2.0},
     )
-    assert resp.status_code == 422
+    assert resp.status_code == 201
 
     resp = await client.put(
         f"/projects/{pid}/weather/{record['id']}", json={"temperatureC": None}
     )
     assert resp.status_code == 200
     assert resp.json()["temperatureC"] is None
+
+    # 列表按日期区间过滤
+    resp = await client.get(
+        f"/projects/{pid}/weather?startDate=2026-01-01&endDate=2026-01-31"
+    )
+    items = resp.json()["items"]
+    assert [w["date"] for w in items] == ["2026-01-05"]
 
     resp = await client.delete(f"/projects/{pid}/weather/{record['id']}")
     assert resp.status_code == 204

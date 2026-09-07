@@ -42,6 +42,14 @@ class ProjectFields:
     Address = Annotated[
         str | None, Field(default=None, max_length=255, description="项目详细地址")
     ]
+    Latitude = Annotated[
+        float | None,
+        Field(default=None, ge=-90, le=90, description="纬度（WGS84）"),
+    ]
+    Longitude = Annotated[
+        float | None,
+        Field(default=None, ge=-180, le=180, description="经度（WGS84）"),
+    ]
     UndergroundBuildingArea = Annotated[
         float | None, Field(default=None, ge=0, description="地下建筑面积（m²）")
     ]
@@ -124,6 +132,8 @@ class ProjectBase(SQLModel):
     province: ProjectFields.Province
     city: ProjectFields.City
     address: ProjectFields.Address
+    latitude: ProjectFields.Latitude
+    longitude: ProjectFields.Longitude
     underground_building_area: ProjectFields.UndergroundBuildingArea
     aboveground_building_area: ProjectFields.AbovegroundBuildingArea
     structure_types: ProjectFields.StructureTypes
@@ -184,6 +194,8 @@ class ProjectUpdate(SQLModel):
     province: ProjectFields.Province = Field(default=None)
     city: ProjectFields.City = Field(default=None)
     address: ProjectFields.Address = Field(default=None)
+    latitude: ProjectFields.Latitude = Field(default=None)
+    longitude: ProjectFields.Longitude = Field(default=None)
     underground_building_area: ProjectFields.UndergroundBuildingArea = Field(
         default=None
     )

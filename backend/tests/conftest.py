@@ -1,4 +1,5 @@
 # pyright: reportCallIssue=false
+import os
 from typing import AsyncGenerator
 
 import pytest_asyncio
@@ -11,7 +12,13 @@ from src.config import settings
 
 # 测试数据库配置，确保 alembic 已经迁移 `DATABASE_URL=... alembic upgrade head`
 # 采用运维惯例写法（postgresql://），asyncpg 驱动由 settings.database_async_url 注入
-TEST_DATABASE_URI = "postgresql://cct:cct@localhost/cctv2-test"
+#
+# 共享测试库（cctv2-test）可能被其它并行 worktree 迁移占用，故支持环境变量
+# TEST_DATABASE_URI 覆盖（如 `TEST_DATABASE_URI=postgresql://cct:cct@localhost/cctv2-test2
+# pytest`）
+TEST_DATABASE_URI = os.environ.get(
+    "TEST_DATABASE_URI", "postgresql://cct:cct@localhost/cctv2-test"
+)
 settings.database_url = TEST_DATABASE_URI
 # 测试请求不带 /api 前缀（真实部署由反代剥离），故放开 Cookie 路径限制，
 # 否则 `path=/api` 的会话 Cookie 不会被发送，auth 测试的 login→callback 链路中断。

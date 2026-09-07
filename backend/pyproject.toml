@@ -22,6 +22,9 @@ dependencies = [
     "authlib>=1.8.0",
     "itsdangerous>=2.2.0",
     "httpx2>=0.28.0",
+    # Open-Meteo 天气同步：openmeteo-requests（AsyncClient）+ openmeteo-sdk
+    # （FlatBuffers 传输，niquests + flatbuffers 传递依赖，纯 Python wheel）
+    "openmeteo-requests>=1.7.5",
 ]
 
 [dependency-groups]

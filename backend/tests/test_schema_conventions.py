@@ -52,6 +52,8 @@ _NULLABLE: dict[type[BaseModel], set[str]] = {
         "province",
         "city",
         "address",
+        "latitude",
+        "longitude",
         "underground_building_area",
         "aboveground_building_area",
         "structure_types",

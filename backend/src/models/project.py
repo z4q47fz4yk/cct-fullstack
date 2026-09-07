@@ -41,6 +41,10 @@ class Project(TimeStampMixin, SQLModel, table=True):
 
     address: ProjectFields.Address
 
+    latitude: ProjectFields.Latitude
+
+    longitude: ProjectFields.Longitude
+
     underground_building_area: ProjectFields.UndergroundBuildingArea
 
     aboveground_building_area: ProjectFields.AbovegroundBuildingArea

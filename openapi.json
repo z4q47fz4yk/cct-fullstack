@@ -6368,8 +6368,8 @@
         "tags": [
           "weather"
         ],
-        "summary": "列出天气月度记录",
-        "description": "列出天气记录。",
+        "summary": "列出天气日记录",
+        "description": "列出天气日记录。",
         "operationId": "list_weather",
         "parameters": [
           {
@@ -6382,7 +6382,7 @@
             }
           },
           {
-            "name": "startMonth",
+            "name": "startDate",
             "in": "query",
             "required": false,
             "schema": {
@@ -6395,13 +6395,13 @@
                   "type": "null"
                 }
               ],
-              "description": "起始月（每月1日，含）",
-              "title": "Startmonth"
+              "description": "起始日期（含）",
+              "title": "Startdate"
             },
-            "description": "起始月（每月1日，含）"
+            "description": "起始日期（含）"
           },
           {
-            "name": "endMonth",
+            "name": "endDate",
             "in": "query",
             "required": false,
             "schema": {
@@ -6414,10 +6414,10 @@
                   "type": "null"
                 }
               ],
-              "description": "结束月（不含）",
-              "title": "Endmonth"
+              "description": "结束日期（不含）",
+              "title": "Enddate"
             },
-            "description": "结束月（不含）"
+            "description": "结束日期（不含）"
           },
           {
             "name": "page",
@@ -6470,8 +6470,8 @@
         "tags": [
           "weather"
         ],
-        "summary": "创建天气月度记录",
-        "description": "同一项目同一个月唯一，重复创建返回 409。",
+        "summary": "创建天气日记录",
+        "description": "同一项目同一天唯一，重复创建返回 409。",
         "operationId": "create_weather",
         "parameters": [
           {
@@ -6523,8 +6523,8 @@
         "tags": [
           "weather"
         ],
-        "summary": "更新天气月度记录",
-        "description": "部分更新；显式 null 清空对应字段；month 不可修改。",
+        "summary": "更新天气日记录",
+        "description": "部分更新；显式 null 清空对应字段；date 不可修改。",
         "operationId": "update_weather",
         "parameters": [
           {
@@ -6583,8 +6583,8 @@
         "tags": [
           "weather"
         ],
-        "summary": "删除天气月度记录",
-        "description": "删除天气记录。",
+        "summary": "删除天气日记录",
+        "description": "删除天气日记录。",
         "operationId": "delete_weather",
         "parameters": [
           {
@@ -6609,6 +6609,59 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project_id}/weather/sync": {
+      "post": {
+        "tags": [
+          "weather"
+        ],
+        "summary": "同步历史天气（Open-Meteo）",
+        "description": "按项目经纬度从 Open-Meteo 历史归档拉取日均气温 / 日降水 / 日光照并写入日记录。手工录入的日期不被覆盖；重复调用幂等。历史数据仅到今天；请求窗口自动裁剪到 [项目开工日, 今天]。",
+        "operationId": "sync_weather",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WeatherSyncRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeatherSyncResp"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -9798,6 +9851,34 @@
             "title": "Address",
             "description": "项目详细地址"
           },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 90.0,
+                "minimum": -90.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude",
+            "description": "纬度（WGS84）"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 180.0,
+                "minimum": -180.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude",
+            "description": "经度（WGS84）"
+          },
           "underground_building_area": {
             "anyOf": [
               {
@@ -10176,6 +10257,34 @@
             ],
             "title": "Address",
             "description": "项目详细地址"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 90.0,
+                "minimum": -90.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude",
+            "description": "纬度（WGS84）"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 180.0,
+                "minimum": -180.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude",
+            "description": "经度（WGS84）"
           },
           "underground_building_area": {
             "anyOf": [
@@ -10582,6 +10691,34 @@
             ],
             "title": "Address",
             "description": "项目详细地址"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 90.0,
+                "minimum": -90.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude",
+            "description": "纬度（WGS84）"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 180.0,
+                "minimum": -180.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude",
+            "description": "经度（WGS84）"
           },
           "underground_building_area": {
             "anyOf": [
@@ -13774,11 +13911,11 @@
       },
       "WeatherCreate": {
         "properties": {
-          "month": {
+          "date": {
             "type": "string",
             "format": "date",
-            "title": "Month",
-            "description": "月份（每月1日）"
+            "title": "Date",
+            "description": "日期（日粒度）"
           },
           "precipitationMm": {
             "anyOf": [
@@ -13821,10 +13958,10 @@
         },
         "type": "object",
         "required": [
-          "month"
+          "date"
         ],
         "title": "WeatherCreate",
-        "description": "创建天气月度记录。"
+        "description": "创建天气日记录。"
       },
       "WeatherResp": {
         "properties": {
@@ -13850,11 +13987,11 @@
             "title": "Projectid",
             "description": "项目ID"
           },
-          "month": {
+          "date": {
             "type": "string",
             "format": "date",
-            "title": "Month",
-            "description": "月份（每月1日）"
+            "title": "Date",
+            "description": "日期（日粒度）"
           },
           "precipitationMm": {
             "anyOf": [
@@ -13891,6 +14028,12 @@
             ],
             "title": "Sunshinehours",
             "description": "光照时长（h）"
+          },
+          "isSynced": {
+            "type": "boolean",
+            "title": "Issynced",
+            "description": "是否来自 Open-Meteo 自动同步",
+            "default": false
           }
         },
         "type": "object",
@@ -13899,10 +14042,86 @@
           "updatedAt",
           "id",
           "projectId",
-          "month"
+          "date"
         ],
         "title": "WeatherResp",
-        "description": "天气月度记录响应。"
+        "description": "天气日记录响应。"
+      },
+      "WeatherSyncRequest": {
+        "properties": {
+          "startDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Startdate",
+            "description": "起始日期（含）"
+          },
+          "endDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enddate",
+            "description": "结束日期（含）"
+          }
+        },
+        "type": "object",
+        "title": "WeatherSyncRequest",
+        "description": "天气同步请求（可选日期窗口；省略时取项目实际/拟开工到今天）。"
+      },
+      "WeatherSyncResp": {
+        "properties": {
+          "synced": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Synced",
+            "description": "本次写入/更新（含覆盖）的记录数"
+          },
+          "skipped": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Skipped",
+            "description": "跳过的记录数（手工录入优先，未覆盖）"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Startdate",
+            "description": "实际同步起始日期"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Enddate",
+            "description": "实际同步结束日期"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "结果说明"
+          }
+        },
+        "type": "object",
+        "required": [
+          "synced",
+          "skipped",
+          "startDate",
+          "endDate",
+          "message"
+        ],
+        "title": "WeatherSyncResp",
+        "description": "天气同步响应。"
       },
       "WeatherUpdate": {
         "properties": {
@@ -13947,7 +14166,7 @@
         },
         "type": "object",
         "title": "WeatherUpdate",
-        "description": "更新天气月度记录（month 不可改，数值字段显式 null 表示清空）。"
+        "description": "更新天气日记录（date 不可改，数值字段显式 null 表示清空）。"
       },
       "src__routers__auth__NotFoundResp": {
         "properties": {

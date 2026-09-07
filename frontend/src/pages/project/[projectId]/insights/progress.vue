@@ -10,6 +10,7 @@
  * 逐日进度来自 /task/progress/timeline，碳排来自 /resource-usage/stats/carbon。
  */
 import { computed, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import ChartEmptyState from '@/components/common/ChartEmptyState.vue'
 import SegmentControl, { type SegmentOption } from '@/components/common/SegmentControl.vue'
@@ -22,13 +23,14 @@ import type {
   WeatherDatum,
 } from '@/composables/useProgressPlotFigure'
 import { useInsightsStore } from '@/stores/insights'
+import { useProjectContext } from '@/composables/useProjectContext'
 import { useProjectApi } from '@/composables/useProjectApi'
 import { usePlanApi } from '@/composables/usePlanApi'
 import { useProgressApi } from '@/composables/useProgressApi'
 import { useWeatherApi } from '@/composables/useWeatherApi'
 import { useCarbonStats, type CarbonGranularity } from '@/composables/useCarbonStats'
 import { useConfirm } from '@/composables/useConfirm'
-import { notifySuccess } from '@/composables/useToast'
+import { notifySuccess, notifyError } from '@/composables/useToast'
 import { fmtEmission, fmtWanYuan, fmtNumber } from '@/utils/format'
 import { getThemeColors, getCategoryColor, getSliceColor } from '@/utils/themeColors'
 import { todayIsoLocal } from '@/utils/date'
@@ -48,10 +50,13 @@ definePage({
 })
 
 const store = useInsightsStore()
+const router = useRouter()
+const { currentProjectId } = useProjectContext()
 const { project } = useProjectApi()
 const { plan } = usePlanApi()
 const { projectSummaries, isLoadingProjectSummaries, progressTimeline } = useProgressApi()
-const { weather, createRecord, updateRecord, deleteRecord, refresh } = useWeatherApi()
+const { weather, createRecord, updateRecord, deleteRecord, refresh, syncWeather, isSyncing } =
+  useWeatherApi()
 const { confirmDanger } = useConfirm()
 const C = getThemeColors()
 
@@ -301,10 +306,10 @@ const emissionLegend = computed<{ name: string; color: string }[]>(() => {
   return [{ name: '碳排', color: C.violet }]
 })
 
-// ──── 天气点（月份 → 日历 x） ──────────────────────────────
+// ──── 天气点（日期 → 日历 x） ──────────────────────────────
 const weatherDatum = computed<WeatherDatum[]>(() =>
   weather.value.map((w) => ({
-    month: w.month,
+    day: w.date,
     temperatureC: w.temperatureC ?? null,
     precipitationMm: w.precipitationMm ?? null,
   })),
@@ -355,11 +360,11 @@ const hasAnyData = computed(
     (plotRows.value.length > 0 || carbonBars.value.length > 0 || weatherDatum.value.length > 0),
 )
 
-// ──── 天气录入弹窗 ─────────────────────────────────────────
+// ──── 天气弹窗（手工录入 + Open-Meteo 同步） ──────────────
 const showWeatherModal = ref(false)
 const editingWeatherId = ref<number | null>(null)
 const weatherForm = reactive({
-  month: '',
+  date: '',
   precipitationMm: null as number | null,
   temperatureC: null as number | null,
   sunshineHours: null as number | null,
@@ -369,7 +374,7 @@ const weatherFormError = ref<string | null>(null)
 function openWeatherCreate() {
   editingWeatherId.value = null
   Object.assign(weatherForm, {
-    month: '',
+    date: '',
     precipitationMm: null,
     temperatureC: null,
     sunshineHours: null,
@@ -381,7 +386,7 @@ function openWeatherCreate() {
 function openWeatherEdit(w: WeatherResp) {
   editingWeatherId.value = w.id
   Object.assign(weatherForm, {
-    month: w.month,
+    date: w.date,
     precipitationMm: w.precipitationMm,
     temperatureC: w.temperatureC,
     sunshineHours: w.sunshineHours,
@@ -392,12 +397,12 @@ function openWeatherEdit(w: WeatherResp) {
 
 async function handleSubmitWeather() {
   weatherFormError.value = null
-  if (!weatherForm.month) {
-    weatherFormError.value = '请选择月份（每月 1 日）'
+  if (!weatherForm.date) {
+    weatherFormError.value = '请选择日期'
     return
   }
   const body = {
-    month: weatherForm.month,
+    date: weatherForm.date,
     precipitationMm: weatherForm.precipitationMm,
     temperatureC: weatherForm.temperatureC,
     sunshineHours: weatherForm.sunshineHours,
@@ -418,13 +423,39 @@ async function handleSubmitWeather() {
 }
 
 async function handleDeleteWeather(w: WeatherResp) {
-  const r = await confirmDanger('确定删除该月天气记录吗？', '删除天气')
+  const r = await confirmDanger('确定删除该日天气记录吗？', '删除天气')
   if (!r.confirmed) return
   try {
     await deleteRecord(w.id)
     await refresh()
   } catch (e) {
     console.error('Delete weather failed:', e)
+  }
+}
+
+/** 同步范围：项目开工（实际/拟）至今天；省略则后端按默认窗口。 */
+async function handleSyncWeather() {
+  const coords = project.value?.latitude ?? null
+  if (coords == null || project.value?.longitude == null) {
+    const r = await confirmDanger(
+      '项目未设置经纬度，无法自动同步历史天气。是否前往「项目信息」填写纬度/经度？',
+      '缺少经纬度',
+    )
+    if (r.confirmed && currentProjectId.value !== null) {
+      router.push({
+        name: '/project/[projectId]/settings/info',
+        params: { projectId: currentProjectId.value },
+      })
+    }
+    return
+  }
+  try {
+    const res = await syncWeather({})
+    await refresh()
+    notifySuccess({ title: '天气同步完成', description: res.message })
+  } catch (e) {
+    notifyError({ title: '天气同步失败', description: formatHttpError(e) })
+    console.error('Sync weather failed:', e)
   }
 }
 
@@ -521,13 +552,22 @@ const emissionLegendVisible = computed(() => emissionDim.value !== 'total')
       <ProgressTimelinePlot v-else :data="plotData" :height="640" />
     </div>
 
-    <!-- 天气录入弹窗 -->
-    <BaseModal v-model:open="showWeatherModal" title="天气数据（月度）" class="max-w-2xl">
+    <!-- 天气录入/同步弹窗 -->
+    <BaseModal v-model:open="showWeatherModal" title="天气数据（日）" class="max-w-2xl">
       <div class="space-y-4">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <p class="text-sm text-fg-muted">
+            手工录入某日天气，或用 Open-Meteo 拉取项目所在地的历史日均温 / 降水 / 光照。
+          </p>
+          <button class="btn btn-ghost btn-sm" :disabled="isSyncing" @click="handleSyncWeather">
+            <span class="material-symbols-outlined icon-sm">sync</span>
+            {{ isSyncing ? '同步中…' : '自动同步历史' }}
+          </button>
+        </div>
         <div class="grid grid-cols-4 gap-3">
           <label class="fieldset">
-            <span class="fieldset-legend">月份（每月 1 日）</span>
-            <input v-model="weatherForm.month" type="date" class="input input-bordered" />
+            <span class="fieldset-legend">日期</span>
+            <input v-model="weatherForm.date" type="date" class="input input-bordered" />
           </label>
           <label class="fieldset">
             <span class="fieldset-legend">降水 mm</span>
@@ -560,19 +600,25 @@ const emissionLegendVisible = computed(() => emissionDim.value !== 'total')
           <table class="table table-sm">
             <thead>
               <tr>
-                <th>月份</th>
+                <th>日期</th>
                 <th class="table-num">降水 mm</th>
                 <th class="table-num">气温 ℃</th>
                 <th class="table-num">光照 h</th>
+                <th>来源</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="w in weather" :key="w.id">
-                <td class="font-num">{{ w.month }}</td>
+                <td class="font-num">{{ w.date }}</td>
                 <td class="table-num">{{ w.precipitationMm ?? '—' }}</td>
                 <td class="table-num">{{ w.temperatureC ?? '—' }}</td>
                 <td class="table-num">{{ w.sunshineHours ?? '—' }}</td>
+                <td>
+                  <span class="text-xs" :class="w.isSynced ? 'text-fg-subtle' : 'text-primary'">
+                    {{ w.isSynced ? '自动同步' : '手工' }}
+                  </span>
+                </td>
                 <td class="text-right whitespace-nowrap">
                   <button class="btn btn-ghost btn-xs" @click="openWeatherEdit(w)">编辑</button>
                   <button class="btn btn-ghost btn-xs text-error" @click="handleDeleteWeather(w)">
@@ -583,6 +629,9 @@ const emissionLegendVisible = computed(() => emissionDim.value !== 'total')
             </tbody>
           </table>
         </div>
+        <p v-else class="text-sm text-fg-muted">
+          暂无天气记录。可手工录入或点击「自动同步历史」按项目经纬度拉取。
+        </p>
       </div>
       <template #actions>
         <button class="btn btn-ghost" @click="showWeatherModal = false">关闭</button>

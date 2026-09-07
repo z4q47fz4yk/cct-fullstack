@@ -131,6 +131,8 @@ const { handleSubmit, errors, defineField, resetForm, setFieldValue } = useForm(
     province: null,
     city: null,
     address: null,
+    latitude: null,
+    longitude: null,
     underground_building_area: null,
     aboveground_building_area: null,
     structure_types: [],
@@ -173,6 +175,8 @@ const [personsPerRoom, personsPerRoomAttrs] = defineField<'persons_per_room', nu
 const [province, provinceAttrs] = defineField('province')
 const [city, cityAttrs] = defineField('city')
 const [address, addressAttrs] = defineField('address')
+const [latitude, latitudeAttrs] = defineField('latitude')
+const [longitude, longitudeAttrs] = defineField('longitude')
 const [undergroundBuildingArea, undergroundBuildingAreaAttrs] = defineField(
   'underground_building_area',
 )
@@ -219,6 +223,8 @@ function snapshotFromProject(p: NonNullable<typeof project.value>) {
     province: p.province ?? null,
     city: p.city ?? null,
     address: p.address ?? null,
+    latitude: p.latitude ?? null,
+    longitude: p.longitude ?? null,
     underground_building_area: p.underground_building_area,
     aboveground_building_area: p.aboveground_building_area,
     structure_types: p.structure_types ?? [],
@@ -748,6 +754,60 @@ onBeforeRouteLeave(async () => {
               <span v-if="errors.address" class="mt-1 text-xs text-error">
                 {{ errors.address }}
               </span>
+            </div>
+
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div class="fieldset">
+                <label class="fieldset-label" for="latitude">纬度（WGS84）</label>
+                <input
+                  id="latitude"
+                  :value="latitude ?? ''"
+                  v-bind="latitudeAttrs"
+                  :disabled="isUpdatingProject"
+                  class="input w-full"
+                  :class="{ 'input-error': errors.latitude }"
+                  placeholder="如 39.9075"
+                  type="number"
+                  step="any"
+                  min="-90"
+                  max="90"
+                  @input="
+                    (e) => (latitude = parseNullableNumber((e.target as HTMLInputElement).value))
+                  "
+                />
+                <span class="mt-1 text-xs text-fg-muted">
+                  用于 Open-Meteo 天气自动同步；填写前先在地图上确认施工现场坐标
+                </span>
+                <span v-if="errors.latitude" class="mt-1 text-xs text-error">
+                  {{ errors.latitude }}
+                </span>
+              </div>
+
+              <div class="fieldset">
+                <label class="fieldset-label" for="longitude">经度（WGS84）</label>
+                <input
+                  id="longitude"
+                  :value="longitude ?? ''"
+                  v-bind="longitudeAttrs"
+                  :disabled="isUpdatingProject"
+                  class="input w-full"
+                  :class="{ 'input-error': errors.longitude }"
+                  placeholder="如 116.39723"
+                  type="number"
+                  step="any"
+                  min="-180"
+                  max="180"
+                  @input="
+                    (e) => (longitude = parseNullableNumber((e.target as HTMLInputElement).value))
+                  "
+                />
+                <span class="mt-1 text-xs text-fg-muted">
+                  用于 Open-Meteo 天气自动同步；需与纬度成对填写
+                </span>
+                <span v-if="errors.longitude" class="mt-1 text-xs text-error">
+                  {{ errors.longitude }}
+                </span>
+              </div>
             </div>
           </div>
         </section>

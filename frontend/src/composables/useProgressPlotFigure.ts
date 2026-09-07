@@ -45,8 +45,8 @@ export interface CarbonBarDatum {
 }
 
 export interface WeatherDatum {
-  /** 月份（每月 1 日，YYYY-MM-DD） */
-  month: string
+  /** 日期（日粒度，YYYY-MM-DD） */
+  day: string
   temperatureC: number | null
   precipitationMm: number | null
 }
@@ -246,7 +246,7 @@ export function buildProgressPlotFigure(d: ProgressPlotData): PlotlyDataLayoutCo
 
   // ──── 天气区（下） ───────────────────────────────────────
   if (weather.length > 0) {
-    const wx = weather.map((w) => toMs(w.month))
+    const wx = weather.map((w) => toMs(w.day))
     data.push({
       type: 'scatter',
       x: wx,
@@ -256,7 +256,7 @@ export function buildProgressPlotFigure(d: ProgressPlotData): PlotlyDataLayoutCo
       line: { color: colors.accel, width: 2 },
       marker: { size: 5 },
       connectgaps: false,
-      hovertemplate: '%{x|%Y-%m} 气温 %{y}℃<extra></extra>',
+      hovertemplate: '%{x|%Y-%m-%d} 气温 %{y}℃<extra></extra>',
       xaxis: 'x3',
       yaxis: 'y3',
     })
@@ -269,7 +269,7 @@ export function buildProgressPlotFigure(d: ProgressPlotData): PlotlyDataLayoutCo
       line: { color: colors.info, width: 2 },
       marker: { size: 5 },
       connectgaps: false,
-      hovertemplate: '%{x|%Y-%m} 降水 %{y}mm<extra></extra>',
+      hovertemplate: '%{x|%Y-%m-%d} 降水 %{y}mm<extra></extra>',
       xaxis: 'x3',
       yaxis: 'y4',
     })
