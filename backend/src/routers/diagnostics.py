@@ -11,9 +11,14 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.dependencies.public.project import CurrentProject
 from src.dependencies.public.session import get_db_session
-from src.schemas.diagnostics import PlanDiagnosticsResp, ResourceDiagnosticsResp
+from src.schemas.diagnostics import (
+    PlanDiagnosticsResp,
+    ResourceDiagnosticsResp,
+    TagChartDiagnosticsResp,
+)
 from src.services.diagnostics import UsageTypeFilter, get_resource_diagnostics
 from src.services.plan_fingerprint import check_plan_stale
+from src.services.tag_chart_diagnostics import get_tag_chart_diagnostics
 
 router = APIRouter(
     prefix="/projects/{project_id}/diagnostics",
@@ -62,3 +67,21 @@ async def plan_stale_diagnostics_endpoint(
 ) -> PlanDiagnosticsResp:
     """获取计划基线过期检查结果。"""
     return await check_plan_stale(session, project.id)
+
+
+@router.get(
+    "/tag-chart",
+    response_model=TagChartDiagnosticsResp,
+    status_code=200,
+    summary="标签/切片配置体检",
+    description=(
+        "只读检查图表切片配置：同一图表内不同切片命中标签重叠（饼图会重复计入"
+        "命中重叠的用量）。标签展平后写入路径不再做互斥校验，改由此处提示修正。"
+    ),
+)
+async def tag_chart_diagnostics_endpoint(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    project: CurrentProject,
+) -> TagChartDiagnosticsResp:
+    """获取标签/切片配置体检结果。"""
+    return await get_tag_chart_diagnostics(session, project.id)

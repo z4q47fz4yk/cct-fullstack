@@ -38,7 +38,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.config import settings
 from src.dependencies.public.session import get_db_session
 from src.models.ai_usage import AiUsageRecord
-from src.models.tag import TagDimension
+from src.models.tag import Tag
 from src.schemas.ai import AbortRequest, ChatRequest
 from src.schemas.ai_usage import AiUsageRecordResp, AiUsageSummary
 from src.schemas.daily_report_config import SaveConfigRequest
@@ -445,18 +445,14 @@ class _SaveConfigReq(BaseModel):
     name: str | None = Field(default=None, description="配置名")
 
 
-@_internal_router.get("/context", summary="项目上下文（资源+标签维度）")
+@_internal_router.get("/context", summary="项目上下文（资源+标签）")
 async def internal_project_context(
     project_id: int,
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ):
-    """供 AI 编写解析配置前了解项目已有资源与标签维度。"""
+    """供 AI 编写解析配置前了解项目已有资源与标签（运输货物标签 group 等）。"""
     resources = []  # resources 太多，对 AI 干扰太大
-    dimensions = (
-        await session.exec(
-            project_filter(select(TagDimension), TagDimension, project_id)
-        )
-    ).all()
+    tags = (await session.exec(project_filter(select(Tag), Tag, project_id))).all()
     return {
         "project_id": project_id,
         "resources": [
@@ -468,7 +464,9 @@ async def internal_project_context(
             for r in resources
         ],
         "categories": sorted({r.category.value for r in resources}),
-        "tag_dimensions": [{"name": d.name} for d in dimensions],
+        # 标签不再有维度：返回标签名 + group（供 AI 决定 cargo 归属标签）
+        "tags": [{"name": t.name, "group": t.group} for t in tags],
+        "tag_groups": sorted({t.group for t in tags}),
     }
 
 

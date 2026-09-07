@@ -93,6 +93,16 @@ class Settings(BaseSettings):
         default_factory=list, validation_alias="OIDC_PROVIDERS"
     )
 
+    # ---- usage_snapshot 物化视图刷新 ----
+    # 物化视图自动刷新间隔（秒）。查询端点会在视图数据超过该间隔后惰性触发
+    # 一次刷新（后台任务按同间隔定时 CONCURRENTLY 刷新），0 表示禁用后台刷新
+    # （仅保留惰性与手动刷新）。
+    snapshot_refresh_interval: int = Field(
+        1800,
+        validation_alias="SNAPSHOT_REFRESH_INTERVAL",
+        description="usage_snapshot 物化视图刷新间隔（秒），默认 30 分钟",
+    )
+
     # ---- Pi Agent（AI 对话 / 日报解析配置生成）----
     # 本后端监听端口（根 .env 的 BACKEND_PORT），用于扩展工具回调内部端点
     backend_port: int = Field(8000, validation_alias="BACKEND_PORT")

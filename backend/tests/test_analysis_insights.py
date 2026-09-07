@@ -11,13 +11,12 @@ from httpx2 import AsyncClient
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.models.chart import ChartDefinition, ChartTagMapping
 from src.models.optimize import OptimizationRun, ParetoSolution, RunStatusEnum
 from src.models.plan import Plan
 from src.models.project import Project, ProjectStatus
 from src.models.resource import Resource, ResourceCategory
 from src.models.resource_usage import TaskResourceUsage, UsageType
-from src.models.tag import ResourceTag, Tag, TagDimension
+from src.models.tag import ResourceTag, Tag
 from src.models.task import Task, TaskDependency
 from src.schemas.optimize import TaskSnapshot, TaskStrategy
 from src.schemas.task import DependencyType
@@ -600,14 +599,9 @@ async def test_carbon_stats_cost_bucket_and_negative_emission(
 async def test_chart_pie_cost_metric(
     client: AsyncClient, insight_project, db_session: AsyncSession
 ):
-    """饼图聚合支持 cost 指标。"""
+    """饼图聚合支持 cost 指标（切片绑定普通标签 + 资源打标）。"""
     pid = insight_project["pid"]
-    dim = TagDimension(project_id=pid, name="排放类别", description="d")
-    db_session.add(dim)
-    await db_session.commit()
-    await db_session.refresh(dim)
-    dim_id = cast(int, dim.id)
-    tag = Tag(project_id=pid, dimension_id=dim_id, name="施工用材", description="d")
+    tag = Tag(project_id=pid, name="施工用材", group="材料", description="d")
     db_session.add(tag)
     await db_session.commit()
     await db_session.refresh(tag)
@@ -619,22 +613,19 @@ async def test_chart_pie_cost_metric(
             tag_id=tag_id,
         )
     )
-    chart = ChartDefinition(
-        project_id=pid, name="成本分布", description="d", chart_type="PIE"
-    )
-    db_session.add(chart)
     await db_session.commit()
-    await db_session.refresh(chart)
-    chart_id = cast(int, chart.id)
-    db_session.add(
-        ChartTagMapping(
-            project_id=pid,
-            chart_id=chart_id,
-            tag_id=tag_id,
-            sort_order=0,
-        )
+
+    resp = await client.post(f"/projects/{pid}/chart", json={"name": "成本分布"})
+    assert resp.status_code == 201
+    chart_id = resp.json()["id"]
+    resp = await client.put(
+        f"/projects/{pid}/chart/{chart_id}/slices",
+        json={"slices": [{"name": "施工用材", "tags": [{"tagId": tag_id}]}]},
     )
-    await db_session.commit()
+    assert resp.status_code == 200, resp.text
+    # 手动刷新物化视图（fixture 数据在请求会话内可见）
+    resp = await client.post(f"/projects/{pid}/usage-snapshot/refresh")
+    assert resp.status_code == 200
 
     resp = await client.get(f"/projects/{pid}/chart/{chart_id}/pie-data?metric=cost")
     assert resp.status_code == 200

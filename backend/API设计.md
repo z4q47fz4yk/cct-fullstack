@@ -1,5 +1,12 @@
 # 碳排放展示需求
 
+> **设计演进说明（2026-09 标签系统 v3）**：本文下方 v2 方案（维度树 + slice_entity +
+> 打标互斥）为历史设计。现行实现已**展平标签**（无 tag_dimension / parent_id），
+> 新增 **slice（切片）与 slice_tag_mapping**（或/且组，含内置分类负 id 标签），
+> 删除 chart_tag_mapping / slice_entity / resource_categories / 打标互斥校验，
+> 聚合改读 **usage_snapshot 物化视图**（30min 自动 + 手动/惰性刷新）。以当前代码为准，
+> v2 保留仅供理解需求来源。
+
 我计划实现一个标签系统，用于区分碳排放类别；再实现一套图定义系统，用来定义需要展示的图表。
 
 比如说，我希望（在软件使用阶段）定义多个饼图，例如：

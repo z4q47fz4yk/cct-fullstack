@@ -1,15 +1,13 @@
 """日报运输块（A2）：货物类别解析、导入打标、导入后可改标。"""
 # pyright: reportCallIssue=false
 
-from typing import cast
-
 import pytest_asyncio
 from httpx2 import AsyncClient
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.resource import Resource, ResourceCategory
-from src.models.tag import Tag, TagDimension, UsageTag
+from src.models.tag import Tag, UsageTag
 from src.models.task import Task
 
 # 默认项目 id
@@ -29,37 +27,15 @@ def _build_transport_csv_bytes() -> bytes:
 
 
 @pytest_asyncio.fixture
-async def transport_tags(db_session: AsyncSession) -> dict[str, Tag | TagDimension]:
-    """「运输货物」维度：材料运输 → [渣土, 建材]。"""
-    dim = TagDimension(project_id=PID, name="运输货物", description="d")
-    db_session.add(dim)
-    await db_session.commit()
-    await db_session.refresh(dim)
-    root = Tag(
-        project_id=PID, dimension_id=cast(int, dim.id), name="材料运输", description="d"
-    )
-    db_session.add(root)
-    await db_session.commit()
-    await db_session.refresh(root)
-    leaf_a = Tag(
-        project_id=PID,
-        dimension_id=cast(int, dim.id),
-        name="渣土",
-        parent_id=cast(int, root.id),
-        description="d",
-    )
-    leaf_b = Tag(
-        project_id=PID,
-        dimension_id=cast(int, dim.id),
-        name="建材",
-        parent_id=cast(int, root.id),
-        description="d",
-    )
+async def transport_tags(db_session: AsyncSession) -> dict[str, Tag]:
+    """扁平货物标签：渣土 / 建材（组=运输货物）。"""
+    leaf_a = Tag(project_id=PID, name="渣土", group="运输货物", description="d")
+    leaf_b = Tag(project_id=PID, name="建材", group="运输货物", description="d")
     db_session.add_all([leaf_a, leaf_b])
     await db_session.commit()
     await db_session.refresh(leaf_a)
     await db_session.refresh(leaf_b)
-    return {"dim": dim, "root": root, "渣土": leaf_a, "建材": leaf_b}
+    return {"渣土": leaf_a, "建材": leaf_b}
 
 
 @pytest_asyncio.fixture

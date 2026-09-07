@@ -1,53 +1,43 @@
-"""标签、标签维度与资源/任务/用量标签管理 API"""
+"""标签（展平）与资源/任务/用量标签管理 API。
 
-from collections import defaultdict
+标签已无维度与树：扁平 CRUD + ``group`` 纯展示分组 + group 分组统计；
+打标端点只做「普通正 id 且存在」校验，不做图表切片互斥校验
+（冲突检查已移至「数据体检」）。
+"""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import SQLModel, col, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel.sql.expression import SelectOfScalar
 
 from src.dependencies.public.pagination import PagiCallable, get_pagination
 from src.dependencies.public.project import CurrentProject
 from src.dependencies.public.session import get_db_session
 from src.models.resource import Resource
 from src.models.resource_usage import TaskResourceUsage
-from src.models.tag import ResourceTag, Tag, TagDimension
+from src.models.tag import ResourceTag, Tag
 from src.models.task import Task
 from src.schemas.public.pagination import ListResp
 from src.schemas.resource import ResourceResp
 from src.schemas.tag import (
     ResourceTagAssignReq,
     TagCreate,
-    TagDimensionCreate,
-    TagDimensionResp,
-    TagDimensionUpdate,
-    TagNodeResp,
+    TagGroupResp,
     TagResp,
     TagUpdate,
     TaskTagAssignReq,
     UsageTagAssignReq,
 )
-from src.services.resource_tag import (
-    ChartConflictError,
-    ResourceTagService,
-    TagNotInProjectError,
-)
-from src.services.task_tag import TaskTagService
-from src.services.usage_tag import UsageTagService
-from src.utils.db_errors import is_foreign_key_violation, is_unique_violation
+from src.services.tag_assign import BuiltinTagAssignError, TagNotInProjectError
+from src.services.x_tag import ResourceTagService, TaskTagService, UsageTagService
+from src.utils.db_errors import is_unique_violation
 from src.utils.query import project_count_filter, project_filter
 
 tag_router = APIRouter(
     prefix="/projects/{project_id}/tag",
     tags=["tag"],
-)
-
-tag_dimension_router = APIRouter(
-    prefix="/projects/{project_id}/tag-dimension",
-    tags=["tag-dimension"],
 )
 
 resource_tag_router = APIRouter(
@@ -108,23 +98,6 @@ async def _get_tag_or_404(session: AsyncSession, project_id: int, tag_id: int) -
     return tag
 
 
-async def _get_dimension_or_404(
-    session: AsyncSession, project_id: int, dimension_id: int
-) -> TagDimension:
-    """按 ID 获取项目内标签维度，不存在时 404。"""
-    stmt = project_filter(
-        select(TagDimension).where(TagDimension.id == dimension_id),
-        TagDimension,
-        project_id,
-    )
-    dim = (await session.exec(stmt)).first()
-    if dim is None:
-        raise HTTPException(
-            status_code=404, detail=f"ID 为 {dimension_id} 的标签维度不存在"
-        )
-    return dim
-
-
 async def _get_resource_or_404(
     session: AsyncSession, project_id: int, resource_id: int
 ) -> Resource:
@@ -172,263 +145,8 @@ async def _get_usage_or_404(
     return usage
 
 
-async def _validate_dimension(
-    session: AsyncSession, project_id: int, dimension_id: int | None
-) -> None:
-    """校验维度存在且属于当前项目，否则 422。"""
-    if dimension_id is None:
-        return
-    stmt = project_filter(
-        select(TagDimension).where(TagDimension.id == dimension_id),
-        TagDimension,
-        project_id,
-    )
-    if (await session.exec(stmt)).first() is None:
-        raise HTTPException(
-            status_code=422,
-            detail=f"标签维度 ID {dimension_id} 不存在或不属于当前项目",
-        )
-
-
-async def _validate_parent(
-    session: AsyncSession, project_id: int, parent_id: int | None
-) -> None:
-    """校验父标签存在且属于当前项目，否则 422。"""
-    if parent_id is None:
-        return
-    stmt = project_filter(
-        select(Tag).where(Tag.id == parent_id),
-        Tag,
-        project_id,
-    )
-    if (await session.exec(stmt)).first() is None:
-        raise HTTPException(
-            status_code=422,
-            detail=f"父级标签 ID {parent_id} 不存在或不属于当前项目",
-        )
-
-
-async def _validate_parent_dimension(
-    session: AsyncSession,
-    project_id: int,
-    parent_id: int | None,
-    dimension_id: int,
-) -> None:
-    """校验父标签与子标签同维度，否则 422。"""
-    if parent_id is None:
-        return
-    stmt = project_filter(
-        select(Tag).where(Tag.id == parent_id),
-        Tag,
-        project_id,
-    )
-    parent = (await session.exec(stmt)).first()
-    if parent is None:
-        raise HTTPException(
-            status_code=422,
-            detail=f"父级标签 ID {parent_id} 不存在或不属于当前项目",
-        )
-    if parent.dimension_id != dimension_id:
-        raise HTTPException(
-            status_code=422,
-            detail=f"父级标签 ID {parent_id} 与当前标签不在同一维度，标签树不能跨维度",
-        )
-
-
-async def _is_descendant(
-    session: AsyncSession,
-    project_id: int,
-    node_id: int,
-    ancestor_candidate: int,
-) -> bool:
-    """node_id 是否是 ancestor_candidate 的子孙（沿 parent 链上溯判定）。"""
-    stmt = project_filter(
-        select(Tag),
-        Tag,
-        project_id,
-    )
-    rows = (await session.exec(stmt)).all()
-    parent_by_id: dict[int, int | None] = {
-        t.id: t.parent_id for t in rows if t.id is not None
-    }
-    cur: int | None = node_id
-    while cur is not None:
-        if cur == ancestor_candidate:
-            return True
-        parent = parent_by_id.get(cur)
-        cur = parent
-    return False
-
-
 # ============================================================
-# 标签维度 CRUD
-# ============================================================
-
-
-@tag_dimension_router.get(
-    "",
-    response_model=ListResp[TagDimensionResp],
-    status_code=200,
-    summary="列出标签维度",
-    description="分页列出项目内标签维度，支持按名称查找",
-)
-async def list_tag_dimensions_endpoint(
-    project: CurrentProject,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
-    paginate: Annotated[PagiCallable, Depends(get_pagination)],
-    name: Annotated[str | None, Query()] = None,
-):
-    stmt = project_filter(select(TagDimension), TagDimension, project.id)
-    stmt_count: SelectOfScalar[int] = project_count_filter(
-        select(func.count()).select_from(TagDimension),
-        TagDimension,
-        project.id,
-    )
-
-    if name is not None:
-        stmt = stmt.filter(col(TagDimension.name).contains(name))
-        stmt_count = stmt_count.filter(col(TagDimension.name).contains(name))
-
-    # 稳定排序，保证分页间不漂移
-    stmt = stmt.order_by(col(TagDimension.id).asc())
-    stmt = paginate(stmt)
-    items = (await session.exec(stmt)).all()
-    count = (await session.exec(stmt_count)).one()
-
-    return ListResp[TagDimensionResp](items=items, total=count)
-
-
-@tag_dimension_router.get(
-    "/{id}",
-    response_model=TagDimensionResp,
-    responses={404: {"model": NotFoundResp}},
-    status_code=200,
-    summary="获取单个标签维度",
-    description="根据 ID 获取项目内标签维度",
-)
-async def get_tag_dimension_endpoint(
-    id: int,
-    project: CurrentProject,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
-):
-    return await _get_dimension_or_404(session, project.id, id)
-
-
-@tag_dimension_router.post(
-    "",
-    response_model=TagDimensionResp,
-    responses={
-        409: {"model": ConflictResp, "description": "项目内标签维度名称重复"},
-    },
-    status_code=201,
-    summary="创建标签维度",
-    description="创建项目内标签维度",
-)
-async def create_tag_dimension_endpoint(
-    project: CurrentProject,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
-    dimension: TagDimensionCreate,
-):
-    db_dimension = TagDimension(
-        name=dimension.name,
-        description=dimension.description,
-        project_id=project.id,
-    )
-    session.add(db_dimension)
-    try:
-        await session.commit()
-    except IntegrityError as e:
-        await session.rollback()
-        if is_unique_violation(e):
-            raise HTTPException(
-                status_code=409,
-                detail=f"标签维度名称 '{dimension.name}' 在当前项目内已被占用",
-            ) from e
-        raise
-    await session.refresh(db_dimension)
-    return db_dimension
-
-
-@tag_dimension_router.put(
-    "/{id}",
-    response_model=TagDimensionResp,
-    responses={
-        404: {"model": NotFoundResp},
-        409: {"model": ConflictResp, "description": "项目内标签维度名称重复"},
-    },
-    status_code=200,
-    summary="更新标签维度",
-    description="更新标签维度名称/描述",
-)
-async def update_tag_dimension_endpoint(
-    id: int,
-    project: CurrentProject,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
-    dimension: TagDimensionUpdate,
-):
-    db_dimension = await _get_dimension_or_404(session, project.id, id)
-    db_dimension.sqlmodel_update(dimension.model_dump(exclude_unset=True))
-    session.add(db_dimension)
-    try:
-        await session.commit()
-    except IntegrityError as e:
-        await session.rollback()
-        if is_unique_violation(e):
-            raise HTTPException(
-                status_code=409,
-                detail=f"标签维度名称 '{db_dimension.name}' 在当前项目内已被占用",
-            ) from e
-        raise
-    await session.refresh(db_dimension)
-    return db_dimension
-
-
-@tag_dimension_router.delete(
-    "/{id}",
-    responses={
-        404: {"model": NotFoundResp},
-        409: {"model": ConflictResp, "description": "维度下存在标签，需先清空标签"},
-    },
-    status_code=204,
-    summary="删除标签维度",
-    description="删除项目内标签维度（维度下存在标签时拒绝）",
-)
-async def delete_tag_dimension_endpoint(
-    id: int,
-    project: CurrentProject,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
-) -> None:
-    await _get_dimension_or_404(session, project.id, id)
-
-    tag_stmt = project_filter(
-        select(Tag).where(Tag.dimension_id == id),
-        Tag,
-        project.id,
-    )
-    if (await session.exec(tag_stmt)).first() is not None:
-        raise HTTPException(
-            status_code=409,
-            detail="该维度下存在标签，请先删除或迁移标签",
-        )
-
-    stmt = project_filter(
-        select(TagDimension).where(TagDimension.id == id),
-        TagDimension,
-        project.id,
-    )
-    db_dimension = (await session.exec(stmt)).first()
-    await session.delete(db_dimension)
-    try:
-        await session.commit()
-    except IntegrityError as e:
-        raise HTTPException(
-            status_code=404,
-            detail=f"ID 为 {id} 的标签维度不存在",
-        ) from e
-
-
-# ============================================================
-# 标签 CRUD
+# 标签 CRUD（扁平 + 分组）
 # ============================================================
 
 
@@ -437,17 +155,19 @@ async def delete_tag_dimension_endpoint(
     response_model=ListResp[TagResp],
     status_code=200,
     summary="列出标签",
-    description="分页列出项目内标签，支持按名称/维度过滤",
+    description="分页列出项目内标签，支持按名称/分组过滤",
 )
 async def list_tags_endpoint(
     project: CurrentProject,
     session: Annotated[AsyncSession, Depends(get_db_session)],
     paginate: Annotated[PagiCallable, Depends(get_pagination)],
     name: Annotated[str | None, Query()] = None,
-    dimension_id: Annotated[int | None, Query(alias="dimensionId")] = None,
+    group: Annotated[
+        str | None, Query(description="按展示分组过滤，空字符串=未分组")
+    ] = None,
 ):
     stmt = project_filter(select(Tag), Tag, project.id)
-    stmt_count: SelectOfScalar[int] = project_count_filter(
+    stmt_count = project_count_filter(
         select(func.count()).select_from(Tag),
         Tag,
         project.id,
@@ -456,12 +176,12 @@ async def list_tags_endpoint(
     if name is not None:
         stmt = stmt.filter(col(Tag.name).contains(name))
         stmt_count = stmt_count.filter(col(Tag.name).contains(name))
-    if dimension_id is not None:
-        stmt = stmt.filter(col(Tag.dimension_id) == dimension_id)
-        stmt_count = stmt_count.filter(col(Tag.dimension_id) == dimension_id)
+    if group is not None:
+        stmt = stmt.filter(col(Tag.group) == group)
+        stmt_count = stmt_count.filter(col(Tag.group) == group)
 
-    # 稳定排序，保证分页间不漂移
-    stmt = stmt.order_by(col(Tag.id).asc())
+    # 稳定排序：分组在前，组内按名称
+    stmt = stmt.order_by(col(Tag.group).asc(), col(Tag.name).asc(), col(Tag.id).asc())
     stmt = paginate(stmt)
     items = (await session.exec(stmt)).all()
     count = (await session.exec(stmt_count)).one()
@@ -470,39 +190,25 @@ async def list_tags_endpoint(
 
 
 @tag_router.get(
-    "/tree",
-    response_model=list[TagNodeResp],
+    "/groups",
+    response_model=list[TagGroupResp],
     status_code=200,
-    summary="获取标签树",
-    description="返回项目内完整的父子标签树（顶级标签为根），支持按维度过滤",
+    summary="标签分组统计",
+    description="返回项目内标签的展示分组（含空分组=未分组）及其数量，用于前端分组列表",
 )
-async def get_tag_tree_endpoint(
+async def list_tag_groups_endpoint(
     project: CurrentProject,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    dimension_id: Annotated[int | None, Query(alias="dimensionId")] = None,
-) -> list[TagNodeResp]:
-    stmt = project_filter(select(Tag), Tag, project.id)
-    if dimension_id is not None:
-        stmt = stmt.filter(col(Tag.dimension_id) == dimension_id)
-    tags = sorted((await session.exec(stmt)).all(), key=lambda t: t.id or 0)
-
-    nodes: dict[int, TagNodeResp] = {
-        t.id: TagNodeResp(
-            id=t.id, name=t.name, dimension_id=t.dimension_id, parent_id=t.parent_id
-        )
-        for t in tags
-        if t.id is not None
-    }
-    roots: list[TagNodeResp] = []
-    for t in tags:
-        if t.id is None:
-            continue
-        node = nodes[t.id]
-        if t.parent_id is None:
-            roots.append(node)
-        elif t.parent_id in nodes:
-            nodes[t.parent_id].children.append(node)
-    return roots
+):
+    stmt = (
+        select(col(Tag.group), func.count().label("count"))
+        .select_from(Tag)
+        .where(Tag.project_id == project.id)
+        .group_by(col(Tag.group))
+        .order_by(col(Tag.group).asc())
+    )
+    rows = (await session.exec(stmt)).all()
+    return [TagGroupResp(group=group, count=count) for group, count in rows]
 
 
 @tag_router.get(
@@ -527,7 +233,7 @@ async def get_tag_endpoint(
     responses={404: {"model": NotFoundResp}},
     status_code=200,
     summary="获取标签直接关联的资源",
-    description="分页返回直接挂载到该标签的资源（不含子标签），标签不存在时 404",
+    description="分页返回直接挂载到该标签的资源，标签不存在时 404",
 )
 async def get_tag_resources_endpoint(
     id: int,
@@ -546,7 +252,7 @@ async def get_tag_resources_endpoint(
         )
         .order_by(col(Resource.id).asc())
     )
-    stmt_count: SelectOfScalar[int] = (
+    stmt_count = (
         select(func.count())
         .select_from(Resource)
         .join(ResourceTag, col(ResourceTag.resource_id) == col(Resource.id))
@@ -570,31 +276,20 @@ async def get_tag_resources_endpoint(
     "",
     response_model=TagResp,
     responses={
-        409: {"model": ConflictResp, "description": "维度内标签名称重复"},
-        422: {
-            "model": ConflictResp,
-            "description": "维度/父级标签不存在或不属于当前项目",
-        },
+        409: {"model": ConflictResp, "description": "项目内标签名称重复"},
     },
     status_code=201,
     summary="创建标签",
-    description="创建项目内标签，须指定所属维度，可指定同维度父级标签",
+    description="创建项目内标签（名称项目内唯一，group 为纯展示分组）",
 )
 async def create_tag_endpoint(
     project: CurrentProject,
     session: Annotated[AsyncSession, Depends(get_db_session)],
     tag: TagCreate,
 ):
-    await _validate_dimension(session, project.id, tag.dimension_id)
-    await _validate_parent(session, project.id, tag.parent_id)
-    await _validate_parent_dimension(
-        session, project.id, tag.parent_id, tag.dimension_id
-    )
-
     db_tag = Tag(
         name=tag.name,
-        dimension_id=tag.dimension_id,
-        parent_id=tag.parent_id,
+        group=tag.group,
         description=tag.description,
         project_id=project.id,
     )
@@ -606,12 +301,7 @@ async def create_tag_endpoint(
         if is_unique_violation(e):
             raise HTTPException(
                 status_code=409,
-                detail=f"标签名称 '{tag.name}' 在当前维度内已被占用",
-            ) from e
-        if is_foreign_key_violation(e):
-            raise HTTPException(
-                status_code=422,
-                detail="标签维度或父级标签不存在或不属于当前项目",
+                detail=f"标签名称 '{tag.name}' 在当前项目内已被占用",
             ) from e
         raise
     await session.refresh(db_tag)
@@ -623,15 +313,13 @@ async def create_tag_endpoint(
     response_model=TagResp,
     responses={
         404: {"model": NotFoundResp},
-        409: {"model": ConflictResp, "description": "维度内标签名称重复"},
-        422: {
-            "model": ConflictResp,
-            "description": "父级标签非法（不存在/跨维度/成环/自身）",
-        },
+        409: {"model": ConflictResp, "description": "项目内标签名称重复"},
     },
     status_code=200,
     summary="更新标签",
-    description="更新标签名称/描述/维度/父级（parentId 显式 null 表示移动到顶级）",
+    description=(
+        "更新标签名称/分组/描述（name/group/description 均 NOT NULL，不可显式置 null）"
+    ),
 )
 async def update_tag_endpoint(
     id: int,
@@ -640,97 +328,51 @@ async def update_tag_endpoint(
     tag: TagUpdate,
 ):
     db_tag = await _get_tag_or_404(session, project.id, id)
-
-    data = tag.model_dump(exclude_unset=True)
-    old_dimension_id = db_tag.dimension_id
-    new_dimension_id = data.get("dimension_id", old_dimension_id)
-    await _validate_dimension(session, project.id, new_dimension_id)
-
-    # 维度变更时，父级标签不能留在旧维度（标签树不跨维度）。
-    # 只传 dimensionId 且当前有父级时拒绝，需显式 parentId=null 移到顶级
-    # 或同时指定新维度下的父级标签。
-    if (
-        new_dimension_id != old_dimension_id
-        and "parent_id" not in data
-        and db_tag.parent_id is not None
-    ):
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "标签存在父级标签，不能直接更换维度："
-                "请将 parentId 设为 null 移到顶级后再更换维度，"
-                "或同时指定新维度下的父级标签"
-            ),
-        )
-
-    if "parent_id" in data:
-        new_parent = data["parent_id"]
-        if new_parent == id:
-            raise HTTPException(status_code=422, detail="标签不能以自身作为父级")
-        if new_parent is not None:
-            await _validate_parent(session, project.id, new_parent)
-            if await _is_descendant(session, project.id, new_parent, id):
-                raise HTTPException(
-                    status_code=422,
-                    detail="不能将标签移动到其子孙标签之下",
-                )
-            await _validate_parent_dimension(
-                session, project.id, new_parent, new_dimension_id
-            )
-
-    db_tag.sqlmodel_update(data)
+    db_tag.sqlmodel_update(tag.model_dump(exclude_unset=True))
     session.add(db_tag)
-
-    # 维度变更时，全部子孙标签随同迁移（保持标签树不跨维度）
-    if new_dimension_id != old_dimension_id:
-        stmt = project_filter(select(Tag), Tag, project.id)
-        all_tags = (await session.exec(stmt)).all()
-        children: dict[int, list[Tag]] = defaultdict(list)
-        for t in all_tags:
-            if t.id is not None and t.parent_id is not None:
-                children[t.parent_id].append(t)
-        stack = [id]
-        while stack:
-            node = stack.pop()
-            for child in children.get(node, []):
-                child.dimension_id = new_dimension_id
-                session.add(child)
-                if child.id is not None:
-                    stack.append(child.id)
-
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as e:
+        await session.rollback()
+        if is_unique_violation(e):
+            raise HTTPException(
+                status_code=409,
+                detail=f"标签名称 '{db_tag.name}' 在当前项目内已被占用",
+            ) from e
+        raise
     await session.refresh(db_tag)
     return db_tag
 
 
 @tag_router.delete(
     "/{id}",
-    responses={
-        404: {"model": NotFoundResp},
-        409: {"model": ConflictResp, "description": "存在子标签，需先删除子标签"},
-    },
+    responses={404: {"model": NotFoundResp}},
     status_code=204,
     summary="删除标签",
-    description="删除项目内标签（存在子标签时拒绝；资源/任务/用量/图表的关联自动级联删除）",
+    description=(
+        "删除项目内标签（资源/任务/用量关联、slice_tag_mapping 中的正 id 引用"
+        "随同清理；内置分类标签不能删除）"
+    ),
 )
 async def delete_tag_endpoint(
     id: int,
     project: CurrentProject,
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> None:
-    db_tag = await _get_tag_or_404(session, project.id, id)
+    if id < 0:
+        raise HTTPException(status_code=422, detail="内置分类标签不允许删除")
+    await _get_tag_or_404(session, project.id, id)
 
-    child_stmt = project_filter(
-        select(Tag).where(Tag.parent_id == id),
-        Tag,
-        project.id,
+    # 显式清理 slice_tag_mapping 中对该标签的引用（该表无 FK）
+    from sqlalchemy import delete as sa_delete
+
+    from src.models.slice import SliceTagMapping
+
+    await session.exec(
+        sa_delete(SliceTagMapping).where(col(SliceTagMapping.tag_id) == id)
     )
-    if (await session.exec(child_stmt)).first() is not None:
-        raise HTTPException(
-            status_code=409,
-            detail="该标签存在子标签，请先删除子标签",
-        )
 
+    db_tag = await _get_tag_or_404(session, project.id, id)
     await session.delete(db_tag)
     try:
         await session.commit()
@@ -769,15 +411,14 @@ async def get_resource_tags_endpoint(
     response_model=list[TagResp],
     responses={
         404: {"model": NotFoundResp, "description": "资源不存在"},
-        409: {
+        422: {
             "model": ConflictResp,
-            "description": "标签在图表中存在多个切片归属（互斥冲突）",
+            "description": "标签不存在/不属于当前项目，或为内置分类标签",
         },
-        422: {"model": ConflictResp, "description": "标签不存在或不属于当前项目"},
     },
     status_code=200,
     summary="替换式设置资源的标签",
-    description="整组替换资源挂载的标签，并执行图表切片互斥校验",
+    description="整组替换资源挂载的标签（仅普通标签；不做图表切片互斥校验，冲突检查在数据体检）",
 )
 async def set_resource_tags_endpoint(
     resource_id: int,
@@ -789,9 +430,7 @@ async def set_resource_tags_endpoint(
     await _get_resource_or_404(session, project.id, resource_id)
     try:
         return await service.set_resource_tags(resource_id, data.tag_ids)
-    except ChartConflictError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
-    except TagNotInProjectError as e:
+    except (BuiltinTagAssignError, TagNotInProjectError) as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
 
@@ -823,15 +462,14 @@ async def get_task_tags_endpoint(
     response_model=list[TagResp],
     responses={
         404: {"model": NotFoundResp, "description": "任务不存在"},
-        409: {
+        422: {
             "model": ConflictResp,
-            "description": "标签在图表中存在多个切片归属（互斥冲突）",
+            "description": "标签不存在/不属于当前项目，或为内置分类标签",
         },
-        422: {"model": ConflictResp, "description": "标签不存在或不属于当前项目"},
     },
     status_code=200,
     summary="替换式设置任务的标签",
-    description="整组替换任务挂载的标签，并执行图表切片互斥校验",
+    description="整组替换任务挂载的标签（仅普通标签；不做图表切片互斥校验，冲突检查在数据体检）",
 )
 async def set_task_tags_endpoint(
     task_id: int,
@@ -843,9 +481,7 @@ async def set_task_tags_endpoint(
     await _get_task_or_404(session, project.id, task_id)
     try:
         return await service.set_task_tags(task_id, data.tag_ids)
-    except ChartConflictError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
-    except TagNotInProjectError as e:
+    except (BuiltinTagAssignError, TagNotInProjectError) as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
 
@@ -877,15 +513,17 @@ async def get_usage_tags_endpoint(
     response_model=list[TagResp],
     responses={
         404: {"model": NotFoundResp, "description": "用量记录不存在"},
-        409: {
+        422: {
             "model": ConflictResp,
-            "description": "标签在图表中存在多个切片归属（互斥冲突）",
+            "description": "标签不存在/不属于当前项目，或为内置分类标签",
         },
-        422: {"model": ConflictResp, "description": "标签不存在或不属于当前项目"},
     },
     status_code=200,
     summary="替换式设置用量的标签",
-    description="整组替换用量记录挂载的标签（含日报导入的用量），并执行图表切片互斥校验",
+    description=(
+        "整组替换用量记录挂载的标签（含日报导入的用量；仅普通标签；"
+        "不做图表切片互斥校验，冲突检查在数据体检）"
+    ),
 )
 async def set_usage_tags_endpoint(
     usage_id: int,
@@ -897,15 +535,12 @@ async def set_usage_tags_endpoint(
     await _get_usage_or_404(session, project.id, usage_id)
     try:
         return await service.set_usage_tags(usage_id, data.tag_ids)
-    except ChartConflictError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
-    except TagNotInProjectError as e:
+    except (BuiltinTagAssignError, TagNotInProjectError) as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
 
 router = APIRouter()
 router.include_router(tag_router)
-router.include_router(tag_dimension_router)
 router.include_router(resource_tag_router)
 router.include_router(task_tag_router)
 router.include_router(usage_tag_router)

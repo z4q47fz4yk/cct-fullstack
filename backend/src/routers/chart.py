@@ -1,30 +1,29 @@
-"""碳排放图表定义与饼图数据 API"""
+"""碳排放图表定义、切片配置与饼图数据 API。
+
+图表自身只含名称/描述/类型；切片（slice）随图表整体配置：
+``PUT /chart/{id}/slices`` 整组替换（数组顺序即 sortOrder）。slice 内标签
+分或/且组（同组且、组间或）。饼图数据基于 usage_snapshot 物化视图命中。
+"""
 
 from datetime import date as date_type
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import SQLModel, col, func, select
+from sqlmodel import SQLModel, col, delete, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.dependencies.public.pagination import PagiCallable, get_pagination
 from src.dependencies.public.project import CurrentProject
 from src.dependencies.public.session import get_db_session
-from src.models.chart import ChartDefinition, ChartTagMapping
+from src.models.chart import ChartDefinition
 from src.models.resource_usage import UsageType
+from src.models.slice import ChartSlice, SliceTagMapping
 from src.models.tag import Tag
-from src.schemas.chart import (
-    ChartCreate,
-    ChartResp,
-    ChartSliceEntity,
-    ChartTagAssignReq,
-    ChartTagResp,
-    ChartUpdate,
-    PieSlice,
-)
+from src.schemas.chart import ChartCreate, ChartResp, ChartUpdate, PieSlice
 from src.schemas.public.pagination import ListResp
-from src.schemas.resource import ResourceCategory
+from src.schemas.slice import ChartSlicesReq, SliceResp
+from src.schemas.tag import BuiltinTagInfo
 from src.services.carbon_chart import CarbonChartService
 from src.utils.db_errors import is_unique_violation
 from src.utils.query import project_count_filter, project_filter
@@ -58,54 +57,35 @@ async def _get_chart_or_404(
     return chart
 
 
+async def _load_slice_rows(
+    session: AsyncSession, project_id: int, chart_id: int
+) -> list[ChartSlice]:
+    """加载图表切片（按 sort_order 升序）。"""
+    stmt = project_filter(
+        select(ChartSlice).where(ChartSlice.chart_id == chart_id),
+        ChartSlice,
+        project_id,
+    )
+    rows = (await session.exec(stmt)).all()
+    return sorted(rows, key=lambda s: (s.sort_order, s.id or 0))
+
+
 async def _build_chart_resp(
     session: AsyncSession, project_id: int, chart: ChartDefinition
 ) -> ChartResp:
-    """加载图表绑定的标签（按 sort_order 排序），组装 ChartResp。"""
-    mappings = (
-        await session.exec(
-            project_filter(
-                select(ChartTagMapping).where(ChartTagMapping.chart_id == chart.id),
-                ChartTagMapping,
-                project_id,
-            )
-        )
-    ).all()
-    ordered = sorted(mappings, key=lambda m: (m.sort_order, m.tag_id))
-
-    tags_by_id: dict[int, Tag] = {}
-    if ordered:
-        tag_ids = [m.tag_id for m in ordered]
-        tag_rows = (
-            await session.exec(
-                project_filter(
-                    select(Tag).where(col(Tag.id).in_(tag_ids)),
-                    Tag,
-                    project_id,
-                )
-            )
-        ).all()
-        tags_by_id = {t.id: t for t in tag_rows if t.id is not None}
-
-    tags = [
-        ChartTagResp(
-            tag_id=m.tag_id,
-            tag_name=tags_by_id[m.tag_id].name,
-            sort_order=m.sort_order,
-        )
-        for m in ordered
-        if m.tag_id in tags_by_id
-    ]
-    # model_dump 时 slice_entity / resource_categories 可能仍是数据库读回的
-    # 原始字符串（SQLModel 加载不重新校验），显式转换避免序列化告警
+    """组装 ChartResp（含切片列表与标签/组）。"""
+    service = CarbonChartService(session, project_id)
+    specs = await service.load_slices(chart.id or -1)
     payload = chart.model_dump(warnings=False)
-    payload["slice_entity"] = ChartSliceEntity(payload["slice_entity"])
-    payload["resource_categories"] = (
-        [ResourceCategory(c) for c in payload["resource_categories"]]
-        if payload["resource_categories"] is not None
-        else None
-    )
-    payload["tags"] = tags
+    payload["slices"] = [
+        SliceResp(
+            id=spec.id,
+            name=spec.name,
+            sort_order=spec.sort_order,
+            tags=spec.tag_items,
+        )
+        for spec in specs
+    ]
     return ChartResp.model_validate(payload)
 
 
@@ -151,7 +131,7 @@ async def list_charts_endpoint(
     responses={404: {"model": NotFoundResp}},
     status_code=200,
     summary="获取单个图表",
-    description="根据 ID 获取图表定义及其绑定的标签",
+    description="根据 ID 获取图表定义及其切片配置",
 )
 async def get_chart_endpoint(
     id: int,
@@ -168,7 +148,7 @@ async def get_chart_endpoint(
     responses={409: {"model": ConflictResp, "description": "项目内图表名称重复"}},
     status_code=201,
     summary="创建图表",
-    description="创建项目内图表定义",
+    description="创建项目内图表定义（切片在 PUT /chart/{id}/slices 配置）",
 )
 async def create_chart_endpoint(
     project: CurrentProject,
@@ -179,12 +159,6 @@ async def create_chart_endpoint(
         name=chart.name,
         description=chart.description,
         chart_type=chart.chart_type,
-        slice_entity=chart.slice_entity,
-        resource_categories=(
-            [c.value for c in chart.resource_categories]
-            if chart.resource_categories is not None
-            else None
-        ),
         project_id=project.id,
     )
     session.add(db_chart)
@@ -220,10 +194,7 @@ async def update_chart_endpoint(
     chart: ChartUpdate,
 ):
     db_chart = await _get_chart_or_404(session, project.id, id)
-    data = chart.model_dump(exclude_unset=True)
-    if data.get("resource_categories") is not None:
-        data["resource_categories"] = [c.value for c in data["resource_categories"]]
-    db_chart.sqlmodel_update(data)
+    db_chart.sqlmodel_update(chart.model_dump(exclude_unset=True))
     session.add(db_chart)
     try:
         await session.commit()
@@ -244,7 +215,7 @@ async def update_chart_endpoint(
     responses={404: {"model": NotFoundResp}},
     status_code=204,
     summary="删除图表",
-    description="删除图表定义（绑定的标签映射自动级联删除）",
+    description="删除图表定义（切片与切片标签映射自动级联删除）",
 )
 async def delete_chart_endpoint(
     id: int,
@@ -263,70 +234,91 @@ async def delete_chart_endpoint(
 
 
 @router.put(
-    "/{id}/tags",
+    "/{id}/slices",
     response_model=ChartResp,
     responses={
         404: {"model": NotFoundResp},
-        422: {"model": ConflictResp, "description": "标签不存在或不属于当前项目"},
+        422: {"model": ConflictResp, "description": "标签/切片配置非法"},
     },
     status_code=200,
-    summary="替换式设置图表的标签",
-    description="整组替换图表绑定的标签（数组顺序即显示顺序 sortOrder）",
+    summary="整组替换图表的切片",
+    description=(
+        "整组替换图表切片（数组顺序即 sortOrder）。每个切片含 name 与标签项；"
+        "标签项 group 同号=且（须同时命中），异号=或。标签可为普通正 id 或"
+        "内置分类负 id（按资源类别命中）。不做切片互斥校验，重叠重复计入。"
+    ),
 )
-async def set_chart_tags_endpoint(
+async def set_chart_slices_endpoint(
     id: int,
-    data: ChartTagAssignReq,
+    data: ChartSlicesReq,
     project: CurrentProject,
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ):
     chart = await _get_chart_or_404(session, project.id, id)
-    unique_ids = list(dict.fromkeys(data.tag_ids))
 
-    # 校验标签均存在且属于当前项目
-    if unique_ids:
-        stmt = project_filter(
-            select(Tag).where(col(Tag.id).in_(unique_ids)),
-            Tag,
-            project.id,
+    # 1. 校验标签（正 id 存在且属于项目；负 id 在内置字典）
+    names = [s.name for s in data.slices]
+    if len(set(names)) != len(names):
+        raise HTTPException(status_code=422, detail="同一图表内切片名称不能重复")
+    for s in data.slices:
+        if not s.name or not s.name.strip():
+            raise HTTPException(status_code=422, detail="切片名称不能为空")
+        if not s.tags:
+            raise HTTPException(
+                status_code=422, detail=f"切片「{s.name}」未配置任何标签"
+            )
+        for t in s.tags:
+            if t.tag_id == 0:
+                raise HTTPException(status_code=422, detail="标签 ID 不能为 0")
+    all_ids = {t.tag_id for s in data.slices for t in s.tags}
+    pos_ids = {i for i in all_ids if i > 0}
+    bad_neg = {i for i in all_ids if i < 0 and not BuiltinTagInfo.is_builtin_id(i)}
+    if bad_neg:
+        raise HTTPException(
+            status_code=422, detail=f"未知的内置分类标签 ID：{sorted(bad_neg)}"
         )
-        found = {t.id for t in (await session.exec(stmt)).all()}
-        missing = set(unique_ids) - found
+    if pos_ids:
+        tag_rows = (
+            await session.exec(
+                select(Tag.id)
+                .where(col(Tag.id).in_(pos_ids))
+                .where(col(Tag.project_id) == project.id)
+            )
+        ).all()
+        found = {int(row) for row in tag_rows}
+        missing = pos_ids - found
         if missing:
             raise HTTPException(
                 status_code=422,
                 detail=f"标签 ID {sorted(missing)} 不存在或不属于当前项目",
             )
 
-    # 替换映射（对称差集：保留仍在集合内的映射仅更新 sort_order，删除被移除
-    # 的，插入新增的；避免 INSERT 先于 DELETE 触发复合主键冲突）
-    old_stmt = project_filter(
-        select(ChartTagMapping).where(ChartTagMapping.chart_id == id),
-        ChartTagMapping,
-        project.id,
+    # 2. 全量替换：删旧切片（映射级联）→ 建新切片
+    old_slices = await _load_slice_rows(session, project.id, id)
+    await session.exec(
+        delete(ChartSlice).where(col(ChartSlice.id).in_([s.id for s in old_slices]))
     )
-    old_mappings = (await session.exec(old_stmt)).all()
-    unique_set = set(unique_ids)
-    kept_by_tag = {m.tag_id: m for m in old_mappings if m.tag_id in unique_set}
-    for mapping in old_mappings:
-        if mapping.tag_id not in unique_set:
-            await session.delete(mapping)
+    # for s in old_slices:
+    #     await session.delete(s)
+    # 先 flush 让删除落库，避免同名切片撞 (chart_id, name) 唯一约束
+    await session.flush()
 
-    for idx, tag_id in enumerate(unique_ids):
-        kept = kept_by_tag.get(tag_id)
-        if kept is not None:
-            kept.sort_order = idx
-            session.add(kept)
-        else:
+    for idx, item in enumerate(data.slices):
+        slice_obj = ChartSlice(
+            chart_id=id, name=item.name, sort_order=idx, project_id=project.id
+        )
+        session.add(slice_obj)
+        await session.flush()  # 拿到 slice_obj.id
+        for t in item.tags:
             session.add(
-                ChartTagMapping(
-                    chart_id=id,
-                    tag_id=tag_id,
-                    sort_order=idx,
-                    project_id=project.id,
+                SliceTagMapping(
+                    slice_id=slice_obj.id,  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+                    tag_id=t.tag_id,
+                    tag_group=t.group,
                 )
             )
-    await session.commit()
 
+    await session.commit()
     return await _build_chart_resp(session, project.id, chart)
 
 
@@ -336,8 +328,9 @@ async def set_chart_tags_endpoint(
     status_code=200,
     summary="饼图数据",
     description=(
-        "按图表绑定的根标签聚合碳排放：每个切片 = 该标签自身及其全部子孙标签"
-        "下资源的碳排放总和（口径与月度报表一致，应用资源周转折减）。"
+        "按图表的 slice 命中 usage_snapshot 合并标签聚合：同组标签且、组间或；"
+        "一条用量命中多个切片时重复计入（重叠由数据体检提示）。"
+        "碳排放/成本口径与月度报表一致（应用资源周转折减）。"
     ),
 )
 async def get_chart_pie_data_endpoint(

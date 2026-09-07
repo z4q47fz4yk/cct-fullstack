@@ -18,6 +18,11 @@ class AiUsageRecord(ProjectScopeMixin, SQLModel, table=True):
     """一次 AI 对话轮的 token/成本审计记录。"""
 
     __tablename__ = "ai_usage_record"  # pyright: ignore[reportAssignmentType]
+    # 会话跨多轮的 usage 汇总可加 updated_at，本表一次一轮 → 仅 created_at 足够。
+    __table_args__ = (
+        sa.Index("ix_ai_usage_record_project_created", "project_id", "created_at"),
+        sa.Index("ix_ai_usage_record_session_id", "session_id"),
+    )
 
     id: int | None = Field(
         default=None,
@@ -55,10 +60,6 @@ class AiUsageRecord(ProjectScopeMixin, SQLModel, table=True):
             "nullable": False,
         },
         description="记录创建时间",
-    )
-    # 会话跨多轮的 usage 汇总可加 updated_at，本表一次一轮 → 仅 created_at 足够。
-    __table_args__ = (
-        sa.Index("ix_ai_usage_record_project_created", "project_id", "created_at"),
     )
 
 

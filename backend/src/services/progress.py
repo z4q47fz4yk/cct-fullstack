@@ -165,9 +165,7 @@ class TaskProgressService:
                 )
             )
         ).all()
-        tasks_by_id: dict[int, Task] = {
-            t.id: t for t in task_rows if t.id is not None
-        }
+        tasks_by_id: dict[int, Task] = {t.id: t for t in task_rows if t.id is not None}
         ordered_task_ids = [t.id for t in task_rows if t.id is not None]
 
         # 2. 全部进度记录
@@ -200,9 +198,7 @@ class TaskProgressService:
                     ),
                     current_percent=last_percent,
                     is_completed=last_percent == 100,
-                    series=[
-                        ProgressPointResp(date=d, percent=p) for d, p in points
-                    ],
+                    series=[ProgressPointResp(date=d, percent=p) for d, p in points],
                 )
             )
         return ProgressTimelineResp(items=items)

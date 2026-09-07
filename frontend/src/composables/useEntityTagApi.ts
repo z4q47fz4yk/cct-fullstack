@@ -65,7 +65,8 @@ export function useEntityTags(entity: Ref<TagEntityRef | null>) {
 
 /**
  * 实体打标 API（资源/任务/用量统一）
- * 互斥校验冲突（409）向上抛出 ApiError（detail 含冲突原因），供界面内联展示
+ * 标签不存在/内置分类禁挂等错误（422）向上抛出 ApiError（detail 含原因），
+ * 供界面内联展示。不做图表切片互斥校验（冲突检查在数据体检）。
  */
 export function useEntityTagApi() {
   const queryCache = useQueryCache()

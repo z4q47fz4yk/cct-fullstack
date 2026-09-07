@@ -7,7 +7,12 @@
 import { computed } from 'vue'
 import { useQuery, useQueryCache } from '@pinia/colada'
 import { useProjectContext } from '@/composables/useProjectContext'
-import { resourceDiagnosticsQuery, resourceDiagnosticsQueryKey } from '@/client/@pinia/colada.gen'
+import {
+  resourceDiagnosticsQuery,
+  resourceDiagnosticsQueryKey,
+  tagChartDiagnosticsQuery,
+  tagChartDiagnosticsQueryKey,
+} from '@/client/@pinia/colada.gen'
 import type { ResourceDiagnosticsResp } from '@/client/types.gen'
 
 /** 用量口径 */
@@ -53,4 +58,33 @@ export function useDiagnosticsApi(usageType: () => DiagnosticsUsageType) {
   }
 
   return { data, items, isLoading, zeroFactorCount, infoCount, refresh, error: query.error }
+}
+
+/**
+ * 标签/切片配置体检（同一图表内不同切片标签重叠 → 饼图重复计入）。
+ * 只读提示，可「重新检查」刷新。
+ */
+export function useTagChartDiagnostics() {
+  const queryCache = useQueryCache()
+  const { currentProjectId } = useProjectContext()
+
+  const query = useQuery(() => ({
+    ...tagChartDiagnosticsQuery({
+      path: { project_id: currentProjectId.value! },
+    }),
+    enabled: !!currentProjectId.value,
+  }))
+
+  const items = computed(() => query.state.value?.data?.items ?? [])
+  const isLoading = computed(() => query.asyncStatus.value === 'loading')
+
+  async function refresh() {
+    await queryCache.invalidateQueries({
+      key: tagChartDiagnosticsQueryKey({
+        path: { project_id: currentProjectId.value! },
+      }),
+    })
+  }
+
+  return { items, isLoading, refresh, error: query.error }
 }

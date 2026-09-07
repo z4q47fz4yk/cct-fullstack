@@ -69,16 +69,16 @@ async function callInternal(path: string, method = "GET", body?: unknown): Promi
 
 export default function (pi: ExtensionAPI): void {
   // ────────────────────────────────────────────────────────────────
-  // 工具 0：获取项目上下文（资源清单、标签维度，帮助 AI 做映射决策）
+  // 工具 0：获取项目上下文（资源清单、标签，帮助 AI 做映射决策）
   // ────────────────────────────────────────────────────────────────
   pi.registerTool({
     name: "get_project_context",
     label: "获取项目上下文",
     description:
-      "获取当前施工项目的资源清单、资源分类与标签维度。AI 在编写日报解析配置前应先调用此工具，以便将日报中的资源名称映射到项目已有资源。",
-    promptSnippet: "获取项目资源清单与标签维度（编写解析配置前调用）",
+      "获取当前施工项目的资源清单、资源分类与已有标签（名称 + 展示分组）。AI 在编写日报解析配置前应先调用此工具，以便将日报中的资源名称映射到项目已有资源。",
+    promptSnippet: "获取项目资源清单与标签（编写解析配置前调用）",
     promptGuidelines: [
-      "编写日报解析配置前，先调用 get_project_context 获取项目已有资源与标签维度，据此决定配置中的 name/quantity 映射。",
+      "编写日报解析配置前，先调用 get_project_context 获取项目已有资源与标签，据此决定配置中的 name/quantity 映射。",
       "AI 只能使用本项目提供的工具，不得尝试读取文件或执行命令。",
     ],
     parameters: Type.Object({

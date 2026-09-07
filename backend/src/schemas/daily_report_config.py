@@ -106,8 +106,11 @@ class ProjectResourcesInfo(BaseModel):
         description="项目已有资源列表（name + category + unit）"
     )
     categories: list[str] = Field(description="项目中已使用的资源分类")
-    tag_dimensions: list[dict[str, Any]] = Field(
-        default_factory=list, description="项目已有的标签维度（用于 cargo_dimension）"
+    tags: list[dict[str, Any]] = Field(
+        default_factory=list, description="项目已有标签（name + group，名称项目内唯一）"
+    )
+    tag_groups: list[str] = Field(
+        default_factory=list, description="项目已有标签分组（含空字符串=未分组）"
     )
 
 

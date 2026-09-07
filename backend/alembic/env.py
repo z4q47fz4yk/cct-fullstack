@@ -39,6 +39,7 @@ def set_target_metadata():
     from sqlmodel import SQLModel
 
     from src.models import (
+        ai_usage,  # noqa: F401
         auth,  # noqa: F401
         chart,  # noqa: F401
         daily_report,  # noqa: F401
@@ -50,6 +51,7 @@ def set_target_metadata():
         resource_public,  # noqa: F401
         resource_reuse_config,  # noqa: F401
         resource_usage,  # noqa: F401
+        slice,  # noqa: F401
         tag,  # noqa: F401
         task,  # noqa: F401
         weather,  # noqa: F401

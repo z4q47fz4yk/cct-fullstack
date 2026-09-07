@@ -1,20 +1,17 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useQuery } from '@pinia/colada'
-import { useTagApi, useTagTreeByDimension, useTagResources } from '@/composables/useTagApi'
-import { useTagDimensionApi } from '@/composables/useTagDimensionApi'
+import { useTagApi, useTagGroups, useTagResources } from '@/composables/useTagApi'
 import { useProjectContext } from '@/composables/useProjectContext'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import { formatHttpError } from '@/utils/error'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import { getTagQuery } from '@/client/@pinia/colada.gen'
-import type { TagDimensionResp, TagNodeResp } from '@/client/types.gen'
+import type { TagGroupResp, TagResp } from '@/client/types.gen'
 import type { ResourceCategory } from '@/types/resource'
 import { categoryConfigMap } from '@/types/resource'
-import { countSubtree, findTagNode, findTagPath } from '@/utils/tagTree'
-import TagTree from '@/components/tag/TagTree.vue'
-import TagFormModal from '@/components/tag/TagFormModal.vue'
+import { UNGROUPED_LABEL, filterTags } from '@/utils/tagGroup'
 import ErrorState from '@/components/common/ErrorState.vue'
 import PaginationBar from '@/components/common/PaginationBar.vue'
 import TableEmptyState from '@/components/common/TableEmptyState.vue'
@@ -23,7 +20,7 @@ import { fmtNumber } from '@/utils/format'
 definePage({
   meta: {
     title: '碳排放标签',
-    description: '按维度组织标签树，父标签自动汇总子孙标签的碳排放',
+    description: '扁平标签 + 展示分组管理，标签名称项目内唯一',
     icon: 'label',
     showInNav: true,
     parentName: '/project/[projectId]/settings',
@@ -31,157 +28,119 @@ definePage({
   },
 })
 
-const { createTag, updateTag, deleteTag, isSubmitting } = useTagApi()
-const {
-  dimensions,
-  isLoading: dimsLoading,
-  error: dimsError,
-  refresh: refreshDims,
-  createDimension,
-  updateDimension,
-  deleteDimension,
-  isSubmitting: dimsSubmitting,
-} = useTagDimensionApi()
+const { tags, isLoading, error, refresh, createTag, updateTag, deleteTag, isSubmitting } =
+  useTagApi()
+const { groups, refresh: refreshGroups } = useTagGroups()
 const { currentProjectId } = useProjectContext()
 const { confirmDanger } = useConfirm()
 const { notifySuccess } = useToast()
 
-// ─── 维度选择（左侧列表） ─────────────────────────────────
+// ─── 左侧：分组列表 ────────────────────────────────────────
 
-const selectedDimensionId = ref<number | null>(null)
+const selectedGroup = ref<string | null>(null)
 
 watch(
-  () => dimensions.value,
+  () => groups.value,
   (list) => {
-    if (selectedDimensionId.value === null && list.length > 0) {
-      selectedDimensionId.value = list[0]!.id
-    } else if (
-      selectedDimensionId.value !== null &&
-      !list.some((d) => d.id === selectedDimensionId.value)
-    ) {
-      selectedDimensionId.value = list[0]?.id ?? null
+    if (selectedGroup.value !== null && !list.some((g) => g.group === selectedGroup.value)) {
+      selectedGroup.value = null // 未知分组 → 全部
     }
   },
   { immediate: true },
 )
 
-const selectedDimension = computed<TagDimensionResp | null>(
-  () => dimensions.value.find((d) => d.id === selectedDimensionId.value) ?? null,
-)
+const visibleTags = computed<TagResp[]>(() => {
+  const base = tags.value
+  if (selectedGroup.value === null) return filterTags(base, searchQuery.value)
+  return filterTags(
+    base.filter((t) => (t.group ?? '') === selectedGroup.value),
+    searchQuery.value,
+  )
+})
 
-// 该维度下的标签树
-const { tagTree, isLoading, error, refresh } = useTagTreeByDimension(selectedDimensionId)
-
-// ─── 选中标签 ──────────────────────────────────────────────
+// ─── 右侧选中标签 ───────────────────────────────────────────
 
 const selectedId = ref<number | null>(null)
 
-watch(selectedDimensionId, () => {
-  selectedId.value = null
-  resPage.value = 1
-})
-
-const selectedNode = computed<TagNodeResp | null>(() =>
-  selectedId.value === null ? null : (findTagNode(tagTree.value, selectedId.value) ?? null),
+const selectedTag = computed<TagResp | null>(
+  () => tags.value.find((t) => t.id === selectedId.value) ?? null,
 )
 
-const selectedPath = computed<string[]>(() =>
-  selectedId.value === null ? [] : findTagPath(tagTree.value, selectedId.value).map((n) => n.name),
-)
-
-// 选中标签详情（描述 / 创建时间）
 const { state: tagDetailState } = useQuery(() => ({
   ...getTagQuery({
     path: { project_id: currentProjectId.value!, id: selectedId.value! },
   }),
   enabled: selectedId.value !== null,
 }))
-
 const tagDetail = computed(() => tagDetailState.value?.data)
 
-// ─── 关联资源（分页） ──────────────────────────────────────
-
+// 关联资源（分页）
 const resPage = ref(1)
 const resPageSize = ref(10)
-
 const {
   resources,
   totalCount,
   isLoading: resLoading,
 } = useTagResources(selectedId, resPage, resPageSize)
-
 watch(selectedId, () => {
   resPage.value = 1
 })
 
-const descendantCount = computed(() =>
-  selectedNode.value ? countSubtree(selectedNode.value) - 1 : 0,
-)
-
 const createdDate = computed(() => tagDetail.value?.createdAt?.slice(0, 10) ?? '—')
 
 // ─── 搜索 ──────────────────────────────────────────────────
-
 const searchQuery = ref('')
 
-// ─── 表单弹窗（标签） ──────────────────────────────────────
-
+// ─── 表单弹窗 ──────────────────────────────────────────────
 const showForm = ref(false)
-const editingTag = ref<TagNodeResp | null>(null)
-const editingDescription = ref('')
-const defaultParentId = ref<number | null>(null)
+const editingTag = ref<TagResp | null>(null)
+const formName = ref('')
+const formGroup = ref('')
+const formDescription = ref('')
 const formError = ref('')
 
-function openCreate() {
+const groupSuggestions = computed(() => {
+  const set = new Set(groups.value.map((g) => g.group).filter((g) => g !== ''))
+  for (const t of tags.value) if (t.group) set.add(t.group)
+  return [...set]
+})
+
+function openCreate(group = '') {
   editingTag.value = null
-  defaultParentId.value = null
+  formName.value = ''
+  formGroup.value = group
+  formDescription.value = ''
   formError.value = ''
   showForm.value = true
 }
 
-function openCreateChild(parent: TagNodeResp) {
-  editingTag.value = null
-  defaultParentId.value = parent.id
-  formError.value = ''
-  showForm.value = true
-}
-
-function openEdit(tag: TagNodeResp) {
+function openEdit(tag: TagResp) {
   editingTag.value = tag
-  editingDescription.value = tag.id === selectedId.value ? (tagDetail.value?.description ?? '') : ''
-  defaultParentId.value = null
+  formName.value = tag.name
+  formGroup.value = tag.group ?? ''
+  formDescription.value = tag.description ?? ''
   formError.value = ''
   showForm.value = true
 }
 
-async function handleFormSubmit(payload: {
-  name: string
-  dimensionId: number
-  parentId: number | null
-  description: string
-}) {
+async function handleFormSubmit() {
+  const name = formName.value.trim()
+  if (!name) {
+    formError.value = '请输入标签名称'
+    return
+  }
   formError.value = ''
   try {
     if (editingTag.value) {
       await updateTag({
         path: { project_id: currentProjectId.value!, id: editingTag.value.id },
-        body: {
-          name: payload.name,
-          dimensionId: payload.dimensionId,
-          parentId: payload.parentId,
-          description: payload.description,
-        },
+        body: { name, group: formGroup.value, description: formDescription.value.trim() },
       })
       notifySuccess('标签已更新')
     } else {
       await createTag({
         path: { project_id: currentProjectId.value! },
-        body: {
-          name: payload.name,
-          dimensionId: payload.dimensionId,
-          parentId: payload.parentId,
-          description: payload.description,
-        },
+        body: { name, group: formGroup.value, description: formDescription.value.trim() },
       })
       notifySuccess('标签已创建')
     }
@@ -191,13 +150,8 @@ async function handleFormSubmit(payload: {
   }
 }
 
-function closeForm() {
-  showForm.value = false
-}
-
 // ─── 删除 ──────────────────────────────────────────────────
-
-async function handleDelete(tag: TagNodeResp) {
+async function handleDelete(tag: TagResp) {
   const { confirmed } = await confirmDanger(`确定要删除标签「${tag.name}」吗？`)
   if (!confirmed) return
   try {
@@ -209,211 +163,101 @@ async function handleDelete(tag: TagNodeResp) {
   }
 }
 
-// ─── 维度管理 ──────────────────────────────────────────────
-
-const showDimForm = ref(false)
-const editingDimension = ref<TagDimensionResp | null>(null)
-const dimName = ref('')
-const dimDescription = ref('')
-const dimError = ref('')
-
-function openCreateDimension() {
-  editingDimension.value = null
-  dimName.value = ''
-  dimDescription.value = ''
-  dimError.value = ''
-  showDimForm.value = true
+function groupLabel(group: string): string {
+  return group === '' ? UNGROUPED_LABEL : group
 }
-
-function openEditDimension(d: TagDimensionResp) {
-  editingDimension.value = d
-  dimName.value = d.name
-  dimDescription.value = d.description
-  dimError.value = ''
-  showDimForm.value = true
-}
-
-async function handleDimensionSubmit() {
-  dimError.value = ''
-  const name = dimName.value.trim()
-  if (!name) {
-    dimError.value = '请输入维度名称'
-    return
-  }
-  try {
-    if (editingDimension.value) {
-      await updateDimension({
-        path: { project_id: currentProjectId.value!, id: editingDimension.value.id },
-        body: { name, description: dimDescription.value.trim() },
-      })
-      notifySuccess('维度已更新')
-    } else {
-      await createDimension({
-        path: { project_id: currentProjectId.value! },
-        body: { name, description: dimDescription.value.trim() },
-      })
-      notifySuccess('维度已创建')
-    }
-    showDimForm.value = false
-  } catch (e) {
-    dimError.value = formatHttpError(e, '保存失败，请重试')
-  }
-}
-
-async function handleDeleteDimension(d: TagDimensionResp) {
-  const { confirmed } = await confirmDanger(`确定要删除维度「${d.name}」吗？`, '确认删除维度')
-  if (!confirmed) return
-  try {
-    await deleteDimension({ path: { project_id: currentProjectId.value!, id: d.id } })
-    notifySuccess('维度已删除')
-  } catch (e) {
-    console.error('Delete dimension failed:', e)
-  }
-}
-
-// 该维度下的标签总数（用于维度行计数）
-const tagCountByDimension = computed(() => {
-  // 维度树按需加载，选中维度时返回其树根节点数
-  if (selectedDimensionId.value === null) return 0
-  return tagTree.value.length
-})
-
-const hasDimensions = computed(() => dimensions.value.length > 0)
 
 function categoryLabel(category: ResourceCategory): string {
   return categoryConfigMap[category]?.label ?? category
 }
+
+const groupCount = (g: TagGroupResp): number => g.count
 </script>
 
 <template>
   <Teleport defer to="#header-actions">
-    <button
-      class="btn btn-primary gap-1 px-5"
-      :disabled="isLoading || dimsLoading"
-      @click="openCreate"
-    >
+    <button class="btn btn-primary gap-1 px-5" :disabled="isLoading" @click="openCreate()">
       <span class="material-symbols-outlined icon-sm">add</span>
       添加标签
     </button>
   </Teleport>
 
   <ErrorState
-    v-if="dimsError"
+    v-if="error"
     title="加载失败"
-    description="无法获取标签维度，请检查网络连接"
-    @retry="refreshDims"
+    description="无法获取标签列表，请检查网络连接"
+    @retry="refresh"
   />
 
   <div v-else class="space-y-4">
     <!-- 汇总说明 -->
     <section class="panel px-4 py-3 flex items-center gap-3">
-      <span class="material-symbols-outlined text-primary icon-md shrink-0">account_tree</span>
+      <span class="material-symbols-outlined text-primary icon-md shrink-0">label</span>
       <p class="text-xs text-fg-muted leading-relaxed">
-        标签按维度组织，每个维度一棵树；父标签的碳排放自动汇总其全部子孙标签；跨维度允许重名，选择器会标注维度上下文。
+        标签为扁平结构，名称在项目内唯一；「分组」仅用于列表/选择器分组展示，不参与碳排放统计。
+        资源、任务、用量分别打标，饼图按其标签命中统计。
       </p>
     </section>
 
-    <div class="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 items-start">
-      <!-- 左：维度列表 -->
-      <section class="panel p-0" aria-labelledby="dimension-list-title">
-        <div class="m-4 flex flex-col gap-3">
-          <div class="flex items-center justify-between gap-2">
-            <h2 id="dimension-list-title" class="section-title m-0">标签维度</h2>
-            <button class="btn btn-ghost btn-xs" title="新建维度" @click="openCreateDimension">
-              <span class="material-symbols-outlined icon-sm">add</span>
-              新建维度
-            </button>
-          </div>
-          <p class="text-[11px] text-fg-subtle -mt-2">选择维度后，右侧展示该维度的标签树</p>
+    <div class="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4 items-start">
+      <!-- 左：分组列表 -->
+      <section class="panel p-0" aria-labelledby="group-list-title">
+        <div class="m-4 flex flex-col gap-2">
+          <h2 id="group-list-title" class="section-title m-0">标签分组</h2>
+          <p class="text-[11px] text-fg-subtle -mt-1">选择分组后右侧仅显示该分组标签</p>
         </div>
-
-        <div class="px-2 pb-3">
-          <div v-if="dimsLoading" class="flex justify-center py-8">
-            <span class="loading loading-spinner loading-md text-primary" />
-          </div>
-          <div v-else-if="dimensions.length === 0" class="px-2 py-8 text-center">
-            <div
-              class="w-12 h-12 rounded-full bg-base-300/60 flex items-center justify-center mx-auto mb-2"
+        <div class="px-2 pb-3 flex flex-col gap-1">
+          <div
+            class="flex items-center justify-between px-3 h-10 rounded-lg cursor-pointer transition-colors"
+            :class="selectedGroup === null ? 'bg-primary/12' : 'hover:bg-base-300/40'"
+            @click="selectedGroup = null"
+          >
+            <span
+              class="text-sm"
+              :class="selectedGroup === null ? 'text-base-content font-medium' : 'text-fg-muted'"
             >
-              <span class="material-symbols-outlined icon-xl text-fg-subtle">account_tree</span>
-            </div>
-            <p class="text-sm text-fg-muted">暂无标签维度</p>
-            <p class="text-xs text-fg-subtle mt-1">点击上方「新建维度」创建第一个维度</p>
+              全部标签
+            </span>
+            <span class="text-[10px] font-mono text-fg-muted">{{ tags.length }}</span>
           </div>
-          <div v-else class="flex flex-col gap-1.5">
-            <div
-              v-for="d in dimensions"
-              :key="d.id"
-              class="group flex items-center gap-2 rounded-lg px-3 h-11 cursor-pointer transition-colors"
-              :class="selectedDimensionId === d.id ? 'bg-primary/12' : 'hover:bg-base-300/40'"
-              @click="selectedDimensionId = d.id"
+          <div
+            v-for="g in groups"
+            :key="g.group"
+            class="flex items-center justify-between px-3 h-10 rounded-lg cursor-pointer transition-colors"
+            :class="selectedGroup === g.group ? 'bg-primary/12' : 'hover:bg-base-300/40'"
+            @click="selectedGroup = g.group"
+          >
+            <span
+              class="text-sm truncate"
+              :class="selectedGroup === g.group ? 'text-base-content font-medium' : 'text-fg-muted'"
             >
-              <span
-                class="material-symbols-outlined icon-sm shrink-0"
-                :class="selectedDimensionId === d.id ? 'text-primary' : 'text-fg-subtle'"
-              >
-                account_tree
-              </span>
-              <div class="flex-1 min-w-0">
-                <p
-                  class="text-sm truncate"
-                  :class="
-                    selectedDimensionId === d.id ? 'text-base-content font-medium' : 'text-fg-muted'
-                  "
-                >
-                  {{ d.name }}
-                </p>
-                <p v-if="d.description" class="text-[10px] text-fg-subtle truncate">
-                  {{ d.description }}
-                </p>
-              </div>
-              <div
-                class="flex items-center gap-0.5 shrink-0"
-                :class="selectedDimensionId === d.id ? '' : 'hidden group-hover:flex'"
-              >
-                <button
-                  class="btn btn-ghost btn-xs btn-square"
-                  title="编辑维度"
-                  @click.stop="openEditDimension(d)"
-                >
-                  <span class="material-symbols-outlined icon-sm text-fg-subtle">edit</span>
-                </button>
-                <button
-                  class="btn btn-ghost btn-xs btn-square hover:bg-error/10"
-                  title="删除维度（含标签时后端拒绝）"
-                  @click.stop="handleDeleteDimension(d)"
-                >
-                  <span class="material-symbols-outlined icon-sm text-error">delete</span>
-                </button>
-              </div>
-            </div>
+              {{ groupLabel(g.group) }}
+            </span>
+            <span class="text-[10px] font-mono text-fg-muted">{{ groupCount(g) }}</span>
           </div>
         </div>
       </section>
 
-      <!-- 右：该维度标签树 + 详情 -->
+      <!-- 右：标签列表 + 详情 -->
       <div class="min-w-0 space-y-4">
-        <!-- 维度标签树 -->
-        <section class="panel p-0" aria-labelledby="tag-tree-title">
-          <div class="m-4 flex flex-col gap-3">
+        <section class="panel p-0" aria-labelledby="tag-list-title">
+          <div class="m-4 flex flex-col gap-2">
             <div class="flex items-center gap-2">
-              <h2 id="tag-tree-title" class="section-title m-0">
-                {{ selectedDimension?.name ?? '标签树' }}
+              <h2 id="tag-list-title" class="section-title m-0">
+                {{ selectedGroup === null ? '全部标签' : groupLabel(selectedGroup) }}
               </h2>
               <span
                 class="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-base-300/60 text-fg-muted"
               >
-                {{ tagCountByDimension }}
+                {{ visibleTags.length }}
               </span>
               <button
-                v-if="hasDimensions"
+                v-if="selectedGroup !== null"
                 class="btn btn-ghost btn-xs ml-auto"
-                title="添加子标签（选中节点）"
-                :disabled="selectedNode === null"
-                @click="selectedNode && openCreateChild(selectedNode)"
+                @click="openCreate(selectedGroup === UNGROUPED_LABEL ? '' : selectedGroup)"
               >
                 <span class="material-symbols-outlined icon-sm">add</span>
-                添加子标签
+                添加到此分组
               </button>
             </div>
             <label class="input flex items-center gap-2">
@@ -422,82 +266,107 @@ function categoryLabel(category: ResourceCategory): string {
                 v-model="searchQuery"
                 type="text"
                 class="w-full bg-transparent"
-                placeholder="搜索标签…"
+                placeholder="搜索标签名称或分组…"
               />
             </label>
           </div>
-          <div class="px-2 pb-3 max-h-[300px] overflow-y-auto">
+
+          <div class="px-2 pb-3 max-h-[380px] overflow-y-auto">
             <div v-if="isLoading" class="flex justify-center py-10">
               <span class="loading loading-spinner loading-md text-primary" />
             </div>
-            <TagTree
-              v-else
-              :tree="tagTree"
-              :selected-id="selectedId"
-              :search="searchQuery"
-              @select="(node) => (selectedId = node.id)"
-              @add-child="openCreateChild"
-              @edit="openEdit"
-              @delete="handleDelete"
-            />
+            <div v-else-if="visibleTags.length === 0" class="text-center py-10">
+              <span class="material-symbols-outlined icon-2xl text-fg-subtle">label_off</span>
+              <p class="text-sm text-fg-muted mt-2">
+                {{ searchQuery ? '未找到匹配的标签' : '暂无标签' }}
+              </p>
+              <p class="text-xs text-fg-subtle mt-1">点击右上角「添加标签」创建第一个标签</p>
+            </div>
+            <div v-else class="flex flex-col gap-0.5">
+              <div
+                v-for="tag in visibleTags"
+                :key="tag.id"
+                class="group flex items-center gap-2 rounded-lg px-3 h-10 cursor-pointer transition-colors"
+                :class="selectedId === tag.id ? 'bg-primary/12' : 'hover:bg-base-300/40'"
+                @click="selectedId = tag.id"
+              >
+                <span
+                  class="material-symbols-outlined icon-sm shrink-0"
+                  :class="selectedId === tag.id ? 'text-primary' : 'text-fg-subtle'"
+                >
+                  label
+                </span>
+                <div class="flex-1 min-w-0">
+                  <p
+                    class="text-sm truncate"
+                    :class="
+                      selectedId === tag.id ? 'text-base-content font-medium' : 'text-fg-muted'
+                    "
+                  >
+                    {{ tag.name }}
+                  </p>
+                  <p v-if="tag.group" class="text-[10px] text-fg-subtle truncate">
+                    {{ tag.group }}
+                  </p>
+                </div>
+                <div
+                  class="flex items-center gap-0.5 shrink-0"
+                  :class="selectedId === tag.id ? '' : 'hidden group-hover:flex'"
+                >
+                  <button
+                    class="btn btn-ghost btn-xs btn-square"
+                    title="编辑标签"
+                    @click.stop="openEdit(tag)"
+                  >
+                    <span class="material-symbols-outlined icon-sm text-fg-subtle">edit</span>
+                  </button>
+                  <button
+                    class="btn btn-ghost btn-xs btn-square hover:bg-error/10"
+                    title="删除标签"
+                    @click.stop="handleDelete(tag)"
+                  >
+                    <span class="material-symbols-outlined icon-sm text-error">delete</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
         <!-- 标签详情 -->
-        <section class="p-4 panel" aria-labelledby="tag-detail-title">
-          <div v-if="!selectedNode" class="py-8 text-center">
+        <section class="panel p-4" aria-labelledby="tag-detail-title">
+          <div v-if="!selectedTag" class="py-8 text-center">
             <div
               class="w-14 h-14 rounded-full bg-base-300/60 flex items-center justify-center mx-auto mb-3"
             >
               <span class="material-symbols-outlined icon-2xl text-fg-subtle">label_off</span>
             </div>
-            <p class="text-fg-muted text-sm">
-              {{ hasDimensions ? '从上方标签树选择一个标签查看详情' : '暂无标签' }}
-            </p>
-            <p v-if="!hasDimensions" class="text-xs text-fg-subtle mt-1">
-              先创建标签维度，再创建标签
-            </p>
+            <p class="text-fg-muted text-sm">从左侧选择一个标签查看详情</p>
           </div>
-
           <div v-else class="space-y-4">
             <div>
-              <nav
-                class="flex items-center gap-1 text-xs text-fg-subtle mb-2"
-                aria-label="标签路径"
+              <span
+                class="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-base-300/60 text-fg-muted"
               >
-                <span class="px-1.5 py-0.5 rounded-full bg-base-300/60 font-mono text-fg-muted">
-                  {{ selectedDimension?.name ?? '' }}
-                </span>
-                <span v-if="selectedPath.length > 0" class="material-symbols-outlined text-sm"
-                  >chevron_right</span
-                >
-                <template v-for="(name, idx) in selectedPath" :key="idx">
-                  <span>{{ name }}</span>
-                  <span
-                    v-if="idx < selectedPath.length - 1"
-                    class="material-symbols-outlined text-sm"
-                  >
-                    chevron_right
-                  </span>
-                </template>
-              </nav>
-              <div class="flex items-start justify-between gap-4">
+                {{ groupLabel(selectedTag.group ?? '') }}
+              </span>
+              <div class="flex items-start justify-between gap-4 mt-1">
                 <div>
                   <h2 id="tag-detail-title" class="text-lg font-semibold text-base-content">
-                    {{ selectedNode.name }}
+                    {{ selectedTag.name }}
                   </h2>
-                  <p v-if="tagDetail?.description" class="text-xs text-fg-subtle mt-1">
-                    {{ tagDetail.description }}
+                  <p v-if="selectedTag.description" class="text-xs text-fg-subtle mt-1">
+                    {{ selectedTag.description }}
                   </p>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
-                  <button class="btn btn-ghost" @click="openEdit(selectedNode)">
+                  <button class="btn btn-ghost" @click="openEdit(selectedTag)">
                     <span class="material-symbols-outlined icon-sm">edit</span>
                     编辑
                   </button>
                   <button
                     class="btn btn-ghost btn-sm text-error"
-                    @click="handleDelete(selectedNode)"
+                    @click="handleDelete(selectedTag)"
                   >
                     <span class="material-symbols-outlined icon-sm">delete</span>
                     删除
@@ -506,19 +375,12 @@ function categoryLabel(category: ResourceCategory): string {
               </div>
             </div>
 
-            <div class="grid grid-cols-3 gap-3">
+            <div class="grid grid-cols-2 gap-3">
               <div class="rounded-field bg-base-200/60 border border-base-content/20 px-4 py-3">
                 <p class="text-[11px] text-fg-subtle">直接关联资源</p>
                 <p class="font-mono text-lg font-semibold text-base-content mt-0.5">
                   {{ resLoading ? '…' : totalCount }}
                   <span class="text-xs font-normal text-fg-subtle">种</span>
-                </p>
-              </div>
-              <div class="rounded-field bg-base-200/60 border border-base-content/20 px-4 py-3">
-                <p class="text-[11px] text-fg-subtle">子孙标签</p>
-                <p class="font-mono text-lg font-semibold text-base-content mt-0.5">
-                  {{ descendantCount }}
-                  <span class="text-xs font-normal text-fg-subtle">个</span>
                 </p>
               </div>
               <div class="rounded-field bg-base-200/60 border border-base-content/20 px-4 py-3">
@@ -538,7 +400,6 @@ function categoryLabel(category: ResourceCategory): string {
                   {{ totalCount }}
                 </span>
               </div>
-
               <div class="panel p-0 overflow-x-auto">
                 <table class="table">
                   <thead>
@@ -590,7 +451,6 @@ function categoryLabel(category: ResourceCategory): string {
                   </tbody>
                 </table>
               </div>
-
               <PaginationBar
                 v-if="totalCount > resPageSize"
                 v-model:current="resPage"
@@ -605,64 +465,44 @@ function categoryLabel(category: ResourceCategory): string {
     </div>
 
     <!-- 新建/编辑标签弹窗 -->
-    <TagFormModal
-      :show="showForm"
-      :tree="tagTree"
-      :editing-tag="editingTag"
-      :default-parent-id="defaultParentId"
-      :dimension-id="selectedDimensionId"
-      :dimensions="dimensions"
-      :editing-description="editingDescription"
-      :is-submitting="isSubmitting"
-      :error="formError"
-      @submit="handleFormSubmit"
-      @cancel="closeForm"
-    />
-
-    <!-- 新建/编辑维度弹窗 -->
     <BaseModal
-      v-model:open="showDimForm"
-      :title="editingDimension ? '编辑维度' : '新建维度'"
+      v-model:open="showForm"
+      :title="editingTag ? '编辑标签' : '新建标签'"
       class="max-w-md"
-      @close="showDimForm = false"
+      @close="showForm = false"
     >
-      <form class="space-y-4" @submit.prevent="handleDimensionSubmit">
+      <form class="space-y-4" @submit.prevent="handleFormSubmit">
         <div class="fieldset">
-          <label class="fieldset-label">维度名称</label>
-          <input
-            v-model="dimName"
-            class="input"
-            :disabled="dimsSubmitting"
-            placeholder="如：施工用材、施工运输、施工现场"
-            type="text"
-          />
+          <label class="fieldset-label">标签名称</label>
+          <input v-model="formName" class="input" placeholder="如：商品混凝土" type="text" />
         </div>
         <div class="fieldset">
-          <label class="fieldset-label">维度描述</label>
+          <label class="fieldset-label">展示分组</label>
           <input
-            v-model="dimDescription"
+            v-model="formGroup"
             class="input"
-            :disabled="dimsSubmitting"
-            placeholder="可选，说明该维度的分类口径"
+            list="group-suggestions"
+            placeholder="如：材料 / 运输（留空=未分组）"
             type="text"
           />
+          <datalist id="group-suggestions">
+            <option v-for="g in groupSuggestions" :key="g" :value="g" />
+          </datalist>
+          <span class="text-xs text-fg-subtle">分组仅用于界面归类展示，可自由填写</span>
         </div>
-        <div v-if="dimError" class="alert alert-error alert-sm">
+        <div class="fieldset">
+          <label class="fieldset-label">描述</label>
+          <input v-model="formDescription" class="input" placeholder="可选" type="text" />
+        </div>
+        <div v-if="formError" class="alert alert-error alert-sm">
           <span class="material-symbols-outlined icon-sm">error</span>
-          <span class="text-sm">{{ dimError }}</span>
+          <span class="text-sm">{{ formError }}</span>
         </div>
         <div class="modal-action">
-          <button
-            class="btn btn-ghost"
-            type="button"
-            :disabled="dimsSubmitting"
-            @click="showDimForm = false"
-          >
-            取消
-          </button>
-          <button class="btn btn-primary" type="submit" :disabled="dimsSubmitting">
-            <span v-if="dimsSubmitting" class="loading loading-spinner loading-xs"></span>
-            {{ editingDimension ? '保存' : '创建' }}
+          <button class="btn btn-ghost" type="button" @click="showForm = false">取消</button>
+          <button class="btn btn-primary" type="submit" :disabled="isSubmitting">
+            <span v-if="isSubmitting" class="loading loading-spinner loading-xs"></span>
+            {{ editingTag ? '保存' : '创建' }}
           </button>
         </div>
       </form>

@@ -1,19 +1,16 @@
-"""资源标签赋值服务（打标互斥校验）。
+"""资源标签赋值服务。
 
-在创建/更新资源的标签时校验：资源的新标签（含已有标签）不得使该资源
-同属同一图表的两个不同切片，否则拒绝操作，从源头保证饼图数据不虚增。
+打标已不做图表切片互斥校验（移到「数据体检」）；仅校验普通正 id 且存在。
 """
 
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.tag import ResourceTag, Tag
-from src.services.tag_validation import (
-    ChartConflictError,
-    ChartConflictValidator,
-    TagEntity,
+from src.services.tag_assign import (
+    BuiltinTagAssignError,
     TagNotInProjectError,
-    validate_tag_ids_in_project,
+    validate_assign_tag_ids,
 )
 from src.utils.query import project_filter
 
@@ -24,7 +21,6 @@ class ResourceTagService:
     def __init__(self, session: AsyncSession, project_id: int) -> None:
         self.session = session
         self.project_id = project_id
-        self._validator = ChartConflictValidator(session, project_id)
 
     async def get_resource_tags(self, resource_id: int) -> list[Tag]:
         """返回资源当前挂载的标签（按标签 ID 升序）。"""
@@ -42,18 +38,14 @@ class ResourceTagService:
     async def set_resource_tags(
         self, resource_id: int, tag_ids: list[int]
     ) -> list[Tag]:
-        """替换式赋值标签，并在写入前执行图表切片互斥校验。"""
+        """替换式赋值标签（不做互斥校验，冲突检查在数据体检）。"""
         unique_ids = list(dict.fromkeys(tag_ids))
 
-        # 1. 校验标签均存在且属于当前项目
+        # 1. 校验标签均为普通正 id 且存在、属于当前项目
         if unique_ids:
-            await validate_tag_ids_in_project(self.session, self.project_id, unique_ids)
+            await validate_assign_tag_ids(self.session, self.project_id, unique_ids)
 
-        # 2. 图表切片互斥校验（新旧标签合并判定）
-        await self._validator.validate(TagEntity.RESOURCE, resource_id, set(unique_ids))
-
-        # 3. 替换式更新（对称差集：只删被移除的关联、只插真正新增的标签，
-        # 重叠标签不写库，避免 INSERT 先于 DELETE 触发唯一约束冲突）
+        # 2. 替换式更新（对称差集，避免 INSERT 先于 DELETE 触发唯一约束冲突）
         old_stmt = project_filter(
             select(ResourceTag).where(ResourceTag.resource_id == resource_id),
             ResourceTag,
@@ -91,6 +83,6 @@ async def get_resource_tag_service(
 __all__ = [
     "ResourceTagService",
     "get_resource_tag_service",
-    "ChartConflictError",
+    "BuiltinTagAssignError",
     "TagNotInProjectError",
 ]

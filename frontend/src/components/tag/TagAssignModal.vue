@@ -2,24 +2,18 @@
 import { computed, ref, watch } from 'vue'
 import { useEntityTags, useEntityTagApi, type TagEntityRef } from '@/composables/useEntityTagApi'
 import { useTagApi } from '@/composables/useTagApi'
-import { useTagDimensionApi } from '@/composables/useTagDimensionApi'
 import { formatHttpError } from '@/utils/error'
 import { getSliceColor } from '@/utils/themeColors'
 import type { TagResp } from '@/client/types.gen'
-import {
-  dimensionLabel,
-  dimensionNameMap,
-  flattenTagTree,
-  groupTagTreesByDimension,
-} from '@/utils/tagTree'
-import TagCheckboxTree from '@/components/tag/TagCheckboxTree.vue'
+import { tagIdNameMap } from '@/utils/tagGroup'
+import TagPicker from '@/components/tag/TagPicker.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 
 /**
  * 通用打标弹窗（资源 / 任务 / 用量）
  *
- * 标签树/维度自取（colada 缓存共享）；标签树按维度分组展示（跨维度可重名）；
- * 后端互斥校验失败（409）时内联展示冲突详情，并抑制全局 toast。
+ * 扁平标签多选（按展示分组展示）；后端不再做互斥校验（错误仅剩 422 标签不存在/
+ * 内置分类禁挂），失败时内联展示详情并抑制全局 toast。
  *
  * 支持两种模式：
  * - 单实体：传 `entity`，当前标签通过 useEntityTags 查询
@@ -42,8 +36,7 @@ const emit = defineEmits<{
   (e: 'cancel'): void
 }>()
 
-const { tagTree } = useTagApi()
-const { dimensions } = useTagDimensionApi()
+const { tags: allTags } = useTagApi()
 
 const entityRef = ref<TagEntityRef | null>(null)
 const batchEntities = ref<TagEntityRef[]>([])
@@ -71,16 +64,8 @@ watch(currentTags, (list) => {
   checkedTagIds.value = list.map((t) => t.id)
 })
 
-const nameMap = computed(() => dimensionNameMap(dimensions.value))
-const groupedTrees = computed(() => groupTagTreesByDimension(tagTree.value))
+const tagNameMap = computed(() => tagIdNameMap(allTags.value))
 
-const tagNameMap = computed(() => {
-  const map = new Map<number, string>()
-  for (const row of flattenTagTree(tagTree.value)) map.set(row.node.id, row.node.name)
-  return map
-})
-
-const searchQuery = ref('')
 const formError = ref('')
 
 const { setTags, isSetting } = useEntityTagApi()
@@ -90,7 +75,7 @@ async function handleSubmit() {
   formError.value = ''
   try {
     if (batchEntities.value.length > 0) {
-      // 批量模式：同一组标签逐条应用；遇冲突（409）中断并内联展示详情
+      // 批量模式：同一组标签逐条应用；遇错误中断并内联展示详情
       for (const e of batchEntities.value) {
         await setTags(e, checkedTagIds.value)
       }
@@ -109,7 +94,7 @@ async function handleSubmit() {
   <BaseModal :open="show" class="max-w-lg" @close="emit('cancel')">
     <h3 class="font-bold text-lg text-base-content mb-1">为{{ entityName }}打标</h3>
     <p class="text-[11px] text-fg-subtle mb-4">
-      标签用于碳排放分类统计；选择器按维度分组，跨维度允许重名
+      标签用于碳排放分类统计；按分组展示便于查找。一个{{ entityName }}可挂多个标签
     </p>
 
     <!-- 已选标签 -->
@@ -140,47 +125,28 @@ async function handleSubmit() {
     </div>
     <p v-else class="text-[11px] text-fg-subtle mb-4">尚未选择标签</p>
 
-    <!-- 互斥冲突错误（后端 409） -->
+    <!-- 错误（标签不存在/内置分类） -->
     <div v-if="formError" class="alert alert-error alert-sm mb-4" role="alert">
       <span class="material-symbols-outlined icon-sm shrink-0">error</span>
       <div class="min-w-0">
-        <p class="font-medium">保存失败：标签互斥</p>
+        <p class="font-medium">保存失败</p>
         <p class="text-xs mt-0.5 break-words">{{ formError }}</p>
-        <p class="text-xs mt-0.5 text-fg-muted">
-          该实体在某个图表中已归入其他切片，请移除冲突标签后重试。
-        </p>
       </div>
     </div>
 
-    <!-- 标签树（按维度分组） -->
+    <!-- 标签选择器（按分组） -->
     <div
       class="rounded-field bg-base-200/40 border border-base-content/20 p-3 max-h-[380px] overflow-y-auto"
     >
-      <label class="input flex items-center gap-2 mb-2">
-        <span class="material-symbols-outlined icon-sm text-fg-subtle">search</span>
-        <input
-          v-model="searchQuery"
-          type="text"
-          class="w-full bg-transparent"
-          placeholder="搜索标签…"
-        />
-      </label>
-      <div v-if="tagsLoading" class="flex justify-center py-8">
+      <TagPicker
+        v-if="!tagsLoading || batchEntities.length > 0"
+        :tags="allTags"
+        v-model="checkedTagIds"
+        :disabled="isSetting"
+      />
+      <div v-else class="flex justify-center py-8">
         <span class="loading loading-spinner loading-md text-primary" />
       </div>
-      <template v-else-if="groupedTrees.length > 0">
-        <div v-for="group in groupedTrees" :key="group.dimensionId" class="mb-3 last:mb-0">
-          <p
-            class="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-base-300/60 text-fg-muted inline-block mb-1"
-          >
-            {{ dimensionLabel(nameMap, group.dimensionId) }}
-          </p>
-          <TagCheckboxTree :tree="group.tree" v-model="checkedTagIds" :search="searchQuery" />
-        </div>
-      </template>
-      <p v-else class="text-center py-6 text-xs text-fg-subtle">
-        暂无标签，请先在「碳排放标签」中创建
-      </p>
     </div>
 
     <div class="modal-action">

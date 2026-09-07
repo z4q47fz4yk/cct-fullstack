@@ -167,37 +167,45 @@
 }
 ```
 
-## 标签系统（Tag / Chart）
+## 标签系统（Tag / Chart / Slice）
 
 ```json
-// 维度
-{ "id": 1, "name": "碳排放来源", "description": "" }
-
-// 标签（维度内成树）
+// 标签（扁平，名称项目内唯一）
 {
   "id": 11,
   "name": "施工用材",
-  "dimensionId": 1,
-  "parentId": 5,        // null = 顶级
+  "group": "建材",       // 纯展示分组，"" = 未分组
   "description": ""
 }
 
 // 关联：资源标签 / 任务标签 / 用量标签
 // { resourceId|taskId|usageId, tagIds: [11, 12] }
 
-// 图表定义
+// 图表定义（含切片；内置分类标签 id 为负：-1 人工 / -2 机械 / -3 材料 / -4 运输 / -5 其他）
 {
   "id": 1,
   "name": "施工用材占比",
   "chartType": "PIE",
-  "sliceEntity": "RESOURCE",   // RESOURCE/TASK/USAGE/ANY
-  "resourceCategories": ["material"],
-  "tags": [{ "id": 11, "name": "施工用材" }]
+  "slices": [
+    {
+      "id": 21,
+      "name": "地下工程支护",
+      "sortOrder": 0,
+      "tags": [
+        { "tagId": 11, "tagName": "施工用材", "isBuiltin": false, "group": 0 },
+        { "tagId": -3, "tagName": "材料",     "isBuiltin": true,  "group": 0 }
+      ]
+    }
+  ]
 }
 
-// 饼图数据（每个绑定标签一个切片 = 标签子树碳排放总和）
-[{ "tagId": 11, "tagName": "施工用材", "emissionKg": 45230.5 }]
+// 饼图数据（每个 slice 一个切片 = 命中该切片标签组的用量聚合；value 为 kgCO2e 或元）
+[{ "name": "地下工程支护", "value": 45230.5, "sortOrder": 0 }]
 ```
+
+切片命中：同 `group` 内标签需**同时**命中（且），不同 `group` 之间命中任一（或）；
+用量行的合并标签 = 资源/任务/用量三类实体标签 ∪ 资源分类内置标签（按名称去重），
+来源为 `usage_snapshot` 物化视图（约 30 分钟自动刷新，可手动刷新）。
 
 ## 通用约定
 

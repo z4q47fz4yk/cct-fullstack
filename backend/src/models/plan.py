@@ -114,7 +114,7 @@ class Measure(TimeStampMixin, ProjectScopeMixin, SQLModel, table=True):
         list[int],
         Field(
             default_factory=list,
-            sa_column=Column(PydanticJson(list[int])),
+            sa_column=Column(PydanticJson(list[int]), nullable=False),
             description="ADD=[资源]；REPLACE=[计划资源, 实际资源]",
         ),
     ]

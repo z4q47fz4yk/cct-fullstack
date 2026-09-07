@@ -6,22 +6,30 @@ import ChartEmptyState from '@/components/common/ChartEmptyState.vue'
 import SegmentControl, { type SegmentOption } from '@/components/common/SegmentControl.vue'
 import StatCard from '@/components/common/StatCard.vue'
 import { useProjectContext } from '@/composables/useProjectContext'
-import { useDiagnosticsApi, type DiagnosticsUsageType } from '@/composables/useDiagnosticsApi'
+import {
+  useDiagnosticsApi,
+  useTagChartDiagnostics,
+  type DiagnosticsUsageType,
+} from '@/composables/useDiagnosticsApi'
+import { useSnapshotManualRefresh, useSnapshotRefreshInfo } from '@/composables/useSnapshotApi'
 import { planStaleDiagnosticsQuery, planStaleDiagnosticsQueryKey } from '@/client/@pinia/colada.gen'
 import { categoryConfigMap } from '@/types/resource'
 import { fmtNumber } from '@/utils/format'
 import type { DiagnosticFlag, ResourceDiagnosticItem } from '@/client/types.gen'
+import { useToast } from '@/composables/useToast'
 
 definePage({
   meta: {
     title: '数据体检',
-    description: '检查有使用记录的资源是否存在异常口径（零碳因子 / 零单价等）',
+    description: '只读检查：资源口径异常 / 标签切片重叠 / 计划基线过期 / 数据新鲜度',
     icon: 'health_and_safety',
     showInNav: true,
     parentName: '/project/[projectId]/settings',
     navOrder: 9,
   },
 })
+
+const { notifySuccess, notifyError } = useToast()
 
 // ──── 用量口径切换 ─────────────────────────────────────────
 const usageType = ref<DiagnosticsUsageType>('ALL')
@@ -68,6 +76,33 @@ const infoItems = computed(() =>
     return flags.length > 0 && !flags.includes('ZERO_FACTOR')
   }),
 )
+
+// ──── 标签/切片重叠体检 ────────────────────────────────────
+const {
+  items: tagChartItems,
+  isLoading: isTagChartLoading,
+  refresh: refreshTagChart,
+} = useTagChartDiagnostics()
+
+// ──── 物化视图新鲜度 + 手动刷新 ───────────────────────────
+const { info: snapshotInfo, refresh: refreshSnapshotInfo } = useSnapshotRefreshInfo()
+const { refreshSnapshot, isRefreshing } = useSnapshotManualRefresh()
+
+async function handleManualRefresh() {
+  try {
+    await refreshSnapshot({ path: { project_id: currentProjectId.value! } })
+    await refreshSnapshotInfo()
+    notifySuccess('数据已刷新')
+  } catch (e) {
+    console.error('Manual snapshot refresh failed:', e)
+    notifyError({ title: '刷新失败', description: String(e) })
+  }
+}
+
+function fmtTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString()
+}
 
 function categoryLabel(item: ResourceDiagnosticItem): string {
   return categoryConfigMap[item.category]?.label ?? item.category
@@ -164,6 +199,82 @@ const flagMeta: Record<DiagnosticFlag, { label: string; cls: string }> = {
           <span v-if="planCheck.checkedAt" class="text-[11px] text-fg-muted font-mono ml-auto">
             检查于 {{ new Date(planCheck.checkedAt).toLocaleString() }}
           </span>
+        </div>
+      </section>
+
+      <!-- 标签/切片重叠体检 -->
+      <section class="panel p-4">
+        <div class="flex items-center justify-between gap-4 mb-1">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-base-content icon-sm">donut_small</span>
+            <h2 class="text-sm font-semibold text-base-content">标签 / 切片配置体检</h2>
+          </div>
+          <button
+            class="btn btn-ghost btn-xs"
+            :disabled="isTagChartLoading"
+            @click="refreshTagChart"
+          >
+            <span v-if="isTagChartLoading" class="loading loading-spinner loading-xs"></span>
+            <span v-else class="material-symbols-outlined icon-sm">refresh</span>
+            重新检查
+          </button>
+        </div>
+        <p class="text-xs text-fg-subtle mb-3">
+          切片命中标签不再互斥校验，同一图表内不同切片标签重叠会让同一条用量被重复计入多个切片；
+          此处只读提示重叠配置，请按需调整切片标签（去「碳排放图表」编辑）。
+        </p>
+        <div v-if="tagChartItems.length === 0" class="text-xs text-success flex items-center gap-2">
+          <span class="material-symbols-outlined icon-sm">verified</span>
+          未发现切片标签重叠
+        </div>
+        <div v-else class="flex flex-col gap-2">
+          <div
+            v-for="(item, i) in tagChartItems"
+            :key="i"
+            class="rounded-field bg-warning/10 border border-warning/30 px-3 py-2 text-xs"
+          >
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="material-symbols-outlined icon-sm text-warning">warning</span>
+              <span class="font-medium text-base-content">图表「{{ item.chartName }}」</span>
+              <span class="text-fg-muted">切片：{{ item.sliceNames?.join('、') }}</span>
+            </div>
+            <p class="text-fg-muted mt-1">{{ item.detail }}</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 物化视图数据新鲜度 -->
+      <section class="panel p-4">
+        <div class="flex items-center justify-between gap-4 mb-1">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-base-content icon-sm">database</span>
+            <h2 class="text-sm font-semibold text-base-content">碳排放数据源新鲜度</h2>
+          </div>
+          <button
+            class="btn btn-ghost btn-xs"
+            :disabled="isRefreshing"
+            @click="handleManualRefresh"
+          >
+            <span v-if="isRefreshing" class="loading loading-spinner loading-xs"></span>
+            <span v-else class="material-symbols-outlined icon-sm">refresh</span>
+            立即刷新
+          </button>
+        </div>
+        <p class="text-xs text-fg-subtle mb-3">
+          图表 / 用量「合并标签」基于约 30
+          分钟自动刷新的物化视图；大量打标或录入后如需立即生效可手动刷新。
+        </p>
+        <div class="flex items-center gap-4 flex-wrap text-xs">
+          <span class="text-fg-muted"
+            >上次刷新：<span class="font-mono text-base-content">{{
+              fmtTime(snapshotInfo?.lastRefreshedAt)
+            }}</span></span
+          >
+          <span class="text-fg-muted"
+            >下次计划：<span class="font-mono text-base-content">{{
+              fmtTime(snapshotInfo?.nextRefreshDue)
+            }}</span></span
+          >
         </div>
       </section>
 

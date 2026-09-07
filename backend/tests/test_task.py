@@ -7,7 +7,7 @@ from faker import Faker
 from httpx2 import AsyncClient
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.models.tag import Tag, TagDimension, TaskTag
+from src.models.tag import Tag, TaskTag
 from src.models.task import Task, TaskDependency
 from src.schemas.task import DependencyType
 
@@ -627,20 +627,14 @@ async def tagged_tasks(db_session: AsyncSession):
     for t in tasks:
         await db_session.refresh(t)
 
-    dim = TagDimension(project_id=PID, name="任务测试维度", description="d")
-    db_session.add(dim)
-    await db_session.commit()
-    await db_session.refresh(dim)
-    assert dim.id is not None
-
-    tag_a = Tag(project_id=PID, dimension_id=dim.id, name="tagtest-A", description="d")
-    tag_b = Tag(project_id=PID, dimension_id=dim.id, name="tagtest-B", description="d")
+    tag_a = Tag(project_id=PID, name="tagtest-A", group="任务测试", description="d")
+    tag_b = Tag(project_id=PID, name="tagtest-B", group="任务测试", description="d")
     db_session.add_all([tag_a, tag_b])
     await db_session.commit()
     await db_session.refresh(tag_a)
     await db_session.refresh(tag_b)
 
-    assert dim.id is not None and tag_a.id is not None and tag_b.id is not None
+    assert tag_a.id is not None and tag_b.id is not None
     assert (
         tasks[0].id is not None and tasks[1].id is not None and tasks[2].id is not None
     )
@@ -723,17 +717,10 @@ async def test_list_tasks_include_tags_project_isolated(
     await db_session.refresh(other)
     assert other.id is not None
 
-    other_dim = TagDimension(
-        project_id=other_project.id, name="其他项目维度", description="d"
-    )
-    db_session.add(other_dim)
-    await db_session.commit()
-    await db_session.refresh(other_dim)
-    assert other_dim.id is not None
     other_tag = Tag(
         project_id=other_project.id,
-        dimension_id=other_dim.id,
         name="tagtest-A",
+        group="其他项目维度",
         description="d",
     )
     db_session.add(other_tag)

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -25,6 +26,7 @@ from src.routers import (
     resource_public,
     resource_stats,
     resource_usage,
+    snapshot,
     tag,
     task,
     weather,
@@ -39,7 +41,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期：启动时回收上次进程遗留的优化运行。
+    """应用生命周期：启动时回收上次进程遗留的优化运行，并启动 usage_snapshot
+    后台定时刷新任务。
 
     后台任务（引擎线程、事件消费者）随进程退出而丢失，遗留的
     PENDING/RUNNING 运行不可能再被推进，标记为失败避免永久悬挂。
@@ -52,7 +55,17 @@ async def lifespan(app: FastAPI):
                 logger.info("启动回收遗留优化运行 %d 条（标记为失败）", recovered)
     except Exception:
         logger.exception("启动回收遗留优化运行失败")
+
+    # usage_snapshot 物化视图后台刷新（30min 一次；首个查询端点会惰性刷新）
+    from src.services.usage_snapshot import snapshot_refresh_loop
+
+    snapshot_task = asyncio.create_task(snapshot_refresh_loop())
     yield
+    snapshot_task.cancel()
+    try:
+        await snapshot_task
+    except asyncio.CancelledError, Exception:
+        pass
     # 关闭时回收全部 pi 子进程（AI 对话会话）
     try:
         from src.services.pi_agent import get_pi_agent_service
@@ -80,6 +93,7 @@ app.include_router(report_config.router)
 app.include_router(optimize.router)
 app.include_router(tag.router)
 app.include_router(chart.router)
+app.include_router(snapshot.router)
 app.include_router(plan.router)
 app.include_router(measure.router)
 app.include_router(progress.router)

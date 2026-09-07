@@ -13,6 +13,10 @@ models/
 ├── daily_report.py     # ImportBatch (UUID PK)
 ├── resource_usage.py   # TaskResourceUsage, ManualSubmissionBatch
 ├── optimize.py         # OptimizationRun, ParetoSolution, ResourceConstraint
+├── tag.py              # Tag(flat+group), ResourceTag, TaskTag, UsageTag
+├── chart.py            # ChartDefinition (no slice_entity/resource_categories)
+├── slice.py            # ChartSlice, SliceTagMapping (or/and groups; negative builtin tag ids)
+├── usage_snapshot.py   # usage_snapshot 物化视图说明（非 ORM 表，见 alembic）
 ├── mixin.py            # TimeStampMixin, ProjectScopeMixin, SoftDeleteMixin
 ├── pydantic_json.py    # PydanticJson utility (stores Pydantic models in JSON columns)
 ```
@@ -32,6 +36,14 @@ models/
 | `ParetoSolution` | `int` (auto) | ✅ | — | Linked to `OptimizationRun` |
 | `ResourceConstraint` | `int` (auto) | ✅ | `(project_id, resource_id)` | Daily usage limits |
 | `ManualSubmissionBatch` | `int` (auto) | ✅ | — | Groups manual resource-usage entries |
+| `Tag` | `int` (auto) | ✅ | `(project_id, name)` | Flat + `group`（纯展示分组），无维度/树 |
+| `ChartDefinition` | `int` (auto) | ✅ | `(project_id, name)` | `chart_type` 默认 PIE；切片由 `slice` 承载 |
+| `ChartSlice` | `int` (auto) | ✅ | `(project_id, chart_id, name)` | FK chart_definition CASCADE；`sort_order` |
+| `SliceTagMapping` | Composite `(slice_id, tag_id)` | — | — | `tag_group` 同号=且、异号=或；`tag_id` 无 FK 且可为负（内置分类标签，见 schemas.tag.BuiltinTagInfo） |
+
+> `usage_snapshot` 是 alembic 建的**物化视图**（非 ORM），按 usage 行合并
+> usage/resource/task 三类实体标签 + resource.category 内置分类名为 `tags[]`；
+> 刷新逻辑见 `src/services/usage_snapshot.py`（30min 后台 + 惰性 + 手动）。
 
 ## Notable Patterns
 

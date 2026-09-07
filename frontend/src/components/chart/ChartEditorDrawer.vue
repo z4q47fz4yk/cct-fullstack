@@ -1,31 +1,23 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useForm } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/valibot'
 import VChart from 'vue-echarts'
 import { vChartCreate } from '@/client/valibot.gen'
-import type { ChartResp, ChartSliceEntity, ResourceCategory } from '@/client/types.gen'
-import type { TagNodeResp } from '@/client/types.gen'
-import {
-  flattenTagTree,
-  groupTagTreesByDimension,
-  dimensionNameMap,
-  dimensionLabel,
-} from '@/utils/tagTree'
-import { useTagPieChart, type PieSliceDatum } from '@/composables/useTagPieChart'
-import { useTagApi } from '@/composables/useTagApi'
-import { useTagDimensionApi } from '@/composables/useTagDimensionApi'
+import type { ChartResp, SliceResp, SliceTagResp, TagResp } from '@/client/types.gen'
 import { getSliceColor } from '@/utils/themeColors'
 import { categoryConfigMap } from '@/types/resource'
-import TagCheckboxTree from '@/components/tag/TagCheckboxTree.vue'
+import { useTagApi } from '@/composables/useTagApi'
+import { useTagPieChart, type PieSliceDatum } from '@/composables/useTagPieChart'
+import TagPicker from '@/components/tag/TagPicker.vue'
 
 /**
- * 图表编辑抽屉（S4）
+ * 图表编辑抽屉
  *
- * - 左侧：名称 / 描述 / 切片归属实体（RESOURCE/TASK/USAGE/ANY，附打标位置引导）/
- *         资源分类过滤 / 可选标签树（按维度分组复选）/ 已绑定切片排序列表
- * - 右侧：实时结构预览（保存后按资源用量实时统计）
- * - 保存 = updateChart + setChartTags（标签顺序即 sortOrder）
+ * - 左侧：名称 / 描述 / 切片列表（每个切片 = 名称 + 若干标签组）
+ * - 组语义：同组标签**且**（须同时命中），不同组之间**或**
+ * - 标签可选：普通标签 + 内置分类标签（材料/机械/运输等，按资源分类命中）
+ * - 保存 = updateChart（若编辑）+ setChartSlices（顺序即 sortOrder）
  */
 const props = defineProps<{
   show: boolean
@@ -41,9 +33,8 @@ const emit = defineEmits<{
     payload: {
       name: string
       description: string
-      sliceEntity: ChartSliceEntity
-      resourceCategories: ResourceCategory[] | null
-      tagIds: number[]
+      chartType: string
+      slices: Array<{ name: string; tags: Array<{ tagId: number; group?: number }> }>
     },
   ): void
   (e: 'cancel'): void
@@ -59,60 +50,52 @@ const { handleSubmit, resetForm, errors, meta, defineField } = useForm({
 const [name, nameAttrs] = defineField('name')
 const [description, descriptionAttrs] = defineField('description')
 
-// 标签树（全维度）与维度列表
-const { tagTree } = useTagApi()
-const { dimensions } = useTagDimensionApi()
+// 标签（扁平）与内置分类标签
+const { tags } = useTagApi()
 
-// ─── 切片归属实体与资源分类过滤 ────────────────────────────
+/** 内置分类伪标签（按 resource.category 命中，id 与后端负 id 约定一致） */
+const BUILTIN_OPTIONS: Array<{ id: number; code: string; name: string }> = (
+  Object.keys(categoryConfigMap) as Array<keyof typeof categoryConfigMap>
+).map((code, i) => ({ id: -(i + 1), code, name: categoryConfigMap[code]!.label }))
 
-const SLICE_ENTITY_OPTIONS: {
-  value: ChartSliceEntity
-  label: string
-  hint: string
-  icon: string
-}[] = [
-  { value: 'RESOURCE', label: '资源', hint: '给资源打标：资源管理 → 打标', icon: 'inventory_2' },
-  { value: 'TASK', label: '任务', hint: '给任务打标：任务管理 → 打标', icon: 'view_timeline' },
-  { value: 'USAGE', label: '用量', hint: '给用量打标：资源使用 → 历史 → 打标', icon: 'edit_note' },
-  {
-    value: 'ANY',
-    label: '任一（资源/任务/用量）',
-    hint: '三类实体任一打标均可纳入统计',
-    icon: 'hub',
-  },
-]
+// 内置 id → 名称
+const builtinIdName = computed(() => new Map(BUILTIN_OPTIONS.map((b) => [b.id, b.name])))
 
-const sliceEntity = ref<ChartSliceEntity>('RESOURCE')
-const selectedEntityMeta = computed(
-  () => SLICE_ENTITY_OPTIONS.find((o) => o.value === sliceEntity.value) ?? SLICE_ENTITY_OPTIONS[0]!,
-)
+/** 所有可选标签项：普通标签 → (id, name)；内置分类 → (负id, name) */
+const selectable = computed<Array<{ id: number; name: string; isBuiltin: boolean }>>(() => {
+  const normal = tags.value.map((t) => ({ id: t.id, name: t.name, isBuiltin: false }))
+  return [...normal, ...BUILTIN_OPTIONS.map((b) => ({ id: b.id, name: b.name, isBuiltin: true }))]
+})
 
-const RESOURCE_CATEGORY_OPTIONS: ResourceCategory[] = [
-  'labor',
-  'machinery',
-  'material',
-  'transport',
-  'others',
-]
+const idName = computed(() => {
+  const m = new Map<number, string>()
+  for (const o of selectable.value) m.set(o.id, o.name)
+  return m
+})
 
-const selectedCategories = ref<ResourceCategory[]>([])
-
-function toggleCategory(cat: ResourceCategory) {
-  const next = [...selectedCategories.value]
-  if (next.includes(cat)) next.splice(next.indexOf(cat), 1)
-  else next.push(cat)
-  selectedCategories.value = next
+// ─── 编辑中的切片模型 ─────────────────────────────────────────
+// editing: [{ name, groups: [{and: number[]}] }]  groups 之间 or；组内 and
+interface EditableSlice {
+  name: string
+  /** groups: 每组=且；数组元素为组（一组内多个标签且）；组之间或 */
+  groups: number[][]
 }
 
-// ─── 已绑定切片（顺序即 sortOrder） ────────────────────────
+const editing = reactive<EditableSlice[]>([])
+/** 正在编辑的切片索引（null=收起） */
+const expandedSlice = ref<number | null>(null)
+const sliceTagSearch = ref('')
 
-const boundTagIds = ref<number[]>([])
-
-const tagNameMap = computed(() => {
-  const map = new Map<number, string>()
-  for (const row of flattenTagTree(tagTree.value)) map.set(row.node.id, row.node.name)
-  return map
-})
+function cloneFromResp(slices: SliceResp[] | undefined): EditableSlice[] {
+  return (slices ?? []).map((s) => {
+    const groups = new Map<number, number[]>()
+    for (const t of s.tags ?? []) {
+      if (!groups.has(t.group)) groups.set(t.group, [])
+      groups.get(t.group)!.push(t.tagId)
+    }
+    return { name: s.name, groups: [...groups.values()].filter((g) => g.length > 0) }
+  })
+}
 
 watch(
   () => props.show,
@@ -125,72 +108,100 @@ watch(
         description: c?.description ?? '',
       },
     })
-    sliceEntity.value = c?.sliceEntity ?? 'RESOURCE'
-    selectedCategories.value = c?.resourceCategories ?? []
-    boundTagIds.value = [...(c?.tags ?? [])]
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((t) => t.tagId)
+    editing.splice(0, editing.length, ...cloneFromResp(c?.slices))
+    expandedSlice.value = editing.length > 0 ? 0 : null
+    sliceTagSearch.value = ''
   },
 )
 
-// 按维度分组的标签树（图表可跨维度绑定切片）
-const nameMap = computed(() => dimensionNameMap(dimensions.value))
-const groupedTrees = computed(() => groupTagTreesByDimension(tagTree.value))
-
-function onCheckedChange(ids: number[]) {
-  // 保持既有顺序：新增的追加到末尾，移除的删除
-  const prev = boundTagIds.value
-  const removed = prev.filter((id) => !ids.includes(id))
-  const added = ids.filter((id) => !prev.includes(id))
-  boundTagIds.value = [...prev.filter((id) => !removed.includes(id)), ...added]
+function addSlice() {
+  editing.push({ name: `切片 ${editing.length + 1}`, groups: [[]] })
+  expandedSlice.value = editing.length - 1
 }
 
-function moveTag(index: number, delta: number) {
-  const next = [...boundTagIds.value]
-  const target = index + delta
-  if (target < 0 || target >= next.length) return
-  ;[next[index], next[target]] = [next[target]!, next[index]!]
-  boundTagIds.value = next
+function removeSlice(idx: number) {
+  editing.splice(idx, 1)
+  expandedSlice.value = null
 }
 
-function removeTag(index: number) {
-  const next = [...boundTagIds.value]
-  next.splice(index, 1)
-  boundTagIds.value = next
+function addGroup(slice: EditableSlice) {
+  slice.groups.push([])
 }
 
-// ─── 实时预览（结构预览：等分 + 计数） ─────────────────────
+function removeGroup(slice: EditableSlice, gi: number) {
+  slice.groups.splice(gi, 1)
+  if (slice.groups.length === 0) slice.groups.push([])
+}
 
+function isTagInSlice(slice: EditableSlice, tagId: number): boolean {
+  return slice.groups.some((g) => g.includes(tagId))
+}
+
+function toggleTagInSlice(slice: EditableSlice, tagId: number) {
+  // 打标到第一组（且组）；若已在则移除
+  if (isTagInSlice(slice, tagId)) {
+    for (const g of slice.groups) {
+      const i = g.indexOf(tagId)
+      if (i >= 0) g.splice(i, 1)
+    }
+  } else {
+    slice.groups[0]!.push(tagId)
+  }
+}
+
+function removeTagFromGroup(slice: EditableSlice, gi: number, idx: number) {
+  slice.groups[gi]!.splice(idx, 1)
+}
+
+function moveSlice(idx: number, delta: number) {
+  const target = idx + delta
+  if (target < 0 || target >= editing.length) return
+  const tmp = editing[idx]!
+  editing.splice(idx, 1)
+  editing.splice(target, 0, tmp)
+  expandedSlice.value = target
+}
+
+// 实时预览
 const previewSlices = computed<PieSliceDatum[]>(() =>
-  boundTagIds.value.map((_, i) => ({
-    name: String(i),
-    value: 1,
-    color: getSliceColor(i),
-  })),
+  editing.map((_, i) => ({ name: String(i), value: 1, color: getSliceColor(i) })),
 )
 
 const { chartOption } = useTagPieChart({
   slices: previewSlices,
   showLegend: false,
-  centerTotal: computed(() => String(boundTagIds.value.length)),
+  centerTotal: computed(() => String(editing.length)),
   centerLabel: '切片数',
 })
 
-const searchQuery = ref('')
+const sliceHasError = computed(() =>
+  editing.some((s) => !s.name.trim() || s.groups.every((g) => g.length === 0)),
+)
 
-// ─── 提交 ──────────────────────────────────────────────────
+// ─── 提交 ──────────────────────────────────────────────────────
+function toSliceUpsert(s: EditableSlice) {
+  const tagsItems: Array<{ tagId: number; group: number }> = []
+  s.groups.forEach((g, gi) => {
+    for (const tagId of g) tagsItems.push({ tagId, group: gi })
+  })
+  return { name: s.name.trim(), tags: tagsItems }
+}
 
 function onSubmit() {
+  if (sliceHasError.value) return
   emit('saved', {
     name: name.value?.trim() ?? '',
     description: description.value?.trim() ?? '',
-    sliceEntity: sliceEntity.value,
-    resourceCategories: selectedCategories.value.length > 0 ? [...selectedCategories.value] : null,
-    tagIds: boundTagIds.value,
+    chartType: 'PIE',
+    slices: editing.map(toSliceUpsert),
   })
 }
 
 const isEditing = computed(() => props.chart !== null)
+
+function builtinBadge(tagId: number): string | null {
+  return tagId < 0 ? (builtinIdName.value.get(tagId) ?? null) : null
+}
 </script>
 
 <template>
@@ -199,7 +210,7 @@ const isEditing = computed(() => props.chart !== null)
       <div class="absolute inset-0 bg-black/60" @click="emit('cancel')"></div>
 
       <aside
-        class="absolute right-0 top-0 h-full w-full max-w-[720px] bg-base-200 border-l border-base-content/20 flex flex-col"
+        class="absolute right-0 top-0 h-full w-full max-w-[760px] bg-base-200 border-l border-base-content/20 flex flex-col"
         aria-label="图表编辑器"
       >
         <!-- 头部 -->
@@ -210,7 +221,7 @@ const isEditing = computed(() => props.chart !== null)
                 {{ isEditing ? '编辑图表' : '新建图表' }}
               </h2>
               <p class="text-[11px] text-fg-subtle mt-0.5">
-                修改切片配置后，饼图数据按资源用量实时统计
+                切片 = 一组标签；同组标签需同时命中（且），不同组命中任一（或）即可
               </p>
             </div>
             <button
@@ -226,78 +237,30 @@ const isEditing = computed(() => props.chart !== null)
         <!-- 主体 -->
         <form class="flex-1 min-h-0 flex flex-col" @submit.prevent="handleSubmit(onSubmit)()">
           <div class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-            <div class="fieldset">
-              <label class="fieldset-label">图表名称</label>
-              <input
-                v-model="name"
-                v-bind="nameAttrs"
-                :disabled="isSubmitting"
-                class="input"
-                :class="{ 'input-error': errors.name }"
-                placeholder="如：施工用材各部分占比"
-                type="text"
-              />
-              <span v-if="errors.name" class="label text-error">{{ errors.name }}</span>
-            </div>
-
-            <div class="fieldset">
-              <label class="fieldset-label">描述</label>
-              <input
-                v-model="description"
-                v-bind="descriptionAttrs"
-                :disabled="isSubmitting"
-                class="input"
-                placeholder="可选，说明该图表的统计口径"
-                type="text"
-              />
-            </div>
-
-            <!-- 切片归属实体 -->
-            <div class="fieldset">
-              <label class="fieldset-label">切片归属实体</label>
-              <div class="grid grid-cols-2 gap-2">
-                <button
-                  v-for="opt in SLICE_ENTITY_OPTIONS"
-                  :key="opt.value"
-                  type="button"
-                  class="flex items-center gap-2 px-3 h-10 rounded-field border text-xs transition-colors text-left"
-                  :class="
-                    sliceEntity === opt.value
-                      ? 'bg-primary/12 border-primary/40 text-base-content'
-                      : 'bg-base-200/40 border-base-content/20 text-fg-muted hover:border-primary/40'
-                  "
-                  @click="sliceEntity = opt.value"
-                >
-                  <span class="material-symbols-outlined icon-sm shrink-0 text-primary">
-                    {{ opt.icon }}
-                  </span>
-                  {{ opt.label }}
-                </button>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div class="fieldset">
+                <label class="fieldset-label">图表名称</label>
+                <input
+                  v-model="name"
+                  v-bind="nameAttrs"
+                  :disabled="isSubmitting"
+                  class="input"
+                  :class="{ 'input-error': errors.name }"
+                  placeholder="如：施工用材各部分占比"
+                  type="text"
+                />
+                <span v-if="errors.name" class="label text-error">{{ errors.name }}</span>
               </div>
-              <p class="text-[11px] text-fg-muted flex items-start gap-1.5 mt-2">
-                <span class="material-symbols-outlined icon-sm shrink-0 text-primary">info</span>
-                打标位置：{{ selectedEntityMeta.hint }}。选错实体打标会导致饼图数据为 0。
-              </p>
-            </div>
-
-            <!-- 资源分类过滤（仅 RESOURCE 实体） -->
-            <div v-if="sliceEntity === 'RESOURCE'" class="fieldset">
-              <label class="fieldset-label">资源分类过滤（可选，不选则统计全部）</label>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  v-for="cat in RESOURCE_CATEGORY_OPTIONS"
-                  :key="cat"
-                  type="button"
-                  class="h-7 px-3 rounded-full border text-[11px] transition-colors"
-                  :class="
-                    selectedCategories.includes(cat)
-                      ? 'bg-primary/12 border-primary/40 text-base-content'
-                      : 'bg-base-200/40 border-base-content/20 text-fg-muted hover:border-primary/40'
-                  "
-                  @click="toggleCategory(cat)"
-                >
-                  {{ categoryConfigMap[cat].label }}
-                </button>
+              <div class="fieldset">
+                <label class="fieldset-label">描述</label>
+                <input
+                  v-model="description"
+                  v-bind="descriptionAttrs"
+                  :disabled="isSubmitting"
+                  class="input"
+                  placeholder="可选，说明该图表的统计口径"
+                  type="text"
+                />
               </div>
             </div>
 
@@ -305,92 +268,62 @@ const isEditing = computed(() => props.chart !== null)
             <div
               class="rounded-field bg-primary/5 border border-primary/25 p-4 flex items-center gap-4"
             >
-              <div class="w-28 h-28 shrink-0">
+              <div class="w-24 h-24 shrink-0">
                 <v-chart :option="chartOption" :autoresize="true" class="w-full h-full" />
               </div>
-              <div class="space-y-2 min-w-0">
+              <div class="space-y-1 min-w-0">
                 <p class="text-xs font-medium text-base-content">实时预览</p>
                 <p class="text-[11px] text-fg-muted">
-                  切片数量：<span class="font-mono text-base-content">{{
-                    boundTagIds.length
-                  }}</span>
+                  切片数量：<span class="font-mono text-base-content">{{ editing.length }}</span>
                 </p>
-                <p class="text-[11px] text-fg-muted">保存后按资源用量与碳排放因子实时统计</p>
+                <p class="text-[11px] text-fg-muted">保存后按资源用量与碳排放因子统计</p>
               </div>
             </div>
 
-            <!-- 切片配置 -->
-            <div>
-              <div class="flex items-center gap-2 mb-2">
+            <!-- 切片配置列表 -->
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
                 <h3 class="text-sm font-medium text-base-content">切片配置</h3>
-                <span
-                  class="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-primary/12 text-primary"
-                >
-                  {{ boundTagIds.length }}
-                </span>
-                <span class="ml-auto text-[11px] text-fg-subtle">顺序即图表展示顺序</span>
+                <button type="button" class="btn btn-ghost btn-xs" @click="addSlice">
+                  <span class="material-symbols-outlined icon-sm">add</span>
+                  添加切片
+                </button>
               </div>
 
-              <!-- 可选标签（按维度分组，跨维度可重名） -->
-              <div class="rounded-field bg-base-200/40 border border-base-content/20 p-3">
-                <label class="input flex items-center gap-2 mb-2">
-                  <span class="material-symbols-outlined icon-sm text-fg-subtle">search</span>
-                  <input
-                    v-model="searchQuery"
-                    type="text"
-                    class="w-full bg-transparent"
-                    placeholder="搜索标签…"
-                  />
-                </label>
-                <div class="max-h-56 overflow-y-auto">
-                  <template v-if="groupedTrees.length > 0">
-                    <div
-                      v-for="group in groupedTrees"
-                      :key="group.dimensionId"
-                      class="mb-3 last:mb-0"
-                    >
-                      <p
-                        class="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-base-300/60 text-fg-muted inline-block mb-1"
-                      >
-                        {{ dimensionLabel(nameMap, group.dimensionId) }}
-                      </p>
-                      <TagCheckboxTree
-                        :tree="group.tree"
-                        :model-value="boundTagIds"
-                        :search="searchQuery"
-                        @update:model-value="onCheckedChange"
-                      />
-                    </div>
-                  </template>
-                  <p v-else class="text-center py-6 text-xs text-fg-subtle">
-                    暂无标签，请先在「碳排放标签」中创建
-                  </p>
-                </div>
+              <div
+                v-if="editing.length === 0"
+                class="text-center py-8 text-xs text-fg-subtle panel"
+              >
+                尚未配置切片 —— 点击「添加切片」配置第一个
               </div>
 
-              <!-- 已绑定切片（排序） -->
-              <div v-if="boundTagIds.length > 0" class="mt-3 flex flex-col gap-1.5">
-                <div
-                  v-for="(tagId, index) in boundTagIds"
-                  :key="tagId"
-                  class="flex items-center gap-2 h-8 px-3 rounded-lg bg-base-200/60 border border-base-content/20"
-                >
-                  <span class="material-symbols-outlined icon-sm text-fg-subtle shrink-0"
-                    >drag_indicator</span
-                  >
+              <div
+                v-for="(slice, idx) in editing"
+                :key="idx"
+                class="panel p-3 flex flex-col gap-2"
+                :class="{ 'border-error/60': !slice.name.trim() }"
+              >
+                <div class="flex items-center gap-2">
                   <span
-                    class="w-2 h-2 rounded-full shrink-0"
-                    :style="{ backgroundColor: getSliceColor(index) }"
-                  />
-                  <span class="text-xs text-base-content truncate flex-1 min-w-0">
-                    {{ tagNameMap.get(tagId) ?? `#${tagId}` }}
+                    class="w-6 h-6 rounded-full text-center text-[11px] leading-6 font-mono shrink-0"
+                    :style="{
+                      backgroundColor: `${getSliceColor(idx)}22`,
+                      color: getSliceColor(idx),
+                    }"
+                  >
+                    {{ idx + 1 }}
                   </span>
+                  <input
+                    v-model="slice.name"
+                    class="input input-sm flex-1 min-w-0"
+                    placeholder="切片名称（饼图扇区名）"
+                  />
                   <button
                     type="button"
                     class="btn btn-ghost btn-xs btn-square"
                     title="上移"
-                    :disabled="index === 0"
-                    @click="moveTag(index, -1)"
+                    :disabled="idx === 0"
+                    @click="moveSlice(idx, -1)"
                   >
                     <span class="material-symbols-outlined icon-sm">arrow_upward</span>
                   </button>
@@ -398,30 +331,125 @@ const isEditing = computed(() => props.chart !== null)
                     type="button"
                     class="btn btn-ghost btn-xs btn-square"
                     title="下移"
-                    :disabled="index === boundTagIds.length - 1"
-                    @click="moveTag(index, 1)"
+                    :disabled="idx === editing.length - 1"
+                    @click="moveSlice(idx, 1)"
                   >
                     <span class="material-symbols-outlined icon-sm">arrow_downward</span>
                   </button>
                   <button
                     type="button"
                     class="btn btn-ghost btn-xs btn-square hover:bg-error/10"
-                    title="移除"
-                    @click="removeTag(index)"
+                    title="删除切片"
+                    @click="removeSlice(idx)"
                   >
-                    <span class="material-symbols-outlined icon-sm text-error">close</span>
+                    <span class="material-symbols-outlined icon-sm text-error">delete</span>
                   </button>
+                </div>
+
+                <!-- 组（或/且） -->
+                <div class="flex flex-col gap-1.5">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-[10px] text-fg-subtle">命中规则：</span>
+                    <span
+                      v-for="(group, gi) in slice.groups"
+                      :key="gi"
+                      class="text-[10px] font-mono px-1.5 py-0.5 rounded-full"
+                      :class="
+                        gi === 0 ? 'bg-primary/12 text-primary' : 'bg-violet-500/10 text-violet-400'
+                      "
+                    >
+                      {{ gi === 0 ? '且' : '或' }}-{{ gi + 1 }}
+                    </span>
+                  </div>
+
+                  <div
+                    v-for="(group, gi) in slice.groups"
+                    :key="gi"
+                    class="rounded-field bg-base-200/40 border border-base-content/20 p-2"
+                  >
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="text-[11px] font-medium text-fg-muted">
+                        {{
+                          gi === 0 ? '必须同时命中以下标签（且组）' : '或 命中以下任一组内全部标签'
+                        }}
+                      </span>
+                      <button
+                        v-if="gi > 0"
+                        type="button"
+                        class="btn btn-ghost btn-xs"
+                        title="删除该或组"
+                        @click="removeGroup(slice, gi)"
+                      >
+                        移除该或组
+                      </button>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5">
+                      <span
+                        v-for="(tagId, ti) in group"
+                        :key="tagId"
+                        class="inline-flex items-center gap-1 h-6 pl-2 pr-1 rounded-full bg-primary/10 border border-primary/30 text-[11px]"
+                      >
+                        {{ idName.get(tagId) ?? `#${tagId}` }}
+                        <button
+                          type="button"
+                          class="btn btn-ghost btn-xs btn-square h-4 min-h-4 w-4"
+                          title="移除标签"
+                          @click="removeTagFromGroup(slice, gi, ti)"
+                        >
+                          <span class="material-symbols-outlined text-[11px]">close</span>
+                        </button>
+                      </span>
+                      <span v-if="group.length === 0" class="text-[11px] text-fg-subtle">
+                        尚未选择标签
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-2">
+                    <button
+                      v-if="slice.groups.length < 3"
+                      type="button"
+                      class="btn btn-ghost btn-xs text-violet-400"
+                      @click="addGroup(slice)"
+                    >
+                      <span class="material-symbols-outlined icon-sm">add</span>
+                      添加或组（命中任一即可）
+                    </button>
+                  </div>
+
+                  <!-- 标签选择（加入第一且组） -->
+                  <div
+                    class="rounded-field bg-base-200/40 border border-base-content/20 p-2 max-h-44 overflow-y-auto"
+                  >
+                    <p class="text-[10px] text-fg-subtle mb-1">
+                      点击标签加入该切片（第一组即「且组」；已加入的标签点击可移除）
+                    </p>
+                    <div class="flex flex-wrap gap-1.5">
+                      <button
+                        v-for="opt in selectable"
+                        :key="opt.id"
+                        type="button"
+                        class="h-6 px-2 rounded-full border text-[11px] transition-colors"
+                        :class="
+                          isTagInSlice(slice, opt.id)
+                            ? 'bg-primary/15 border-primary/50 text-base-content'
+                            : 'bg-base-200/40 border-base-content/20 text-fg-muted hover:border-primary/40'
+                        "
+                        @click="toggleTagInSlice(slice, opt.id)"
+                      >
+                        {{ opt.name }}<template v-if="opt.isBuiltin">（分类）</template>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
             <p class="text-[11px] text-fg-muted leading-relaxed flex items-start gap-1.5">
-              <span
-                class="material-symbols-outlined icon-sm shrink-0"
-                style="color: var(--color-violet)"
-                >info</span
-              >
-              支持跨子树组合切片；打标互斥校验保证同一资源不会在同一图表的多个切片中重复计算。
+              <span class="material-symbols-outlined icon-sm shrink-0 text-primary">info</span>
+              内置「分类」标签按资源类别自动命中（如「材料」=
+              所有材料类资源），可与普通标签混用「且/或」组合。
+              多条用量命中同一图表多个切片时会重复计入（可在「数据体检」检查重叠）。
             </p>
 
             <div v-if="error" class="alert alert-error alert-sm">
@@ -442,7 +470,11 @@ const isEditing = computed(() => props.chart !== null)
             >
               取消
             </button>
-            <button class="btn btn-primary" type="submit" :disabled="isSubmitting || !meta.valid">
+            <button
+              class="btn btn-primary"
+              type="submit"
+              :disabled="isSubmitting || !meta.valid || sliceHasError"
+            >
               <span v-if="isSubmitting" class="loading loading-spinner loading-xs"></span>
               <span>{{ isEditing ? '保存更改' : '创建图表' }}</span>
             </button>

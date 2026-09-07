@@ -10,13 +10,13 @@ import {
   createChartMutation,
   updateChartMutation,
   deleteChartMutation,
-  setChartTagsMutation,
+  setChartSlicesMutation,
   getChartPieDataQuery,
 } from '@/client/@pinia/colada.gen'
 
 /**
  * 碳排放图表定义 API 封装
- * 提供图表列表、CRUD、切片绑定与饼图数据查询
+ * 提供图表列表、CRUD、切片配置与饼图数据查询
  */
 export function useChartApi() {
   const queryCache = useQueryCache()
@@ -53,9 +53,9 @@ export function useChartApi() {
     onSuccess: invalidateCharts,
   })
 
-  // 替换式设置图表绑定的标签（顺序即 sortOrder）
-  const { mutateAsync: setChartTags, asyncStatus: tagsStatus } = useMutation({
-    ...setChartTagsMutation(),
+  // 整组替换切片（顺序即 sortOrder）
+  const { mutateAsync: setChartSlices, asyncStatus: slicesStatus } = useMutation({
+    ...setChartSlicesMutation(),
     onSuccess: invalidateCharts,
   })
 
@@ -69,7 +69,7 @@ export function useChartApi() {
     () =>
       createStatus.value === 'loading' ||
       updateStatus.value === 'loading' ||
-      tagsStatus.value === 'loading' ||
+      slicesStatus.value === 'loading' ||
       deleteStatus.value === 'loading',
   )
 
@@ -80,7 +80,7 @@ export function useChartApi() {
     refresh,
     createChart,
     updateChart,
-    setChartTags,
+    setChartSlices,
     deleteChart,
     isSubmitting,
   }

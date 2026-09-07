@@ -2,56 +2,62 @@ import { computed } from 'vue'
 import type { Ref } from 'vue'
 import { useQuery, useMutation, useQueryCache } from '@pinia/colada'
 import { useProjectContext } from '@/composables/useProjectContext'
-import type { TagCreate, TagUpdate } from '@/client/types.gen'
+import type { TagCreate, TagResp, TagUpdate } from '@/client/types.gen'
 import {
-  getTagTreeQuery,
-  getTagTreeQueryKey,
   createTagMutation,
   updateTagMutation,
   deleteTagMutation,
   getTagResourcesQuery,
+  listTagGroupsQuery,
+  listTagGroupsQueryKey,
+  listTagsQuery,
+  listTagsQueryKey,
 } from '@/client/@pinia/colada.gen'
+import { FETCH_ALL_PAGE_SIZE } from '@/constants/pagination'
 
 /**
- * 碳排放标签 API 封装
+ * 扁平标签 API 封装（group 为纯展示分组）
  *
- * - `tagTree`：全维度标签树（多棵根树，供图表/打标选择器按维度分组展示）
- * - CRUD：创建必须携带 dimensionId；删除含子标签时后端拒绝
+ * - `tags`：项目内全部标签（一次拉全量，量级很小），按 (group, name) 排序
+ * - CRUD：创建携带 group（空=未分组）；删除/改名后端即时生效
  */
 export function useTagApi() {
   const queryCache = useQueryCache()
   const { currentProjectId } = useProjectContext()
 
-  const invalidateTree = async () => {
+  const invalidateTags = async () => {
     await queryCache.invalidateQueries({
-      key: getTagTreeQueryKey({ path: { project_id: currentProjectId.value! } }),
+      key: listTagsQueryKey({ path: { project_id: currentProjectId.value! } }),
+    })
+    await queryCache.invalidateQueries({
+      key: listTagGroupsQueryKey({ path: { project_id: currentProjectId.value! } }),
     })
   }
 
-  // 全维度标签树
+  // 项目内全部标签（分页一次取满）
   const { state, asyncStatus, error, refresh } = useQuery(() =>
-    getTagTreeQuery({ path: { project_id: currentProjectId.value! } }),
+    listTagsQuery({
+      path: { project_id: currentProjectId.value! },
+      query: { per_page: FETCH_ALL_PAGE_SIZE },
+    }),
   )
 
-  const tagTree = computed(() => state.value?.data ?? [])
+  const tags = computed<TagResp[]>(() => state.value?.data?.items ?? [])
   const isLoading = computed(() => asyncStatus.value === 'loading')
 
-  // 创建标签
   const { mutateAsync: createTag, asyncStatus: createStatus } = useMutation({
     ...createTagMutation(),
-    onSuccess: invalidateTree,
+    onSuccess: invalidateTags,
   })
 
-  // 更新标签（parentId 省略=保持当前父级，显式 null=移到顶级）
   const { mutateAsync: updateTag, asyncStatus: updateStatus } = useMutation({
     ...updateTagMutation(),
-    onSuccess: invalidateTree,
+    onSuccess: invalidateTags,
   })
 
-  // 删除标签
   const { mutateAsync: deleteTag, asyncStatus: deleteStatus } = useMutation({
     ...deleteTagMutation(),
-    onSuccess: invalidateTree,
+    onSuccess: invalidateTags,
   })
 
   const isSubmitting = computed(
@@ -62,7 +68,7 @@ export function useTagApi() {
   )
 
   return {
-    tagTree,
+    tags,
     isLoading,
     error,
     refresh,
@@ -73,30 +79,41 @@ export function useTagApi() {
   }
 }
 
-export type { TagCreate, TagUpdate }
-
 /**
- * 按维度查询标签树（标签管理页：左侧维度 → 右侧该维度树）。
- * dimensionId 为 null 时查询挂起。
+ * 按分组加载标签（分页），供管理页左侧分组 + 右侧标签列表。
  */
-export function useTagTreeByDimension(dimensionId: Ref<number | null>) {
+export function useTagsByGroup(group: Ref<string>) {
   const { currentProjectId } = useProjectContext()
   const { state, asyncStatus, error, refresh } = useQuery(() => ({
-    ...getTagTreeQuery({
+    ...listTagsQuery({
       path: { project_id: currentProjectId.value! },
-      query: { dimensionId: dimensionId.value ?? undefined },
+      query: { group: group.value || undefined, per_page: FETCH_ALL_PAGE_SIZE },
     }),
-    enabled: dimensionId.value !== null,
+    enabled: !!currentProjectId.value,
   }))
 
-  const tagTree = computed(() => state.value?.data ?? [])
+  const tags = computed(() => state.value?.data?.items ?? [])
   const isLoading = computed(() => asyncStatus.value === 'loading')
-
-  return { tagTree, isLoading, error, refresh }
+  return { tags, isLoading, error, refresh }
 }
 
 /**
- * 查询标签直接关联的资源（分页，不含子标签）。
+ * 标签分组统计（管理页左侧分组列表）。
+ */
+export function useTagGroups() {
+  const { currentProjectId } = useProjectContext()
+  const { state, asyncStatus, error, refresh } = useQuery(() => ({
+    ...listTagGroupsQuery({ path: { project_id: currentProjectId.value! } }),
+    enabled: !!currentProjectId.value,
+  }))
+
+  const groups = computed(() => state.value?.data ?? [])
+  const isLoading = computed(() => asyncStatus.value === 'loading')
+  return { groups, isLoading, error, refresh }
+}
+
+/**
+ * 查询标签直接关联的资源（分页）。
  * 供标签详情页使用，跟随 selectedTagId 自动切换。
  */
 export function useTagResources(
@@ -119,3 +136,5 @@ export function useTagResources(
 
   return { resources, totalCount, isLoading, error, refresh }
 }
+
+export type { TagCreate, TagUpdate }

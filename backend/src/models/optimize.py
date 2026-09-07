@@ -77,14 +77,14 @@ class OptimizationRun(TimeStampMixin, ProjectScopeMixin, SQLModel, table=True):
     task_snapshot: Annotated[
         list[TaskSnapshot],
         Field(
-            sa_column=Column(PydanticJson(list[TaskSnapshot])),
+            sa_column=Column(PydanticJson(list[TaskSnapshot]), nullable=False),
             description="运行创建时覆盖的任务快照 list[TaskSnapshot]",
         ),
     ]
     dependency_snapshot: Annotated[
         list[DependencySnapshot],
         Field(
-            sa_column=Column(PydanticJson(list[DependencySnapshot])),
+            sa_column=Column(PydanticJson(list[DependencySnapshot]), nullable=False),
             description="运行创建时的依赖关系快照 list[DependencySnapshot]",
         ),
     ]

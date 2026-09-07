@@ -12,7 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.models.daily_report import ImportBatch, ImportBatchStatus
 from src.models.resource import Resource, ResourceCategory
 from src.models.resource_usage import TaskResourceUsage
-from src.models.tag import Tag, TagDimension, UsageTag
+from src.models.tag import Tag, UsageTag
 from src.models.task import Task
 
 # 默认项目 id（由 alembic 迁移 10f6fdbf450e seed）
@@ -761,14 +761,8 @@ async def test_batch_created_records_appear_in_list(
 @pytest_asyncio.fixture
 async def tagged_usages(task_resources, db_session: AsyncSession):
     """在 task_resources 基础上新增标签维度、标签与用量-标签关联。"""
-    dim = TagDimension(project_id=PID, name="用量测试维度", description="d")
-    db_session.add(dim)
-    await db_session.commit()
-    await db_session.refresh(dim)
-    assert dim.id is not None
-
-    tag_a = Tag(project_id=PID, dimension_id=dim.id, name="ru-tag-A", description="d")
-    tag_b = Tag(project_id=PID, dimension_id=dim.id, name="ru-tag-B", description="d")
+    tag_a = Tag(project_id=PID, name="ru-tag-A", group="用量测试", description="d")
+    tag_b = Tag(project_id=PID, name="ru-tag-B", group="用量测试", description="d")
     db_session.add_all([tag_a, tag_b])
     await db_session.commit()
     await db_session.refresh(tag_a)
@@ -870,13 +864,8 @@ async def test_list_resource_usages_include_tags_project_isolated(
     await db_session.refresh(other_usage)
     assert other_usage.id is not None
 
-    other_dim = TagDimension(project_id=other.id, name="其他维度", description="d")
-    db_session.add(other_dim)
-    await db_session.commit()
-    await db_session.refresh(other_dim)
-    assert other_dim.id is not None
     other_tag = Tag(
-        project_id=other.id, dimension_id=other_dim.id, name="ru-tag-A", description="d"
+        project_id=other.id, name="ru-tag-A", group="其他维度", description="d"
     )
     db_session.add(other_tag)
     await db_session.commit()

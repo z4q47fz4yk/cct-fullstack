@@ -74,11 +74,11 @@ const finalOption = computed(() => ({
   },
 }))
 
-// 隐藏零值切片数：绑定标签中统计为 0 或未返回的
+// 隐藏零值切片数：绑定切片中统计为 0 或未返回的
 const hiddenCount = computed(() => {
   const ordered = orderSlicesByChart(slices.value)
   const valueByName = new Map(ordered.map((s) => [s.name, s.value ?? 0]))
-  return (props.chart.tags ?? []).filter((t) => (valueByName.get(t.tagName) ?? 0) <= 0).length
+  return (props.chart.slices ?? []).filter((s) => (valueByName.get(s.name) ?? 0) <= 0).length
 })
 
 watch(

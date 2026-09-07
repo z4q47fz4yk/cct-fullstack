@@ -7,9 +7,9 @@ from sqlmodel import col, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.daily_report import ImportBatch, ImportBatchStatus
-from src.models.resource import Resource, ResourceCategory
+from src.models.resource import Resource
 from src.models.resource_usage import TaskResourceUsage
-from src.models.tag import Tag, TagDimension, UsageTag
+from src.models.tag import Tag, UsageTag
 from src.models.task import Task
 from src.schemas.daily_report import (
     AllocateRespItem,
@@ -539,7 +539,7 @@ class DailyReportService:
         self.session.add_all(usages_to_create)
         await self.session.flush()
 
-        # 货物类别 → 运输维标签（按 cargo_dimension 精确匹配，未匹配则跳过，
+        # 货物类别 → 项目内同名标签（名称项目内唯一，精确匹配；未匹配则跳过，
         # 用户可事后通过 PUT /resource-usage/{id}/tags 补标）
         cargo_tag_map: dict[str, int] = {}
         cargo_names = {cargo for _, cargo in usage_cargo if cargo}
@@ -575,41 +575,23 @@ class DailyReportService:
         )
 
     async def _load_cargo_tag_map(self, cargo_names: set[str]) -> dict[str, int]:
-        """按货物类别名称加载项目内标签 ID（优先运输块配置的维度）。"""
-        from src.utils.daily_report_config import load_config
+        """按货物类别名称加载项目内标签 ID（标签名项目内唯一，无需维度）。
 
-        cfg = load_config()
-        cargo_dimension_names = {
-            blk.cargo_dimension
-            for blk in cfg.blocks
-            if blk.category == ResourceCategory.transport and blk.cargo_dimension
-        }
-
+        名称唯一由约束保证（UNIQUE(project_id, name)），同名多标签已不可能；
+        未匹配到的货物类别跳过（用户可事后经 PUT /resource-usage/{id}/tags 补标）。
+        """
         stmt = project_filter(
             select(Tag).where(col(Tag.name).in_(cargo_names)),
             Tag,
             self.project_id,
         )
-        if cargo_dimension_names:
-            stmt = stmt.where(
-                col(Tag.dimension_id).in_(
-                    select(TagDimension.id).where(
-                        TagDimension.project_id == self.project_id,
-                        col(TagDimension.name).in_(cargo_dimension_names),
-                    )
-                )
-            )
         rows = (await self.session.exec(stmt)).all()
 
         result: dict[str, int] = {}
         for tag in rows:
             if tag.id is None:
                 continue
-            if tag.name in result:
-                # 同名多标签（跨维度）时放弃自动匹配，交由用户手动补标
-                result.pop(tag.name, None)
-            else:
-                result[tag.name] = tag.id
+            result[tag.name] = tag.id
         return result
 
 

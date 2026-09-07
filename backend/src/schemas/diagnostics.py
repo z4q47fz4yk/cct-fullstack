@@ -72,3 +72,28 @@ class PlanDiagnosticsResp(CamelCaseRespMixin):
     checked_at: datetime | None = Field(
         default=None, description="本次检查时间（has_plan=false 时为 null）"
     )
+
+
+class TagChartConflictItem(CamelCaseRespMixin):
+    """标签/切片体检条目（只读提示，不阻断）。"""
+
+    chart_id: int = Field(description="图表ID")
+    chart_name: str = Field(description="图表名称")
+    kind: str = Field(
+        description="检查项：OVERLAP_SLICES（同一图表不同切片命中标签重叠）"
+    )
+    detail: str = Field(description="中文提示内容")
+    slice_names: list[str] = Field(
+        default_factory=list, description="涉及切片名称（OVERLAP_SLICES 时）"
+    )
+    overlap_tags: list[str] = Field(
+        default_factory=list, description="重叠的标签名（OVERLAP_SLICES 时）"
+    )
+
+
+class TagChartDiagnosticsResp(CamelCaseRespMixin):
+    """标签/切片数据体检响应。"""
+
+    items: list[TagChartConflictItem] = Field(
+        default_factory=list, description="检查到的标签/切片提示项"
+    )

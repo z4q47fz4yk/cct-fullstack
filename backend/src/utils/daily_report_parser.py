@@ -149,9 +149,7 @@ def _parse_block(
 ) -> None:
     """解析单个 block：label_at_column 列 + rows label 并集过滤后按 rows 长度切片分组"""
     col = df.columns[blk.label_at_column]
-    matched = df.filter(
-        pl.col(col).cast(pl.Utf8).str.contains(blk._label_union)
-    )
+    matched = df.filter(pl.col(col).cast(pl.Utf8).str.contains(blk._label_union))
     rows_data = matched.rows()
     n = len(blk.rows)
     if len(rows_data) % n != 0:

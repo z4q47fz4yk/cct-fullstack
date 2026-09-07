@@ -129,7 +129,8 @@ class TestInternalContext:
         assert data["project_id"] == 1
         assert "resources" in data
         assert "categories" in data
-        assert "tag_dimensions" in data
+        assert "tags" in data
+        assert "tag_groups" in data
         assert isinstance(data["resources"], list)
         assert isinstance(data["categories"], list)
 

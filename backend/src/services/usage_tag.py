@@ -1,19 +1,17 @@
-"""用量标签赋值服务（打标互斥校验）。
+"""用量标签赋值服务。
 
-运输货物分类等用量级标签挂在用量记录上；打标时执行与资源一致的图表
-切片互斥校验。日报导入的用量同样走此服务补标/改标。
+打标已不做图表切片互斥校验（移到「数据体检」）；仅校验普通正 id 且存在。
+日报导入的用量同样走此服务补标/改标。
 """
 
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.tag import Tag, UsageTag
-from src.services.tag_validation import (
-    ChartConflictError,
-    ChartConflictValidator,
-    TagEntity,
+from src.services.tag_assign import (
+    BuiltinTagAssignError,
     TagNotInProjectError,
-    validate_tag_ids_in_project,
+    validate_assign_tag_ids,
 )
 from src.utils.query import project_filter
 
@@ -24,7 +22,6 @@ class UsageTagService:
     def __init__(self, session: AsyncSession, project_id: int) -> None:
         self.session = session
         self.project_id = project_id
-        self._validator = ChartConflictValidator(session, project_id)
 
     async def get_usage_tags(self, usage_id: int) -> list[Tag]:
         """返回用量当前挂载的标签（按标签 ID 升序）。"""
@@ -40,18 +37,14 @@ class UsageTagService:
         return list((await self.session.exec(stmt)).all())
 
     async def set_usage_tags(self, usage_id: int, tag_ids: list[int]) -> list[Tag]:
-        """替换式赋值标签，并在写入前执行图表切片互斥校验。"""
+        """替换式赋值标签（不做互斥校验，冲突检查在数据体检）。"""
         unique_ids = list(dict.fromkeys(tag_ids))
 
-        # 1. 校验标签均存在且属于当前项目
+        # 1. 校验标签均为普通正 id 且存在、属于当前项目
         if unique_ids:
-            await validate_tag_ids_in_project(self.session, self.project_id, unique_ids)
+            await validate_assign_tag_ids(self.session, self.project_id, unique_ids)
 
-        # 2. 图表切片互斥校验（新旧标签合并判定）
-        await self._validator.validate(TagEntity.USAGE, usage_id, set(unique_ids))
-
-        # 3. 替换式更新（对称差集：只删被移除的关联、只插真正新增的标签，
-        # 重叠标签不写库，避免 INSERT 先于 DELETE 触发唯一约束冲突）
+        # 2. 替换式更新（对称差集）
         old_stmt = project_filter(
             select(UsageTag).where(UsageTag.usage_id == usage_id),
             UsageTag,
@@ -89,6 +82,6 @@ async def get_usage_tag_service(
 __all__ = [
     "UsageTagService",
     "get_usage_tag_service",
-    "ChartConflictError",
+    "BuiltinTagAssignError",
     "TagNotInProjectError",
 ]

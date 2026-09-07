@@ -5,7 +5,7 @@ import { useProjectContext } from '@/composables/useProjectContext'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import { formatHttpError } from '@/utils/error'
-import type { ChartResp, ChartSliceEntity, ResourceCategory } from '@/client/types.gen'
+import type { ChartResp } from '@/client/types.gen'
 import ChartCard from '@/components/chart/ChartCard.vue'
 import ChartEditorDrawer from '@/components/chart/ChartEditorDrawer.vue'
 import ErrorState from '@/components/common/ErrorState.vue'
@@ -14,7 +14,7 @@ import LoadingState from '@/components/common/LoadingState.vue'
 definePage({
   meta: {
     title: '碳排放图表',
-    description: '绑定标签作为切片，自动汇总每个标签子树下的资源碳排放',
+    description: '用切片（标签组合 + 或/且命中）配置饼图',
     icon: 'pie_chart',
     showInNav: true,
     parentName: '/project/[projectId]/settings',
@@ -29,7 +29,7 @@ const {
   refresh,
   createChart,
   updateChart,
-  setChartTags,
+  setChartSlices,
   deleteChart,
   isSubmitting,
 } = useChartApi()
@@ -58,9 +58,8 @@ function openEdit(chart: ChartResp) {
 async function handleSaved(payload: {
   name: string
   description: string
-  sliceEntity: ChartSliceEntity
-  resourceCategories: ResourceCategory[] | null
-  tagIds: number[]
+  chartType: string
+  slices: Array<{ name: string; tags: Array<{ tagId: number; group?: number }> }>
 }) {
   formError.value = ''
   try {
@@ -71,8 +70,7 @@ async function handleSaved(payload: {
         body: {
           name: payload.name,
           description: payload.description,
-          sliceEntity: payload.sliceEntity,
-          resourceCategories: payload.resourceCategories,
+          chartType: payload.chartType,
         },
       })
       chartId = editingChart.value.id
@@ -83,17 +81,15 @@ async function handleSaved(payload: {
         body: {
           name: payload.name,
           description: payload.description,
-          chartType: 'PIE',
-          sliceEntity: payload.sliceEntity,
-          resourceCategories: payload.resourceCategories,
+          chartType: payload.chartType,
         },
       })
       chartId = created.id
       notifySuccess('图表已创建')
     }
-    await setChartTags({
+    await setChartSlices({
       path: { project_id: currentProjectId.value!, id: chartId },
-      body: { tagIds: payload.tagIds },
+      body: { slices: payload.slices },
     })
     showEditor.value = false
   } catch (e) {
@@ -136,11 +132,13 @@ async function handleDelete(chart: ChartResp) {
   />
 
   <div v-else class="space-y-4">
-    <!-- 互斥说明 -->
+    <!-- 说明 -->
     <section class="panel px-4 py-3 flex items-center gap-3">
-      <span class="material-symbols-outlined text-violet-400 icon-md shrink-0">verified_user</span>
+      <span class="material-symbols-outlined text-violet-400 icon-md shrink-0">pie_chart</span>
       <p class="text-xs text-fg-muted leading-relaxed">
-        切片即绑定的标签：父标签汇总整棵子树；同一资源不会在同一图表的多个切片中重复计算（打标互斥校验）。
+        每个切片 =
+        若干标签组：同组标签需同时命中（且），组间命中任一（或）；支持「分类」内置标签按资源类别命中。
+        切片重叠时同一用量会重复计入，可在「数据体检」检查。
       </p>
     </section>
 

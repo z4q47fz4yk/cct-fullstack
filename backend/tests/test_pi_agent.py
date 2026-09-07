@@ -61,7 +61,7 @@ def _make_session() -> PiSession:
     return PiSession(
         project_id=1,
         session_id="s",
-        proc=_StubProc(),  # type: ignore[arg-type]
+        proc=_StubProc(),  # type: ignore[arg-type]#ty:ignore[invalid-argument-type]
         event_queue=asyncio.Queue(),
     )
 
@@ -151,7 +151,7 @@ async def test_read_loop_crash_marks_failed_and_cleans_up():
     session = PiSession(
         project_id=1,
         session_id="crash-sess",
-        proc=proc,  # type: ignore[arg-type]
+        proc=proc,  # type: ignore[arg-type]#ty:ignore[invalid-argument-type]
         event_queue=asyncio.Queue(),
     )
     key = service._key(1, "crash-sess")

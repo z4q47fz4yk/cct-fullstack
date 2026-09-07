@@ -1,38 +1,50 @@
-"""碳排放图表聚合服务。
+"""碳排放图表聚合服务（基于 usage_snapshot 物化视图 + slice 或/且命中）。
 
-按图表绑定的"根标签"分组：每个切片 = 该标签自身及其全部子孙标签下
-碳排放总和。标签子树在内存中展开（一次加载项目全量标签构建
-parent->children 映射，DFS 收集）。
+切片命中语义（写入期不再做互斥校验，重叠**重复计入**）：
+- 每个 slice 由若干「组」标签组成：同组标签之间为**且**（须同时命中），
+  不同组之间为**或**；
+- 普通标签命中 = usage 行合并 tags[] 含该标签名；
+- 内置分类标签命中 = usage 行的 resource_category 等于该分类（物化视图已把
+  resource.category 作为分类名并入 tags[]，因此统一按名称比对）。
 
-切片归属实体（chart.slice_entity）决定以哪类标签为准：
-- RESOURCE：资源标签（旧图表默认，兼容原有语义）
-- TASK：任务标签
-- USAGE：用量标签（如运输货物分类）
-- ANY：资源 / 任务 / 用量任一命中
-
-碳排放口径与月度报表一致：SQL 只聚合 SUM(quantity)，Python 层应用
-``ResourceReuseConfig`` 周转折减后计算排放。全部切片用单条 SQL 完成聚合：
-每个根标签构建一个 EXISTS 命中条件，``CASE WHEN`` 将每条用量行归属到
-命中的切片下标后分组累加，避免老实现"每切片一条 SQL"的 N+1 查询。
+一条 usage 可能命中多个 slice → 重复计入（如实反映配置重叠，由数据体检
+提示修正）。碳排放/成本口径与月度报表一致：Python 侧逐行乘因子/单价，
+周转折减经 ``ResourceReuseConfig`` 应用。
 """
 
 import datetime as dt
 from collections import defaultdict
+from dataclasses import dataclass, field
 
-from sqlalchemy import case
-from sqlmodel import col, func, select
+from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.models.chart import ChartDefinition, ChartTagMapping
+from src.models.chart import ChartDefinition
 from src.models.resource import Resource
 from src.models.resource_reuse_config import ResourceReuseConfig
-from src.models.resource_usage import TaskResourceUsage, UsageType
-from src.models.tag import ResourceTag, Tag, TaskTag, UsageTag
+from src.models.resource_usage import UsageType
+from src.models.slice import ChartSlice, SliceTagMapping
+from src.models.tag import Tag
 from src.schemas.chart import PieSlice
-from src.utils.carbon import (
-    compute_resource_emission,
-    get_effective_unit_price,
-)
+from src.schemas.slice import SliceTagResp
+from src.schemas.tag import BuiltinTagInfo
+from src.services.usage_snapshot import refresh_if_stale
+from src.services.usage_snapshot_query import fetch_usage_rows
+from src.utils.carbon import compute_resource_emission, get_effective_unit_price
+from src.utils.query import project_filter
+
+
+@dataclass
+class SliceSpec:
+    """内存中的切片命中规格。"""
+
+    id: int
+    name: str
+    sort_order: int
+    # group_no → 标签名集合；同组且、组间或
+    groups: dict[int, set[str]] = field(default_factory=dict)
+    # 响应用标签项（按 group 升序、tag_id 升序）
+    tag_items: list[SliceTagResp] = field(default_factory=list)
 
 
 class CarbonChartService:
@@ -42,49 +54,98 @@ class CarbonChartService:
         self.session = session
         self.project_id = project_id
 
+    # ---------------------------------------------------------------- 查询
     async def get_chart(self, chart_id: int) -> ChartDefinition | None:
-        """返回项目内图表定义（含 slice_entity / resource_categories）。"""
-        stmt = select(ChartDefinition).where(
-            ChartDefinition.id == chart_id,
-            ChartDefinition.project_id == self.project_id,
+        """返回项目内图表定义。"""
+        stmt = project_filter(
+            select(ChartDefinition).where(ChartDefinition.id == chart_id),
+            ChartDefinition,
+            self.project_id,
         )
         return (await self.session.exec(stmt)).first()
 
-    async def get_chart_roots(self, chart_id: int) -> list[tuple[Tag, int]]:
-        """返回图表绑定的根标签（按 sort_order 升序）。"""
-        stmt = (
-            select(Tag, ChartTagMapping.sort_order)
-            .join(ChartTagMapping, col(ChartTagMapping.tag_id) == col(Tag.id))
-            .where(
-                ChartTagMapping.chart_id == chart_id,
-                ChartTagMapping.project_id == self.project_id,
+    async def load_slices(self, chart_id: int) -> list[SliceSpec]:
+        """加载图表切片（按 sort_order 升序）并解析标签名/组。
+
+        返回 SliceSpec 列表；无切片返回空列表。不存在的普通标签会被跳过
+        （防御性：tag 删除时应在删除端点清理映射，此处兜底）。
+        """
+        slice_rows = (
+            await self.session.exec(
+                project_filter(
+                    select(ChartSlice).where(ChartSlice.chart_id == chart_id),
+                    ChartSlice,
+                    self.project_id,
+                )
             )
-            .order_by(col(ChartTagMapping.sort_order).asc(), col(Tag.id).asc())
-        )
-        return list((await self.session.exec(stmt)).all())
+        ).all()
+        slice_rows = sorted(slice_rows, key=lambda s: (s.sort_order, s.id or 0))
+        if not slice_rows:
+            return []
 
-    async def _load_children_map(self) -> dict[int, list[int]]:
-        """一次加载项目全量标签，构建 parent_id -> children 映射（避免 N+1）。"""
-        stmt = select(Tag.id, Tag.parent_id).where(Tag.project_id == self.project_id)
-        rows = (await self.session.exec(stmt)).all()
-        children: dict[int, list[int]] = defaultdict(list)
-        for tag_id, parent_id in rows:
-            if tag_id is not None and parent_id is not None:
-                children[parent_id].append(tag_id)
-        return children
+        slice_ids = [s.id for s in slice_rows if s.id is not None]
+        mappings = (
+            await self.session.exec(
+                select(SliceTagMapping).where(
+                    col(SliceTagMapping.slice_id).in_(slice_ids)
+                )
+            )
+        ).all()
 
-    def _collect_subtree_ids(
-        self, children: dict[int, list[int]], root_id: int
-    ) -> set[int]:
-        """DFS 收集 root 及其全部子孙的 tag_id（含自身）。"""
-        result: set[int] = set()
-        stack = [root_id]
-        while stack:
-            node = stack.pop()
-            result.add(node)
-            stack.extend(children.get(node, []))
-        return result
+        # 普通标签名解析（正 id，一次加载）
+        pos_ids = {m.tag_id for m in mappings if m.tag_id > 0}
+        tag_name_map: dict[int, str] = {}
+        if pos_ids:
+            tag_rows = (
+                await self.session.exec(
+                    select(Tag.id, Tag.name)
+                    .where(col(Tag.id).in_(pos_ids))
+                    .where(col(Tag.project_id) == self.project_id)
+                    # project_filter(
+                    #     select(Tag.id, Tag.name).where(col(Tag.id).in_(pos_ids)),
+                    #     Tag,
+                    #     self.project_id,
+                    # )
+                )
+            ).all()
+            tag_name_map = {tid: name for tid, name in tag_rows if tid is not None}
 
+        def tag_name(tag_id: int) -> str | None:
+            if tag_id > 0:
+                return tag_name_map.get(tag_id)
+            return BuiltinTagInfo.builtin_tag_name(tag_id)
+
+        # 组装 SliceSpec
+        by_slice: dict[int, list[SliceTagMapping]] = defaultdict(list)
+        for m in mappings:
+            by_slice[m.slice_id].append(m)
+
+        specs: list[SliceSpec] = []
+        for s in slice_rows:
+            if s.id is None:
+                continue
+            spec = SliceSpec(id=s.id, name=s.name, sort_order=s.sort_order)
+            items: list[tuple[int, int, str]] = []  # (group, tag_id, name)
+            for m in by_slice.get(s.id, []):
+                name = tag_name(m.tag_id)
+                if name is None:
+                    continue  # 未知标签（含已删普通标签），跳过
+                spec.groups.setdefault(m.tag_group, set()).add(name)
+                items.append((m.tag_group, m.tag_id, name))
+            items.sort(key=lambda t: (t[0], t[1]))
+            spec.tag_items = [
+                SliceTagResp(
+                    tag_id=tag_id,
+                    tag_name=nm,
+                    is_builtin=tag_id < 0,
+                    group=grp,
+                )
+                for grp, tag_id, nm in items
+            ]
+            specs.append(spec)
+        return specs
+
+    # ---------------------------------------------------------------- 聚合
     async def get_pie_data(
         self,
         chart_id: int,
@@ -93,12 +154,7 @@ class CarbonChartService:
         end_date: dt.date | None = None,
         metric: str = "emission",
     ) -> list[PieSlice]:
-        """聚合饼图数据：每个绑定标签一个切片。
-
-        单条 SQL 完成全部切片的聚合：每个根标签对应一个 EXISTS 命中条件，
-        用 ``CASE WHEN`` 将每条用量行归属到命中的切片下标（标签子树互斥，
-        打标校验保证每行至多命中一个切片，first-match 语义正确），
-        再按 ``slice_idx`` 分组在 Python 侧累加指标。
+        """聚合饼图数据：每个 slice 一个切片（重叠重复计入）。
 
         Args:
             chart_id: 图表 ID
@@ -108,41 +164,34 @@ class CarbonChartService:
             metric: emission=碳排放（默认）；cost=按用量×有效单价聚合金额
 
         Returns:
-            按 sort_order 排序的切片列表；无数据的切片 value=0.0。
+            按 slice.sortOrder 排序的切片列表；无命中数据切片 value=0.0。
         """
         chart = await self.get_chart(chart_id)
         if chart is None:
             return []
-
-        roots = await self.get_chart_roots(chart_id)
-        if not roots:
+        specs = await self.load_slices(chart_id)
+        if not specs:
             return []
 
-        children = await self._load_children_map()
-        slice_entity = str(chart.slice_entity)
-        resource_categories = chart.resource_categories
+        # 惰性兜底刷新：确保读到的 usage_snapshot 不陈旧（业务端点在请求
+        # 会话内调用时传入 session 使刷新同事务可见；此处走 engine 独立提交）
+        await refresh_if_stale(session=self.session)
 
-        # 每个根标签对应一个 EXISTS 命中条件；条件下标即切片下标
-        root_slots: list[tuple[str, int | None]] = []
-        slice_conds: list = []
-        for tag, _sort_order in roots:
-            if tag.id is None:
-                # 序号越界则跳过该根（理论上不会发生，防御性保留）
-                slot_idx = None
-            else:
-                subtree_ids = self._collect_subtree_ids(children, tag.id)
-                slice_conds.append(self._slice_hit_cond(slice_entity, subtree_ids))
-                slot_idx = len(slice_conds) - 1
-            root_slots.append((tag.name, slot_idx))
+        rows = await fetch_usage_rows(
+            self.session,
+            self.project_id,
+            usage_type=usage_type,
+            start_date=start_date,
+            end_date=end_date,
+        )
 
-        # 无任何有效切片条件时，空切片列表（CASE 恒 NULL 无意义，直接短路）
-        if not slice_conds:
-            return [
-                PieSlice(name=name, value=0.0, sort_order=so)
-                for so, (name, _) in enumerate(root_slots)
-            ]
-
-        # 周转配置（口径与月度报表一致）
+        # 资源因子/单价/周转配置映射（rows 不含数值列）
+        resource_stmt = project_filter(select(Resource), Resource, self.project_id)
+        res_map = {
+            r.id: r
+            for r in (await self.session.exec(resource_stmt)).all()
+            if r.id is not None
+        }
         reuse_rows = (
             await self.session.exec(
                 select(ResourceReuseConfig).where(
@@ -150,139 +199,53 @@ class CarbonChartService:
                 )
             )
         ).all()
-        reuse_cfg_by_rid: dict[int, ResourceReuseConfig] = {
+        reuse_map: dict[int, ResourceReuseConfig] = {
             rc.resource_id: rc for rc in reuse_rows
         }
 
-        # 单条 SQL：CASE 输出命中的切片下标，按 (slice_idx, resource) 分组
-        case_expr = case(
-            *[(cond, idx) for idx, cond in enumerate(slice_conds)], else_=None
-        )
-        stmt = (
-            select(  # type: ignore[call-overload, ty:no-matching-overload]
-                col(Resource.id),
-                col(Resource.carbon_factor),
-                col(Resource.unit_price),
-                case_expr.label("slice_idx"),
-                func.sum(TaskResourceUsage.quantity).label("total_quantity"),
-            )
-            .join(
-                Resource,
-                (col(Resource.id) == TaskResourceUsage.resource_id)
-                & (col(Resource.project_id) == self.project_id),
-            )
-            .where(TaskResourceUsage.project_id == self.project_id)
-            .where(case_expr.is_not(None))
-            .group_by(
-                col(Resource.id),
-                col(Resource.carbon_factor),
-                col(Resource.unit_price),
-                case_expr,
-            )
-        )
-        if resource_categories:
-            stmt = stmt.where(col(Resource.category).in_(resource_categories))
-        if usage_type is not None:
-            stmt = stmt.where(TaskResourceUsage.usage_type == usage_type)
-        if start_date is not None:
-            stmt = stmt.where(TaskResourceUsage.usage_date >= start_date)
-        if end_date is not None:
-            stmt = stmt.where(TaskResourceUsage.usage_date < end_date)
-
-        rows = (await self.session.exec(stmt)).all()
-
-        # 按切片下标累加指标
         totals: dict[int, float] = defaultdict(float)
-        for resource_id, carbon_factor, unit_price, slice_idx, total_qty in rows:
+        for row in rows:
+            hit_indices = _matched_slice_indices(specs, row.get("tags") or [])
+            if not hit_indices:
+                continue
+            rid = row.get("resource_id")
+            res = res_map.get(rid) if rid is not None else None
+            if res is None:
+                continue
+            qty = float(row.get("quantity") or 0.0)
             if metric == "cost":
-                totals[slice_idx] += float(total_qty) * get_effective_unit_price(
-                    unit_price, reuse_cfg_by_rid.get(resource_id)
+                value = qty * get_effective_unit_price(
+                    res.unit_price, reuse_map.get(rid)
                 )
             else:
-                totals[slice_idx] += compute_resource_emission(
-                    float(total_qty),
-                    float(carbon_factor),
-                    reuse_cfg_by_rid.get(resource_id),
+                value = compute_resource_emission(
+                    qty, res.carbon_factor, reuse_map.get(rid)
                 )
+            for idx in hit_indices:
+                totals[idx] += value
 
-        # 按 roots 顺序构造切片；无结果的下标 value=0.0
         return [
             PieSlice(
-                name=name,
-                value=float(totals[slot_idx]),
-                sort_order=sort_order,
+                name=spec.name,
+                value=float(totals[i]),
+                sort_order=spec.sort_order,
             )
-            if slot_idx is not None
-            else PieSlice(name=name, value=0.0, sort_order=sort_order)
-            for sort_order, (name, slot_idx) in enumerate(root_slots)
+            for i, spec in enumerate(specs)
         ]
 
-    def _slice_hit_cond(self, slice_entity: str, subtree_ids: set[int]):
-        """构造单个切片的 EXISTS 命中条件。
 
-        按 ``slice_entity`` 分支决定以哪类标签判定用量行是否命中子树标签，
-        避免 JOIN 造成的 quantity 重复加总。与旧 ``_slice_value`` 的判定逻辑一致。
-        """
-        if slice_entity == "TASK":
-            return (
-                select(TaskTag.id)
-                .where(
-                    TaskTag.project_id == self.project_id,
-                    TaskTag.task_id == TaskResourceUsage.task_id,
-                    col(TaskTag.tag_id).in_(subtree_ids),
-                )
-                .exists()
-            )
-        if slice_entity == "USAGE":
-            return (
-                select(UsageTag.id)
-                .where(
-                    UsageTag.project_id == self.project_id,
-                    UsageTag.usage_id == TaskResourceUsage.id,
-                    col(UsageTag.tag_id).in_(subtree_ids),
-                )
-                .exists()
-            )
-        if slice_entity == "ANY":
-            return (
-                (
-                    select(ResourceTag.id)
-                    .where(
-                        ResourceTag.project_id == self.project_id,
-                        ResourceTag.resource_id == TaskResourceUsage.resource_id,
-                        col(ResourceTag.tag_id).in_(subtree_ids),
-                    )
-                    .exists()
-                )
-                | (
-                    select(TaskTag.id)
-                    .where(
-                        TaskTag.project_id == self.project_id,
-                        TaskTag.task_id == TaskResourceUsage.task_id,
-                        col(TaskTag.tag_id).in_(subtree_ids),
-                    )
-                    .exists()
-                )
-                | (
-                    select(UsageTag.id)
-                    .where(
-                        UsageTag.project_id == self.project_id,
-                        UsageTag.usage_id == TaskResourceUsage.id,
-                        col(UsageTag.tag_id).in_(subtree_ids),
-                    )
-                    .exists()
-                )
-            )
-        # RESOURCE（默认，兼容旧图）
-        return (
-            select(ResourceTag.id)
-            .where(
-                ResourceTag.project_id == self.project_id,
-                ResourceTag.resource_id == TaskResourceUsage.resource_id,
-                col(ResourceTag.tag_id).in_(subtree_ids),
-            )
-            .exists()
-        )
+def _matched_slice_indices(specs: list[SliceSpec], tags: list[str]) -> list[int]:
+    """返回命中的切片下标列表（同组且、组间或；可命中多个）。"""
+    tag_set = set(tags)
+    hits: list[int] = []
+    for idx, spec in enumerate(specs):
+        if not spec.groups:
+            continue
+        for group_names in spec.groups.values():
+            if group_names and group_names <= tag_set:
+                hits.append(idx)
+                break
+    return hits
 
 
 async def get_carbon_chart_service(
@@ -293,4 +256,4 @@ async def get_carbon_chart_service(
     return CarbonChartService(session, project_id)
 
 
-__all__ = ["CarbonChartService", "get_carbon_chart_service"]
+__all__ = ["CarbonChartService", "get_carbon_chart_service", "SliceSpec"]

@@ -9,7 +9,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.project import Project
 from src.models.resource import Resource
-from src.models.tag import ResourceTag, Tag, TagDimension
+from src.models.tag import ResourceTag, Tag
 from src.schemas.resource import ResourceCategory
 
 # 默认项目 id（由 alembic 迁移 10f6fdbf450e seed）
@@ -258,15 +258,6 @@ async def test_delete_resource(resources, client: AsyncClient, rid, code: int):
 
 
 @pytest_asyncio.fixture
-async def tag_dimension(db_session: AsyncSession) -> TagDimension:
-    d = TagDimension(project_id=PID, name="测试维度", description="d")
-    db_session.add(d)
-    await db_session.commit()
-    await db_session.refresh(d)
-    return d
-
-
-@pytest_asyncio.fixture
 async def tag_resources(db_session: AsyncSession) -> list[Resource]:
     """三个命名唯一的资源（tagtest-*），避免与 seed 数据混淆。"""
     rs = [
@@ -307,16 +298,11 @@ async def test_list_resources_include_tags(
     client: AsyncClient,
     db_session: AsyncSession,
     tag_resources,
-    tag_dimension,
 ):
     """include_tags=true 时返回直接标签（按 ID 升序），无标签资源返回空数组。"""
     r1, r2, r3 = tag_resources
-    tag_a = Tag(
-        project_id=PID, dimension_id=tag_dimension.id, name="tagtest-A", description="d"
-    )
-    tag_b = Tag(
-        project_id=PID, dimension_id=tag_dimension.id, name="tagtest-B", description="d"
-    )
+    tag_a = Tag(project_id=PID, name="tagtest-A", group="测试", description="d")
+    tag_b = Tag(project_id=PID, name="tagtest-B", group="测试", description="d")
     db_session.add_all([tag_a, tag_b])
     await db_session.commit()
     await db_session.refresh(tag_a)
@@ -352,13 +338,10 @@ async def test_list_resources_include_tags_pagination(
     client: AsyncClient,
     db_session: AsyncSession,
     tag_resources,
-    tag_dimension,
 ):
     """分页只加载当前页资源的标签，跨页不串数据。"""
     r1, r2, r3 = tag_resources
-    tag_a = Tag(
-        project_id=PID, dimension_id=tag_dimension.id, name="tagtest-A", description="d"
-    )
+    tag_a = Tag(project_id=PID, name="tagtest-A", group="测试", description="d")
     db_session.add(tag_a)
     await db_session.commit()
     await db_session.refresh(tag_a)
@@ -384,13 +367,10 @@ async def test_list_resources_include_tags_project_isolated(
     client: AsyncClient,
     db_session: AsyncSession,
     tag_resources,
-    tag_dimension,
 ):
     """其他项目挂同名标签的资源不串入本项目列表。"""
     r1, r2, r3 = tag_resources
-    tag_a = Tag(
-        project_id=PID, dimension_id=tag_dimension.id, name="tagtest-A", description="d"
-    )
+    tag_a = Tag(project_id=PID, name="tagtest-A", group="测试", description="d")
     db_session.add(tag_a)
     await db_session.commit()
     await db_session.refresh(tag_a)
@@ -409,8 +389,8 @@ async def test_list_resources_include_tags_project_isolated(
     )
     other_tag = Tag(
         project_id=other.id,
-        dimension_id=tag_dimension.id,
         name="tagtest-A",
+        group="其他项目",
         description="d",
     )
     db_session.add_all([other_res, other_tag])
@@ -445,13 +425,10 @@ async def test_list_resources_include_tags_with_filters(
     client: AsyncClient,
     db_session: AsyncSession,
     tag_resources,
-    tag_dimension,
 ):
     """include_tags 与 name/category 过滤组合使用。"""
     r1, r2, r3 = tag_resources
-    tag_a = Tag(
-        project_id=PID, dimension_id=tag_dimension.id, name="tagtest-A", description="d"
-    )
+    tag_a = Tag(project_id=PID, name="tagtest-A", group="测试", description="d")
     db_session.add(tag_a)
     await db_session.commit()
     await db_session.refresh(tag_a)

@@ -50,7 +50,7 @@ const totalHidden = computed(() =>
           标签碳排放占比
         </h2>
         <p class="text-[11px] text-fg-subtle mt-0.5">
-          切片为图表绑定的标签，值为标签子树下全部资源的碳排放合计（实时统计）
+          切片为图表配置的标签组合，值为命中该切片（标签组且/或规则）的用量碳排放合计
         </p>
       </div>
       <span
@@ -73,7 +73,7 @@ const totalHidden = computed(() =>
         <RouterLink :to="`/project/${currentProjectId}/settings/charts`" class="link link-primary">
           设置 → 碳排放图表
         </RouterLink>
-        绑定标签创建饼图
+        配置切片创建饼图
       </p>
     </div>
 

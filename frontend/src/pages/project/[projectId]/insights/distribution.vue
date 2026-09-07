@@ -73,7 +73,7 @@ const totalValue = computed(() => Object.values(summaries).reduce((sum, v) => su
         <RouterLink :to="`/project/${currentProjectId}/settings/charts`" class="link link-primary">
           设置 → 碳排放图表
         </RouterLink>
-        绑定标签创建饼图
+        配置切片创建饼图
       </p>
     </div>
 
