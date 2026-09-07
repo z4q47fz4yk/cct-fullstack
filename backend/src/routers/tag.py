@@ -31,7 +31,7 @@ from src.schemas.tag import (
     TaskTagAssignReq,
     UsageTagAssignReq,
 )
-from src.services.tag_assign import DefaultTagAssignError, TagNotInProjectError
+from src.services.tag_assign import TagNotInProjectError, ensure_tag_in_project
 from src.services.x_tag import ResourceTagService, TaskTagService, UsageTagService
 from src.utils.db_errors import is_unique_violation
 from src.utils.query import project_count_filter, project_filter
@@ -414,7 +414,10 @@ async def delete_tag_endpoint(
     responses={404: {"model": NotFoundResp}},
     status_code=200,
     summary="获取资源的标签",
-    description="返回资源当前挂载的标签列表",
+    description=(
+        "返回资源的完整标签列表：直接挂载标签 + 按资源分类并入的默认分类标签"
+        "（如材料类资源恒带「材料」），与用量物化视图口径一致"
+    ),
 )
 async def get_resource_tags_endpoint(
     resource_id: int,
@@ -433,12 +436,16 @@ async def get_resource_tags_endpoint(
         404: {"model": NotFoundResp, "description": "资源不存在"},
         422: {
             "model": ConflictResp,
-            "description": "标签不存在/不属于当前项目，或为默认分类标签",
+            "description": "标签不存在/不属于当前项目",
         },
     },
     status_code=200,
     summary="替换式设置资源的标签",
-    description="整组替换资源挂载的标签（默认分类标签不可手工打标；不做图表切片互斥校验，冲突检查在数据体检）",
+    description=(
+        "整组替换资源直接挂载的标签；请求中的默认分类标签被静默忽略（不落库、"
+        "不报错）。响应为完整标签列表（直接挂载 + 资源分类默认标签）。"
+        "不做图表切片互斥校验，冲突检查在数据体检"
+    ),
 )
 async def set_resource_tags_endpoint(
     resource_id: int,
@@ -450,8 +457,65 @@ async def set_resource_tags_endpoint(
     await _get_resource_or_404(session, project.id, resource_id)
     try:
         return await service.set_resource_tags(resource_id, data.tag_ids)
-    except (DefaultTagAssignError, TagNotInProjectError) as e:
+    except TagNotInProjectError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+
+
+@resource_tag_router.post(
+    "/{resource_id}/tags/{tag_id}",
+    response_model=list[TagResp],
+    responses={
+        404: {"model": NotFoundResp, "description": "资源不存在"},
+        422: {
+            "model": ConflictResp,
+            "description": "标签不存在/不属于当前项目",
+        },
+    },
+    status_code=200,
+    summary="为资源新增标签关联（幂等）",
+    description=(
+        "新增单条资源-标签关联；已存在该关联或标签为默认分类标签（no-op）均"
+        "返回 200。响应为完整标签列表（直接挂载 + 资源分类默认标签）"
+    ),
+)
+async def add_resource_tag_endpoint(
+    resource_id: int,
+    tag_id: int,
+    project: CurrentProject,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    service: Annotated[ResourceTagService, Depends(get_resource_tag_service)],
+):
+    await _get_resource_or_404(session, project.id, resource_id)
+    try:
+        return await service.add_resource_tag(resource_id, tag_id)
+    except TagNotInProjectError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+
+@resource_tag_router.delete(
+    "/{resource_id}/tags/{tag_id}",
+    responses={404: {"model": NotFoundResp, "description": "资源或标签不存在"}},
+    status_code=204,
+    summary="删除资源的标签关联（幂等）",
+    description=(
+        "删除单条资源-标签关联；关联未建立（含默认分类标签）也返回 204；"
+        "资源或标签不存在/不属于当前项目返回 404"
+    ),
+)
+async def remove_resource_tag_endpoint(
+    resource_id: int,
+    tag_id: int,
+    project: CurrentProject,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    service: Annotated[ResourceTagService, Depends(get_resource_tag_service)],
+) -> None:
+    await _get_resource_or_404(session, project.id, resource_id)
+    tag = await ensure_tag_in_project(session, project.id, tag_id)
+    if tag is None:
+        raise HTTPException(
+            status_code=404, detail=f"ID 为 {tag_id} 的标签不存在或不属于当前项目"
+        )
+    await service.remove_resource_tag(resource_id, tag_id)
 
 
 # ============================================================
@@ -465,7 +529,7 @@ async def set_resource_tags_endpoint(
     responses={404: {"model": NotFoundResp}},
     status_code=200,
     summary="获取任务的标签",
-    description="返回任务当前挂载的标签列表",
+    description="返回任务当前直接挂载的标签列表（按 ID 升序）",
 )
 async def get_task_tags_endpoint(
     task_id: int,
@@ -484,12 +548,16 @@ async def get_task_tags_endpoint(
         404: {"model": NotFoundResp, "description": "任务不存在"},
         422: {
             "model": ConflictResp,
-            "description": "标签不存在/不属于当前项目，或为默认分类标签",
+            "description": "标签不存在/不属于当前项目",
         },
     },
     status_code=200,
     summary="替换式设置任务的标签",
-    description="整组替换任务挂载的标签（默认分类标签不可手工打标；不做图表切片互斥校验，冲突检查在数据体检）",
+    description=(
+        "整组替换任务直接挂载的标签；请求中的默认分类标签被静默忽略（不落库、"
+        "不报错）。响应为替换后直接挂载的标签列表。不做图表切片互斥校验，"
+        "冲突检查在数据体检"
+    ),
 )
 async def set_task_tags_endpoint(
     task_id: int,
@@ -501,8 +569,65 @@ async def set_task_tags_endpoint(
     await _get_task_or_404(session, project.id, task_id)
     try:
         return await service.set_task_tags(task_id, data.tag_ids)
-    except (DefaultTagAssignError, TagNotInProjectError) as e:
+    except TagNotInProjectError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+
+
+@task_tag_router.post(
+    "/{task_id}/tags/{tag_id}",
+    response_model=list[TagResp],
+    responses={
+        404: {"model": NotFoundResp, "description": "任务不存在"},
+        422: {
+            "model": ConflictResp,
+            "description": "标签不存在/不属于当前项目",
+        },
+    },
+    status_code=200,
+    summary="为任务新增标签关联（幂等）",
+    description=(
+        "新增单条任务-标签关联；已存在该关联或标签为默认分类标签（no-op）均"
+        "返回 200。响应为任务当前直接挂载的标签列表"
+    ),
+)
+async def add_task_tag_endpoint(
+    task_id: int,
+    tag_id: int,
+    project: CurrentProject,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    service: Annotated[TaskTagService, Depends(get_task_tag_service)],
+):
+    await _get_task_or_404(session, project.id, task_id)
+    try:
+        return await service.add_task_tag(task_id, tag_id)
+    except TagNotInProjectError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+
+@task_tag_router.delete(
+    "/{task_id}/tags/{tag_id}",
+    responses={404: {"model": NotFoundResp, "description": "任务或标签不存在"}},
+    status_code=204,
+    summary="删除任务的标签关联（幂等）",
+    description=(
+        "删除单条任务-标签关联；关联未建立（含默认分类标签）也返回 204；"
+        "任务或标签不存在/不属于当前项目返回 404"
+    ),
+)
+async def remove_task_tag_endpoint(
+    task_id: int,
+    tag_id: int,
+    project: CurrentProject,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    service: Annotated[TaskTagService, Depends(get_task_tag_service)],
+) -> None:
+    await _get_task_or_404(session, project.id, task_id)
+    tag = await ensure_tag_in_project(session, project.id, tag_id)
+    if tag is None:
+        raise HTTPException(
+            status_code=404, detail=f"ID 为 {tag_id} 的标签不存在或不属于当前项目"
+        )
+    await service.remove_task_tag(task_id, tag_id)
 
 
 # ============================================================
@@ -516,7 +641,7 @@ async def set_task_tags_endpoint(
     responses={404: {"model": NotFoundResp}},
     status_code=200,
     summary="获取用量的标签",
-    description="返回用量记录当前挂载的标签列表",
+    description="返回用量记录当前直接挂载的标签列表（按 ID 升序）",
 )
 async def get_usage_tags_endpoint(
     usage_id: int,
@@ -535,14 +660,15 @@ async def get_usage_tags_endpoint(
         404: {"model": NotFoundResp, "description": "用量记录不存在"},
         422: {
             "model": ConflictResp,
-            "description": "标签不存在/不属于当前项目，或为默认分类标签",
+            "description": "标签不存在/不属于当前项目",
         },
     },
     status_code=200,
     summary="替换式设置用量的标签",
     description=(
-        "整组替换用量记录挂载的标签（含日报导入的用量；默认分类标签不可手工打标；"
-        "不做图表切片互斥校验，冲突检查在数据体检）"
+        "整组替换用量记录直接挂载的标签（含日报导入的用量）；请求中的默认分类"
+        "标签被静默忽略（不落库、不报错）。响应为替换后直接挂载的标签列表。"
+        "不做图表切片互斥校验，冲突检查在数据体检"
     ),
 )
 async def set_usage_tags_endpoint(
@@ -555,8 +681,65 @@ async def set_usage_tags_endpoint(
     await _get_usage_or_404(session, project.id, usage_id)
     try:
         return await service.set_usage_tags(usage_id, data.tag_ids)
-    except (DefaultTagAssignError, TagNotInProjectError) as e:
+    except TagNotInProjectError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+
+
+@usage_tag_router.post(
+    "/{usage_id}/tags/{tag_id}",
+    response_model=list[TagResp],
+    responses={
+        404: {"model": NotFoundResp, "description": "用量记录不存在"},
+        422: {
+            "model": ConflictResp,
+            "description": "标签不存在/不属于当前项目",
+        },
+    },
+    status_code=200,
+    summary="为用量记录新增标签关联（幂等）",
+    description=(
+        "新增单条用量-标签关联；已存在该关联或标签为默认分类标签（no-op）均"
+        "返回 200。响应为用量记录当前直接挂载的标签列表"
+    ),
+)
+async def add_usage_tag_endpoint(
+    usage_id: int,
+    tag_id: int,
+    project: CurrentProject,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    service: Annotated[UsageTagService, Depends(get_usage_tag_service)],
+):
+    await _get_usage_or_404(session, project.id, usage_id)
+    try:
+        return await service.add_usage_tag(usage_id, tag_id)
+    except TagNotInProjectError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+
+@usage_tag_router.delete(
+    "/{usage_id}/tags/{tag_id}",
+    responses={404: {"model": NotFoundResp, "description": "用量记录或标签不存在"}},
+    status_code=204,
+    summary="删除用量记录的标签关联（幂等）",
+    description=(
+        "删除单条用量-标签关联；关联未建立（含默认分类标签）也返回 204；"
+        "用量记录或标签不存在/不属于当前项目返回 404"
+    ),
+)
+async def remove_usage_tag_endpoint(
+    usage_id: int,
+    tag_id: int,
+    project: CurrentProject,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    service: Annotated[UsageTagService, Depends(get_usage_tag_service)],
+) -> None:
+    await _get_usage_or_404(session, project.id, usage_id)
+    tag = await ensure_tag_in_project(session, project.id, tag_id)
+    if tag is None:
+        raise HTTPException(
+            status_code=404, detail=f"ID 为 {tag_id} 的标签不存在或不属于当前项目"
+        )
+    await service.remove_usage_tag(usage_id, tag_id)
 
 
 router = APIRouter()

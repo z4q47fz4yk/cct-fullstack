@@ -4461,7 +4461,7 @@
           "resource-tag"
         ],
         "summary": "获取资源的标签",
-        "description": "返回资源当前挂载的标签列表",
+        "description": "返回资源的完整标签列表：直接挂载标签 + 按资源分类并入的默认分类标签（如材料类资源恒带「材料」），与用量物化视图口径一致",
         "operationId": "get_resource_tags",
         "parameters": [
           {
@@ -4525,7 +4525,7 @@
           "resource-tag"
         ],
         "summary": "替换式设置资源的标签",
-        "description": "整组替换资源挂载的标签（默认分类标签不可手工打标；不做图表切片互斥校验，冲突检查在数据体检）",
+        "description": "整组替换资源直接挂载的标签；请求中的默认分类标签被静默忽略（不落库、不报错）。响应为完整标签列表（直接挂载 + 资源分类默认标签）。不做图表切片互斥校验，冲突检查在数据体检",
         "operationId": "set_resource_tags",
         "parameters": [
           {
@@ -4583,11 +4583,148 @@
             }
           },
           "422": {
-            "description": "标签不存在/不属于当前项目，或为默认分类标签",
+            "description": "标签不存在/不属于当前项目",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/src__routers__tag__ConflictResp"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project_id}/resource/{resource_id}/tags/{tag_id}": {
+      "post": {
+        "tags": [
+          "resource-tag"
+        ],
+        "summary": "为资源新增标签关联（幂等）",
+        "description": "新增单条资源-标签关联；已存在该关联或标签为默认分类标签（no-op）均返回 200。响应为完整标签列表（直接挂载 + 资源分类默认标签）",
+        "operationId": "add_resource_tag",
+        "parameters": [
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Resource Id"
+            }
+          },
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tag Id"
+            }
+          },
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TagResp"
+                  },
+                  "title": "Response Add Resource Tag"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/src__routers__tag__NotFoundResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "标签不存在/不属于当前项目",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/src__routers__tag__ConflictResp"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "resource-tag"
+        ],
+        "summary": "删除资源的标签关联（幂等）",
+        "description": "删除单条资源-标签关联；关联未建立（含默认分类标签）也返回 204；资源或标签不存在/不属于当前项目返回 404",
+        "operationId": "remove_resource_tag",
+        "parameters": [
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Resource Id"
+            }
+          },
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tag Id"
+            }
+          },
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "资源或标签不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/src__routers__tag__NotFoundResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -4601,7 +4738,7 @@
           "task-tag"
         ],
         "summary": "获取任务的标签",
-        "description": "返回任务当前挂载的标签列表",
+        "description": "返回任务当前直接挂载的标签列表（按 ID 升序）",
         "operationId": "get_task_tags",
         "parameters": [
           {
@@ -4665,7 +4802,7 @@
           "task-tag"
         ],
         "summary": "替换式设置任务的标签",
-        "description": "整组替换任务挂载的标签（默认分类标签不可手工打标；不做图表切片互斥校验，冲突检查在数据体检）",
+        "description": "整组替换任务直接挂载的标签；请求中的默认分类标签被静默忽略（不落库、不报错）。响应为替换后直接挂载的标签列表。不做图表切片互斥校验，冲突检查在数据体检",
         "operationId": "set_task_tags",
         "parameters": [
           {
@@ -4723,11 +4860,148 @@
             }
           },
           "422": {
-            "description": "标签不存在/不属于当前项目，或为默认分类标签",
+            "description": "标签不存在/不属于当前项目",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/src__routers__tag__ConflictResp"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project_id}/task/{task_id}/tags/{tag_id}": {
+      "post": {
+        "tags": [
+          "task-tag"
+        ],
+        "summary": "为任务新增标签关联（幂等）",
+        "description": "新增单条任务-标签关联；已存在该关联或标签为默认分类标签（no-op）均返回 200。响应为任务当前直接挂载的标签列表",
+        "operationId": "add_task_tag",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tag Id"
+            }
+          },
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TagResp"
+                  },
+                  "title": "Response Add Task Tag"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "任务不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/src__routers__tag__NotFoundResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "标签不存在/不属于当前项目",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/src__routers__tag__ConflictResp"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "task-tag"
+        ],
+        "summary": "删除任务的标签关联（幂等）",
+        "description": "删除单条任务-标签关联；关联未建立（含默认分类标签）也返回 204；任务或标签不存在/不属于当前项目返回 404",
+        "operationId": "remove_task_tag",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tag Id"
+            }
+          },
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "任务或标签不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/src__routers__tag__NotFoundResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -4741,7 +5015,7 @@
           "usage-tag"
         ],
         "summary": "获取用量的标签",
-        "description": "返回用量记录当前挂载的标签列表",
+        "description": "返回用量记录当前直接挂载的标签列表（按 ID 升序）",
         "operationId": "get_usage_tags",
         "parameters": [
           {
@@ -4805,7 +5079,7 @@
           "usage-tag"
         ],
         "summary": "替换式设置用量的标签",
-        "description": "整组替换用量记录挂载的标签（含日报导入的用量；默认分类标签不可手工打标；不做图表切片互斥校验，冲突检查在数据体检）",
+        "description": "整组替换用量记录直接挂载的标签（含日报导入的用量）；请求中的默认分类标签被静默忽略（不落库、不报错）。响应为替换后直接挂载的标签列表。不做图表切片互斥校验，冲突检查在数据体检",
         "operationId": "set_usage_tags",
         "parameters": [
           {
@@ -4863,11 +5137,148 @@
             }
           },
           "422": {
-            "description": "标签不存在/不属于当前项目，或为默认分类标签",
+            "description": "标签不存在/不属于当前项目",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/src__routers__tag__ConflictResp"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project_id}/resource-usage/{usage_id}/tags/{tag_id}": {
+      "post": {
+        "tags": [
+          "usage-tag"
+        ],
+        "summary": "为用量记录新增标签关联（幂等）",
+        "description": "新增单条用量-标签关联；已存在该关联或标签为默认分类标签（no-op）均返回 200。响应为用量记录当前直接挂载的标签列表",
+        "operationId": "add_usage_tag",
+        "parameters": [
+          {
+            "name": "usage_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Usage Id"
+            }
+          },
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tag Id"
+            }
+          },
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TagResp"
+                  },
+                  "title": "Response Add Usage Tag"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "用量记录不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/src__routers__tag__NotFoundResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "标签不存在/不属于当前项目",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/src__routers__tag__ConflictResp"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "usage-tag"
+        ],
+        "summary": "删除用量记录的标签关联（幂等）",
+        "description": "删除单条用量-标签关联；关联未建立（含默认分类标签）也返回 204；用量记录或标签不存在/不属于当前项目返回 404",
+        "operationId": "remove_usage_tag",
+        "parameters": [
+          {
+            "name": "usage_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Usage Id"
+            }
+          },
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tag Id"
+            }
+          },
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "用量记录或标签不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/src__routers__tag__NotFoundResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -11876,7 +12287,7 @@
             },
             "type": "array",
             "title": "Tagids",
-            "description": "标签ID列表（替换式赋值；默认分类标签不可手工打标）"
+            "description": "标签ID列表（替换式赋值；默认分类标签将被静默忽略）"
           }
         },
         "type": "object",
@@ -13636,7 +14047,7 @@
             },
             "type": "array",
             "title": "Tagids",
-            "description": "标签ID列表（替换式赋值；默认分类标签不可手工打标）"
+            "description": "标签ID列表（替换式赋值；默认分类标签将被静默忽略）"
           }
         },
         "type": "object",
@@ -13802,7 +14213,7 @@
             },
             "type": "array",
             "title": "Tagids",
-            "description": "标签ID列表（替换式赋值；默认分类标签不可手工打标）"
+            "description": "标签ID列表（替换式赋值；默认分类标签将被静默忽略）"
           }
         },
         "type": "object",

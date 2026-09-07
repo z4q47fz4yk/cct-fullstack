@@ -7,6 +7,7 @@ from datetime import date
 import pytest
 import pytest_asyncio
 from httpx2 import AsyncClient
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.daily_report import ImportBatch, ImportBatchStatus
@@ -904,3 +905,66 @@ async def test_list_resource_usages_include_tags_with_filters(
     assert [t["name"] for t in by_id[U_ID_BASE]["tags"]] == ["ru-tag-A", "ru-tag-B"]
     assert [t["name"] for t in by_id[U_ID_BASE + 1]["tags"]] == ["ru-tag-A"]
     assert by_id[U_ID_BASE + 2]["tags"] == []
+
+
+# ---------------------------------------------------------------------------
+# 单点新增 / 删除用量-标签关联（POST/DELETE /tags/{tag_id}）
+# ---------------------------------------------------------------------------
+
+
+async def test_usage_tag_single_point_add_delete(
+    tagged_usages, client: AsyncClient, db_session: AsyncSession
+):
+    """用量单点增删标签关联（幂等；usage 无 category → 不并入默认标签）。"""
+    # PID=1 有默认分类标签（迁移种子）；U_ID_BASE 当前挂 ru-tag-A/ru-tag-B
+    tags = (await client.get(f"/projects/{PID}/tag?per_page=100")).json()["items"]
+    default = next(t for t in tags if t["isDefault"])
+    plain = Tag(project_id=PID, name="ru-single", group="x", description="d")
+    db_session.add(plain)
+    await db_session.commit()
+    await db_session.refresh(plain)
+    assert plain.id is not None
+
+    # POST 新增
+    resp = await client.post(
+        f"/projects/{PID}/resource-usage/{U_ID_BASE}/tags/{plain.id}"
+    )
+    assert resp.status_code == 200
+    got = {t["id"] for t in resp.json()}
+    assert plain.id in got
+
+    # 重复 POST → 200 幂等
+    resp = await client.post(
+        f"/projects/{PID}/resource-usage/{U_ID_BASE}/tags/{plain.id}"
+    )
+    assert resp.status_code == 200
+
+    # POST 默认分类标签 → 200 no-op（不落关联）
+    resp = await client.post(
+        f"/projects/{PID}/resource-usage/{U_ID_BASE}/tags/{default['id']}"
+    )
+    assert resp.status_code == 200
+    rows = (
+        await db_session.exec(select(UsageTag).where(UsageTag.usage_id == U_ID_BASE))
+    ).all()
+    linked = {r.tag_id for r in rows}
+    assert default["id"] not in linked  # 默认标签永不落库
+    assert plain.id in linked  # 单点 POST 已落库
+
+    # DELETE → 204；重复 DELETE → 204
+    resp = await client.delete(
+        f"/projects/{PID}/resource-usage/{U_ID_BASE}/tags/{plain.id}"
+    )
+    assert resp.status_code == 204
+    resp = await client.delete(
+        f"/projects/{PID}/resource-usage/{U_ID_BASE}/tags/{plain.id}"
+    )
+    assert resp.status_code == 204
+
+    # DELETE tag 不存在 → 404；usage 不存在 → 404
+    resp = await client.delete(
+        f"/projects/{PID}/resource-usage/{U_ID_BASE}/tags/999999"
+    )
+    assert resp.status_code == 404
+    resp = await client.delete(f"/projects/{PID}/resource-usage/999999/tags/1")
+    assert resp.status_code == 404

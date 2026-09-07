@@ -3,9 +3,9 @@ import { computed } from 'vue'
 import type { Resource, ResourceCategory } from '@/types/resource'
 import { categoryConfigMap } from '@/types/resource'
 import type { ResourceWithTagsResp } from '@/client/types.gen'
-import { getSliceColor } from '@/utils/themeColors'
 import { fmtNumber } from '@/utils/format'
 import TableEmptyState from '@/components/common/TableEmptyState.vue'
+import TagInput from '@/components/tag/TagInput.vue'
 
 const { resources, category } = defineProps<{
   resources: ResourceWithTagsResp[]
@@ -15,7 +15,6 @@ const { resources, category } = defineProps<{
 const emit = defineEmits<{
   (e: 'edit', resource: Resource): void
   (e: 'delete', resource: Resource): void
-  (e: 'tags', resource: Resource): void
 }>()
 
 interface TableHeader {
@@ -45,21 +44,6 @@ const tableHeaders: TableHeader[] = [
 
 /** 物理单元格总数（含 colspan 拆出的隐式列） */
 const cellCount = tableHeaders.reduce((sum, h) => sum + (h.colspan ?? 1), 0)
-
-/** 每行最多展示的标签 chip 数，其余折叠为 +N */
-const MAX_TAGS_VISIBLE = 2
-
-function visibleTags(resource: ResourceWithTagsResp) {
-  return (resource.tags ?? []).slice(0, MAX_TAGS_VISIBLE)
-}
-
-function hiddenTagCount(resource: ResourceWithTagsResp): number {
-  return Math.max(0, (resource.tags?.length ?? 0) - MAX_TAGS_VISIBLE)
-}
-
-function tagListText(resource: ResourceWithTagsResp): string {
-  return (resource.tags ?? []).map((t) => t.name).join('、')
-}
 
 const categoryIcon = computed(() => categoryConfigMap[category].icon)
 </script>
@@ -119,35 +103,11 @@ const categoryIcon = computed(() => categoryConfigMap[category].icon)
               <div class="font-medium text-base-content">{{ resource.name }}</div>
             </td>
             <td>
-              <!-- 标签列：经典胶囊样式，超限折叠为 +N，悬浮查看全量 -->
-              <div
-                v-if="resource.tags && resource.tags.length > 0"
-                class="flex items-center gap-1 overflow-hidden"
-                :title="tagListText(resource)"
-              >
-                <span
-                  v-for="(tag, index) in visibleTags(resource)"
-                  :key="tag.id"
-                  class="inline-flex items-center gap-1 h-5 px-1.5 rounded-full border text-[10px] whitespace-nowrap shrink-0"
-                  :style="{
-                    backgroundColor: `${getSliceColor(index)}14`,
-                    borderColor: `${getSliceColor(index)}3d`,
-                  }"
-                >
-                  <span
-                    class="w-1.5 h-1.5 rounded-full shrink-0"
-                    :style="{ backgroundColor: getSliceColor(index) }"
-                  ></span>
-                  <span class="text-fg-muted">{{ tag.name }}</span>
-                </span>
-                <span
-                  v-if="hiddenTagCount(resource) > 0"
-                  class="inline-flex items-center h-5 px-1.5 rounded-full border border-base-content/20 bg-base-200/60 text-[10px] font-mono text-fg-subtle whitespace-nowrap shrink-0"
-                >
-                  +{{ hiddenTagCount(resource) }}
-                </span>
-              </div>
-              <span v-else class="text-xs text-fg-subtle">未打标</span>
+              <!-- 标签列：行内 tag-input（悬停 ✕ 移除，(+tag) 虚线新增） -->
+              <TagInput
+                :entity="{ type: 'resource', id: resource.id }"
+                :tags="resource.tags ?? []"
+              />
             </td>
             <td class="table-num w-24 pr-1">
               <span class="font-num font-medium">{{ fmtNumber(resource.unitPrice, 2) }}</span>
@@ -163,13 +123,6 @@ const categoryIcon = computed(() => categoryConfigMap[category].icon)
             </td>
             <td>
               <div class="flex items-center gap-1">
-                <button
-                  class="btn btn-ghost btn-xs btn-square"
-                  title="为资源打标"
-                  @click="emit('tags', resource)"
-                >
-                  <span class="material-symbols-outlined icon-sm">label</span>
-                </button>
                 <button
                   class="btn btn-ghost btn-xs btn-square"
                   title="编辑"

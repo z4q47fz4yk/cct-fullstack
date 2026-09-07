@@ -130,7 +130,7 @@ class ResourceTagAssignReq(CamelCaseRespMixin):
     """为资源替换式赋值标签。"""
 
     tag_ids: list[int] = Field(
-        description="标签ID列表（替换式赋值；默认分类标签不可手工打标）"
+        description="标签ID列表（替换式赋值；默认分类标签将被静默忽略）"
     )
 
 
@@ -138,7 +138,7 @@ class TaskTagAssignReq(CamelCaseRespMixin):
     """为任务替换式赋值标签。"""
 
     tag_ids: list[int] = Field(
-        description="标签ID列表（替换式赋值；默认分类标签不可手工打标）"
+        description="标签ID列表（替换式赋值；默认分类标签将被静默忽略）"
     )
 
 
@@ -146,7 +146,7 @@ class UsageTagAssignReq(CamelCaseRespMixin):
     """为用量记录替换式赋值标签。"""
 
     tag_ids: list[int] = Field(
-        description="标签ID列表（替换式赋值；默认分类标签不可手工打标）"
+        description="标签ID列表（替换式赋值；默认分类标签将被静默忽略）"
     )
 
 

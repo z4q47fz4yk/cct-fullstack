@@ -23,7 +23,6 @@ import ResourceCategoryTabs from '@/components/resource/ResourceCategoryTabs.vue
 import ResourceTable from '@/components/resource/ResourceTable.vue'
 import ResourceForm from '@/components/resource/ResourceForm.vue'
 import PublicResourceImportModal from '@/components/resource/PublicResourceImportModal.vue'
-import TagAssignModal from '@/components/tag/TagAssignModal.vue'
 import type { SelectOption } from '@/types/select'
 
 definePage({
@@ -131,15 +130,6 @@ const editingResourceId = ref<number | null>(null)
 
 // 公共资源导入模态框
 const showImportModal = ref(false)
-
-// 资源打标模态框
-const showTagModal = ref(false)
-const taggingResource = ref<ResourceResp | null>(null)
-
-function openTagModal(resource: ResourceResp) {
-  taggingResource.value = resource
-  showTagModal.value = true
-}
 
 const formData = ref<ResourceCreate>({
   name: '',
@@ -376,7 +366,6 @@ function retryLoad() {
             :category="activeCategory"
             @edit="openEditModal"
             @delete="handleDeleteResource"
-            @tags="openTagModal"
             class="border-t border-b border-base-content/30"
           />
 
@@ -409,13 +398,4 @@ function retryLoad() {
 
   <!-- 从公共资源导入模态框 -->
   <PublicResourceImportModal v-model:show="showImportModal" @submit="handleImportSubmit" />
-
-  <!-- 资源打标模态框 -->
-  <TagAssignModal
-    :show="showTagModal"
-    :entity="taggingResource ? { type: 'resource', id: taggingResource.id } : null"
-    :entity-name="taggingResource?.name ?? '资源'"
-    @saved="showTagModal = false"
-    @cancel="showTagModal = false"
-  />
 </template>

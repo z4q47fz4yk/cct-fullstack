@@ -6,12 +6,18 @@ import {
   getResourceTagsQuery,
   getResourceTagsQueryKey,
   setResourceTagsMutation,
+  addResourceTagMutation,
+  removeResourceTagMutation,
   getTaskTagsQuery,
   getTaskTagsQueryKey,
   setTaskTagsMutation,
+  addTaskTagMutation,
+  removeTaskTagMutation,
   getUsageTagsQuery,
   getUsageTagsQueryKey,
   setUsageTagsMutation,
+  addUsageTagMutation,
+  removeUsageTagMutation,
   listResourcesQueryKey,
   listTasksQueryKey,
   listResourceUsagesQueryKey,
@@ -65,8 +71,12 @@ export function useEntityTags(entity: Ref<TagEntityRef | null>) {
 
 /**
  * 实体打标 API（资源/任务/用量统一）
- * 标签不存在/默认分类禁挂等错误（422）向上抛出 ApiError（detail 含原因），
- * 供界面内联展示。不做图表切片互斥校验（冲突检查在数据体检）。
+ * 支持三种写语义：
+ * - setTags：整组替换（PUT，默认分类标签被后端静默忽略）
+ * - addTag：单点新增（POST /tags/{tag_id}，幂等；默认分类标签 no-op）
+ * - removeTag：单点删除（DELETE /tags/{tag_id}，幂等；tag 不存在由后端 404）
+ * 错误（422/404）向上抛出 ApiError（detail 含原因），供界面内联展示。
+ * 不做图表切片互斥校验（冲突检查在数据体检）。
  */
 export function useEntityTagApi() {
   const queryCache = useQueryCache()
@@ -105,14 +115,40 @@ export function useEntityTagApi() {
     onSuccess: (_data, vars) =>
       invalidateEntityTags({ type: 'resource', id: vars.path.resource_id }),
   })
+  const { mutateAsync: addResourceTag } = useMutation({
+    ...addResourceTagMutation(),
+    onSuccess: (_data, vars) =>
+      invalidateEntityTags({ type: 'resource', id: vars.path.resource_id }),
+  })
+  const { mutateAsync: removeResourceTag } = useMutation({
+    ...removeResourceTagMutation(),
+    onSuccess: (_data, vars) =>
+      invalidateEntityTags({ type: 'resource', id: vars.path.resource_id }),
+  })
 
   const { mutateAsync: setTaskTags, asyncStatus: taskStatus } = useMutation({
     ...setTaskTagsMutation(),
     onSuccess: (_data, vars) => invalidateEntityTags({ type: 'task', id: vars.path.task_id }),
   })
+  const { mutateAsync: addTaskTag } = useMutation({
+    ...addTaskTagMutation(),
+    onSuccess: (_data, vars) => invalidateEntityTags({ type: 'task', id: vars.path.task_id }),
+  })
+  const { mutateAsync: removeTaskTag } = useMutation({
+    ...removeTaskTagMutation(),
+    onSuccess: (_data, vars) => invalidateEntityTags({ type: 'task', id: vars.path.task_id }),
+  })
 
   const { mutateAsync: setUsageTags, asyncStatus: usageStatus } = useMutation({
     ...setUsageTagsMutation(),
+    onSuccess: (_data, vars) => invalidateEntityTags({ type: 'usage', id: vars.path.usage_id }),
+  })
+  const { mutateAsync: addUsageTag } = useMutation({
+    ...addUsageTagMutation(),
+    onSuccess: (_data, vars) => invalidateEntityTags({ type: 'usage', id: vars.path.usage_id }),
+  })
+  const { mutateAsync: removeUsageTag } = useMutation({
+    ...removeUsageTagMutation(),
     onSuccess: (_data, vars) => invalidateEntityTags({ type: 'usage', id: vars.path.usage_id }),
   })
 
@@ -146,5 +182,45 @@ export function useEntityTagApi() {
     }
   }
 
-  return { setTags, isSetting }
+  async function addTag(entity: TagEntityRef, tagId: number, silent = true) {
+    const projectId = currentProjectId.value!
+    if (entity.type === 'resource') {
+      await addResourceTag({
+        path: { project_id: projectId, resource_id: entity.id, tag_id: tagId },
+        silent,
+      })
+    } else if (entity.type === 'task') {
+      await addTaskTag({
+        path: { project_id: projectId, task_id: entity.id, tag_id: tagId },
+        silent,
+      })
+    } else {
+      await addUsageTag({
+        path: { project_id: projectId, usage_id: entity.id, tag_id: tagId },
+        silent,
+      })
+    }
+  }
+
+  async function removeTag(entity: TagEntityRef, tagId: number, silent = true) {
+    const projectId = currentProjectId.value!
+    if (entity.type === 'resource') {
+      await removeResourceTag({
+        path: { project_id: projectId, resource_id: entity.id, tag_id: tagId },
+        silent,
+      })
+    } else if (entity.type === 'task') {
+      await removeTaskTag({
+        path: { project_id: projectId, task_id: entity.id, tag_id: tagId },
+        silent,
+      })
+    } else {
+      await removeUsageTag({
+        path: { project_id: projectId, usage_id: entity.id, tag_id: tagId },
+        silent,
+      })
+    }
+  }
+
+  return { setTags, addTag, removeTag, isSetting }
 }

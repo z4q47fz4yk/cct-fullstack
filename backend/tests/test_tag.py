@@ -10,7 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.project import Project
 from src.models.resource import Resource
-from src.models.tag import ResourceTag, Tag
+from src.models.tag import ResourceTag, Tag, TaskTag
 from src.models.task import Task
 from src.schemas.resource import ResourceCategory
 
@@ -330,13 +330,13 @@ async def test_set_resource_tags_not_in_project_422(
     assert resp.status_code == 422
 
 
-async def test_set_resource_tags_default_tag_422(
+async def test_set_resource_tags_ignores_default_tag(
     client: AsyncClient,
     db_session: AsyncSession,
     project: Project,
     resource: Resource,
 ):
-    """「资源类别」默认标签不允许手工打标（分类由资源类别自动命中）。"""
+    """整组替换时默认分类标签被静默忽略：不落库、不报错。"""
     pid = cast(int, project.id)
     # 默认标签行直接写入本测试项目（fixture 直插项目不自动生成）
     default_tag = Tag(
@@ -346,18 +346,41 @@ async def test_set_resource_tags_default_tag_422(
         description="系统默认资源类别标签",
         is_default=True,
     )
-    db_session.add(default_tag)
+    normal_tag = Tag(project_id=pid, name="自定义", group="自定义", description="d")
+    db_session.add_all([default_tag, normal_tag])
     await db_session.commit()
     await db_session.refresh(default_tag)
-    assert default_tag.id is not None
+    await db_session.refresh(normal_tag)
+    assert default_tag.id is not None and normal_tag.id is not None
 
-    # 默认标签不可手工挂载
+    # 仅传默认标签 → 200；直接挂载为空。resource 为 material，响应完整 tags
+    # 仍会并入「材料」默认标签展示（默认标签不存在关联行）
     resp = await client.put(
         f"/projects/{pid}/resource/{resource.id}/tags",
         json={"tagIds": [default_tag.id]},
     )
-    assert resp.status_code == 422
-    assert "默认分类标签" in resp.json()["detail"]
+    assert resp.status_code == 200
+    assert [t["id"] for t in resp.json()] == [default_tag.id]
+
+    # 混入默认 + 普通 → 200，只挂载普通标签；响应完整 tags 含默认展示
+    resp = await client.put(
+        f"/projects/{pid}/resource/{resource.id}/tags",
+        json={"tagIds": [default_tag.id, normal_tag.id]},
+    )
+    assert resp.status_code == 200
+    ids = [t["id"] for t in resp.json()]
+    assert normal_tag.id in ids
+    assert default_tag.id in ids  # 并入展示（resource=material）
+
+    # 数据库中确实只存在普通标签的关联行
+    from src.models.tag import ResourceTag
+
+    rows = (
+        await db_session.exec(
+            select(ResourceTag).where(ResourceTag.resource_id == resource.id)
+        )
+    ).all()
+    assert {r.tag_id for r in rows} == {normal_tag.id}
 
     # 负数 id（旧伪标签）不再有内置分类含义 → 直接按“不存在/不属于项目”拒绝
     resp = await client.put(
@@ -628,3 +651,224 @@ async def test_get_default_tag_resources_not_in_category_excluded(
 async def test_get_tag_resources_tag_404(client: AsyncClient, project: Project):
     resp = await client.get(f"/projects/{project.id}/tag/999999/resources")
     assert resp.status_code == 404
+
+
+# ============================================================
+# 单点新增 / 删除标签关联（POST/DELETE /tags/{tag_id}）
+# ============================================================
+
+
+async def test_post_resource_tag_adds_link(
+    client: AsyncClient, project: Project, tags, resource: Resource
+):
+    """POST 新增单条关联；响应为完整标签（直接挂载 + 资源分类并入默认标签）。"""
+    pid = cast(int, project.id)
+    # resource 为 material；项目无默认标签行 → 无并入
+    resp = await client.post(
+        f"/projects/{pid}/resource/{resource.id}/tags/{tags['t1'].id}"
+    )
+    assert resp.status_code == 200
+    assert {t["id"] for t in resp.json()} == {tags["t1"].id}
+
+    # 幂等：重复 POST 仍 200，无重复行
+    resp = await client.post(
+        f"/projects/{pid}/resource/{resource.id}/tags/{tags['t1'].id}"
+    )
+    assert resp.status_code == 200
+    resp = await client.get(f"/projects/{pid}/resource/{resource.id}/tags")
+    assert {t["id"] for t in resp.json()} == {tags["t1"].id}
+
+
+async def test_post_resource_tag_merges_default_display(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    resource: Resource,
+):
+    """resource=material 且项目有「材料」默认标签时，响应并入默认标签展示。"""
+    pid = cast(int, project.id)
+    default_tag = Tag(
+        project_id=pid,
+        name="材料",
+        group="资源类别",
+        description="d",
+        is_default=True,
+    )
+    normal = Tag(project_id=pid, name="施工", group="x", description="d")
+    db_session.add_all([default_tag, normal])
+    await db_session.commit()
+    await db_session.refresh(default_tag)
+    await db_session.refresh(normal)
+    assert default_tag.id is not None and normal.id is not None
+
+    resp = await client.post(f"/projects/{pid}/resource/{resource.id}/tags/{normal.id}")
+    assert resp.status_code == 200
+    ids = {t["id"] for t in resp.json()}
+    assert ids == {normal.id, default_tag.id}
+
+
+async def test_post_resource_default_tag_noop(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    resource: Resource,
+):
+    """POST 默认分类标签 → 静默 no-op：不落关联、200 且响应完整 tags。"""
+    pid = cast(int, project.id)
+    default_tag = Tag(
+        project_id=pid,
+        name="材料",
+        group="资源类别",
+        description="d",
+        is_default=True,
+    )
+    normal = Tag(project_id=pid, name="施工", group="x", description="d")
+    db_session.add_all([default_tag, normal])
+    await db_session.commit()
+    await db_session.refresh(default_tag)
+    await db_session.refresh(normal)
+    assert default_tag.id is not None and normal.id is not None
+
+    # 先挂一个普通标签
+    await client.post(f"/projects/{pid}/resource/{resource.id}/tags/{normal.id}")
+
+    resp = await client.post(
+        f"/projects/{pid}/resource/{resource.id}/tags/{default_tag.id}"
+    )
+    assert resp.status_code == 200
+    # 响应含默认标签展示，但数据库仅 normal 关联
+    assert default_tag.id in {t["id"] for t in resp.json()}
+    rows = (
+        await db_session.exec(
+            select(ResourceTag).where(ResourceTag.resource_id == resource.id)
+        )
+    ).all()
+    assert {r.tag_id for r in rows} == {normal.id}
+
+
+async def test_post_resource_tag_errors(
+    client: AsyncClient, project: Project, resource: Resource
+):
+    pid = cast(int, project.id)
+    # tag 不存在/不属于 → 422
+    resp = await client.post(f"/projects/{pid}/resource/{resource.id}/tags/999999")
+    assert resp.status_code == 422
+    # 资源不存在 → 404
+    resp = await client.post(f"/projects/{pid}/resource/999999/tags/1")
+    assert resp.status_code == 404
+
+
+async def test_delete_resource_tag_removes_link(
+    client: AsyncClient, project: Project, tags, resource: Resource
+):
+    pid = cast(int, project.id)
+    await client.post(f"/projects/{pid}/resource/{resource.id}/tags/{tags['t1'].id}")
+
+    resp = await client.delete(
+        f"/projects/{pid}/resource/{resource.id}/tags/{tags['t1'].id}"
+    )
+    assert resp.status_code == 204
+    resp = await client.get(f"/projects/{pid}/resource/{resource.id}/tags")
+    assert {t["id"] for t in resp.json()} == set()
+
+
+async def test_delete_resource_tag_idempotent_noop(
+    client: AsyncClient, project: Project, tags, resource: Resource
+):
+    pid = cast(int, project.id)
+    # 未建立的关联 → 204（不报错）
+    resp = await client.delete(
+        f"/projects/{pid}/resource/{resource.id}/tags/{tags['t2'].id}"
+    )
+    assert resp.status_code == 204
+
+
+async def test_delete_resource_default_tag_noop(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    resource: Resource,
+):
+    """DELETE 默认分类标签：无关联行 → 204 no-op（默认标签存在故非 404）。"""
+    pid = cast(int, project.id)
+    default_tag = Tag(
+        project_id=pid,
+        name="材料",
+        group="资源类别",
+        description="d",
+        is_default=True,
+    )
+    db_session.add(default_tag)
+    await db_session.commit()
+    await db_session.refresh(default_tag)
+    assert default_tag.id is not None
+
+    resp = await client.delete(
+        f"/projects/{pid}/resource/{resource.id}/tags/{default_tag.id}"
+    )
+    assert resp.status_code == 204
+
+
+async def test_delete_resource_tag_missing_tag_404(
+    client: AsyncClient, project: Project, resource: Resource
+):
+    pid = cast(int, project.id)
+    # tag 本身不存在 → 404
+    resp = await client.delete(f"/projects/{pid}/resource/{resource.id}/tags/999999")
+    assert resp.status_code == 404
+    # 资源不存在 → 404
+    resp = await client.delete(f"/projects/{pid}/resource/999999/tags/1")
+    assert resp.status_code == 404
+
+
+async def test_post_delete_task_tag_link(
+    client: AsyncClient, project: Project, tags, task: Task
+):
+    """task 单点增删链路。"""
+    pid = cast(int, project.id)
+    # 新增
+    resp = await client.post(f"/projects/{pid}/task/{task.id}/tags/{tags['t1'].id}")
+    assert resp.status_code == 200
+    assert {t["id"] for t in resp.json()} == {tags["t1"].id}
+    # 重复新增幂等
+    resp = await client.post(f"/projects/{pid}/task/{task.id}/tags/{tags['t1'].id}")
+    assert resp.status_code == 200
+    # 删除
+    resp = await client.delete(f"/projects/{pid}/task/{task.id}/tags/{tags['t1'].id}")
+    assert resp.status_code == 204
+    resp = await client.get(f"/projects/{pid}/task/{task.id}/tags")
+    assert resp.json() == []
+    # 不存在 tag → 404；任务不存在 → 404
+    resp = await client.delete(f"/projects/{pid}/task/{task.id}/tags/999999")
+    assert resp.status_code == 404
+    resp = await client.delete(f"/projects/{pid}/task/999999/tags/1")
+    assert resp.status_code == 404
+
+
+async def test_post_task_default_tag_noop(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    task: Task,
+):
+    """task POST 默认分类标签 → no-op：任务无 category，不并入默认标签。"""
+    pid = cast(int, project.id)
+    default_tag = Tag(
+        project_id=pid,
+        name="材料",
+        group="资源类别",
+        description="d",
+        is_default=True,
+    )
+    db_session.add(default_tag)
+    await db_session.commit()
+    await db_session.refresh(default_tag)
+    assert default_tag.id is not None
+
+    resp = await client.post(f"/projects/{pid}/task/{task.id}/tags/{default_tag.id}")
+    assert resp.status_code == 200
+    assert resp.json() == []  # 无并入，直接挂载为空
+    rows = (
+        await db_session.exec(select(TaskTag).where(TaskTag.task_id == task.id))
+    ).all()
+    assert rows == []

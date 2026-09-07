@@ -8,7 +8,6 @@ import TaskTable from '@/components/schedule/TaskTable.vue'
 import GanttChart, { type GanttChartItem } from '@/components/common/GanttChart.vue'
 import AddPredecessorModal from '@/components/schedule/AddPredecessorModal.vue'
 import ManagePredecessorsModal from '@/components/schedule/ManagePredecessorsModal.vue'
-import TagAssignModal from '@/components/tag/TagAssignModal.vue'
 import TaskForm from '@/components/schedule/TaskForm.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import { useScheduleApi } from '@/composables/useScheduleApi'
@@ -273,15 +272,6 @@ const handleAddPredecessorSubmit = async (payload: AddPredecessorRequest) => {
   }
 }
 
-// 任务打标（TASK 切片实体）
-const showTagModal = ref(false)
-const taggingTask = ref<TaskWithTagsResp | null>(null)
-
-const handleOpenTags = (task: TaskWithTagsResp) => {
-  taggingTask.value = task
-  showTagModal.value = true
-}
-
 const closeAddModal = () => {
   showAddModal.value = false
   formError.value = ''
@@ -410,7 +400,6 @@ const closeManagePredecessorModal = () => {
             @delete="handleDeleteTask"
             @add-predecessor="handleAddPredecessor"
             @manage-predecessors="handleManagePredecessors"
-            @tags="handleOpenTags"
           />
           <div v-if="pageSize > 10" class="border-t border-base-content/10">
             <PaginationBar
@@ -437,15 +426,6 @@ const closeManagePredecessorModal = () => {
     :current-task="currentTaskForPredecessor"
     :available-tasks="availablePredecessors"
     @add="handleAddPredecessorSubmit"
-  />
-
-  <!-- 任务打标模态框 -->
-  <TagAssignModal
-    :show="showTagModal"
-    :entity="taggingTask ? { type: 'task', id: taggingTask.id } : null"
-    :entity-name="taggingTask?.name ?? '任务'"
-    @saved="showTagModal = false"
-    @cancel="showTagModal = false"
   />
 
   <!-- 添加任务模态框 -->

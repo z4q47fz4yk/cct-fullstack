@@ -2,6 +2,7 @@
 import type { TaskWithTagsResp } from '@/client/types.gen'
 import { getSliceColor } from '@/utils/themeColors'
 import TableEmptyState from '@/components/common/TableEmptyState.vue'
+import TagInput from '@/components/tag/TagInput.vue'
 
 const { tasks, deletingId } = defineProps<{
   tasks: TaskWithTagsResp[]
@@ -13,7 +14,6 @@ const emit = defineEmits<{
   (e: 'delete', task: TaskWithTagsResp): void
   (e: 'addPredecessor', task: TaskWithTagsResp): void
   (e: 'managePredecessors', task: TaskWithTagsResp): void
-  (e: 'tags', task: TaskWithTagsResp): void
 }>()
 
 const tableHeaders = [
@@ -26,23 +26,8 @@ const tableHeaders = [
   { key: 'actions', label: '操作', width: 'w-36' },
 ]
 
-/** 每行最多展示的标签 chip 数，其余折叠为 +N */
-const MAX_TAGS_VISIBLE = 2
-
 /** 前置任务列：每行最多展示的编码 chip 数 */
 const MAX_PREDECESSORS_VISIBLE = 2
-
-function visibleTags(task: TaskWithTagsResp) {
-  return (task.tags ?? []).slice(0, MAX_TAGS_VISIBLE)
-}
-
-function hiddenTagCount(task: TaskWithTagsResp): number {
-  return Math.max(0, (task.tags?.length ?? 0) - MAX_TAGS_VISIBLE)
-}
-
-function tagListText(task: TaskWithTagsResp): string {
-  return (task.tags ?? []).map((t) => t.name).join('、')
-}
 
 function visiblePredecessors(task: TaskWithTagsResp) {
   return (task.predecessors ?? []).slice(0, MAX_PREDECESSORS_VISIBLE)
@@ -102,35 +87,8 @@ function truncateDescription(desc: string, maxLength: number = 50): string {
 
             <!-- 标签 -->
             <td>
-              <!-- 标签列：经典胶囊样式，超限折叠为 +N，悬浮查看全量 -->
-              <div
-                v-if="task.tags && task.tags.length > 0"
-                class="flex items-center gap-1 overflow-hidden"
-                :title="tagListText(task)"
-              >
-                <span
-                  v-for="(tag, index) in visibleTags(task)"
-                  :key="tag.id"
-                  class="inline-flex items-center gap-1 h-5 px-1.5 rounded-full border text-[10px] whitespace-nowrap shrink-0"
-                  :style="{
-                    backgroundColor: `${getSliceColor(index)}14`,
-                    borderColor: `${getSliceColor(index)}3d`,
-                  }"
-                >
-                  <span
-                    class="w-1.5 h-1.5 rounded-full shrink-0"
-                    :style="{ backgroundColor: getSliceColor(index) }"
-                  ></span>
-                  <span class="text-fg-muted">{{ tag.name }}</span>
-                </span>
-                <span
-                  v-if="hiddenTagCount(task) > 0"
-                  class="inline-flex items-center h-5 px-1.5 rounded-full border border-base-content/20 bg-base-200/60 text-[10px] font-mono text-fg-subtle whitespace-nowrap shrink-0"
-                >
-                  +{{ hiddenTagCount(task) }}
-                </span>
-              </div>
-              <span v-else class="text-xs text-fg-subtle">未打标</span>
+              <!-- 标签列：行内 tag-input（悬停 ✕ 移除，(+tag) 虚线新增） -->
+              <TagInput :entity="{ type: 'task', id: task.id }" :tags="task.tags ?? []" />
             </td>
 
             <!-- 任务说明 -->
@@ -200,13 +158,6 @@ function truncateDescription(desc: string, maxLength: number = 50): string {
             <!-- 操作 -->
             <td>
               <div class="flex items-center gap-1">
-                <button
-                  class="btn btn-ghost btn-sm btn-square"
-                  title="为任务打标"
-                  @click="emit('tags', task)"
-                >
-                  <span class="material-symbols-outlined icon-sm">label</span>
-                </button>
                 <button
                   class="btn btn-ghost btn-sm btn-square"
                   title="编辑"
