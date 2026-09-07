@@ -28,6 +28,13 @@ RESOURCE_CATEGORY_LABEL: dict[str, str] = {
     "others": "其他",
 }
 
+#: 资源分类中文显示名 → code（``RESOURCE_CATEGORY_LABEL`` 的反向索引）。
+#: 用于默认标签（名称=显示名）与 ``resource.category`` 之间互转，
+#: 使「默认标签 ↔ 分类」在接口层可双向解析。
+RESOURCE_CATEGORY_CODE_BY_LABEL: dict[str, str] = {
+    label: code for code, label in RESOURCE_CATEGORY_LABEL.items()
+}
+
 
 # 默认标签分组（项目创建时随系统写入，用于前端分组展示）
 DEFAULT_TAG_GROUP: str = "资源类别"
@@ -145,6 +152,7 @@ class UsageTagAssignReq(CamelCaseRespMixin):
 
 __all__ = [
     "RESOURCE_CATEGORY_LABEL",
+    "RESOURCE_CATEGORY_CODE_BY_LABEL",
     "DEFAULT_PROJECT_TAGS",
     "DEFAULT_TAG_GROUP",
     "TagCreate",

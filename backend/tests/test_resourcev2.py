@@ -299,7 +299,11 @@ async def test_list_resources_include_tags(
     db_session: AsyncSession,
     tag_resources,
 ):
-    """include_tags=true 时返回直接标签（按 ID 升序），无标签资源返回空数组。"""
+    """include_tags=true 返回直接标签（按 ID 升序）＋分类默认标签。
+
+    三个 tagtest-* 资源均属 material 分类，在项目默认标签（材料 is_default）
+    存在时，返回 tags = [材料(默认)] + 直接挂载标签，按 tag_id 升序。
+    """
     r1, r2, r3 = tag_resources
     tag_a = Tag(project_id=PID, name="tagtest-A", group="测试", description="d")
     tag_b = Tag(project_id=PID, name="tagtest-B", group="测试", description="d")
@@ -316,7 +320,7 @@ async def test_list_resources_include_tags(
             (r1.id, tag_b.id),  # 故意乱序写入，验证按 tag_id 升序返回
             (r1.id, tag_a.id),
             (r2.id, tag_a.id),
-            # r3 不挂标签
+            # r3 不挂直接标签
         ],
     )
 
@@ -326,12 +330,15 @@ async def test_list_resources_include_tags(
     assert resp.status_code == 200
     by_name = {it["name"]: it for it in resp.json()["items"]}
 
+    # 默认分类标签 id < 直接标签 id → 排序后「材料」恒在最前
     assert [t["name"] for t in by_name["tagtest-r1"]["tags"]] == [
+        "材料",
         "tagtest-A",
         "tagtest-B",
     ]
-    assert [t["name"] for t in by_name["tagtest-r2"]["tags"]] == ["tagtest-A"]
-    assert by_name["tagtest-r3"]["tags"] == []
+    assert [t["name"] for t in by_name["tagtest-r2"]["tags"]] == ["材料", "tagtest-A"]
+    # 无直接标签的资源仍带其分类默认标签（材料）
+    assert [t["name"] for t in by_name["tagtest-r3"]["tags"]] == ["材料"]
 
 
 async def test_list_resources_include_tags_pagination(
@@ -360,7 +367,7 @@ async def test_list_resources_include_tags_pagination(
     items = resp.json()["items"]
     assert len(items) == 1
     assert items[0]["name"] == "tagtest-r2"
-    assert [t["name"] for t in items[0]["tags"]] == ["tagtest-A"]
+    assert [t["name"] for t in items[0]["tags"]] == ["材料", "tagtest-A"]
 
 
 async def test_list_resources_include_tags_project_isolated(
@@ -416,9 +423,9 @@ async def test_list_resources_include_tags_project_isolated(
     assert resp.status_code == 200
     by_name = {it["name"]: it for it in resp.json()["items"]}
     assert "tagtest-other" not in by_name
-    assert [t["name"] for t in by_name["tagtest-r1"]["tags"]] == ["tagtest-A"]
-    assert by_name["tagtest-r2"]["tags"] == []
-    assert by_name["tagtest-r3"]["tags"] == []
+    assert [t["name"] for t in by_name["tagtest-r1"]["tags"]] == ["材料", "tagtest-A"]
+    assert [t["name"] for t in by_name["tagtest-r2"]["tags"]] == ["材料"]
+    assert [t["name"] for t in by_name["tagtest-r3"]["tags"]] == ["材料"]
 
 
 async def test_list_resources_include_tags_with_filters(
@@ -445,4 +452,4 @@ async def test_list_resources_include_tags_with_filters(
     items = resp.json()["items"]
     assert len(items) == 1
     assert items[0]["name"] == "tagtest-r1"
-    assert [t["name"] for t in items[0]["tags"]] == ["tagtest-A"]
+    assert [t["name"] for t in items[0]["tags"]] == ["材料", "tagtest-A"]

@@ -19,7 +19,7 @@ from src.schemas.resource import (
     ResourceUpdate,
     ResourceWithTagsResp,
 )
-from src.schemas.tag import TagResp
+from src.schemas.tag import RESOURCE_CATEGORY_LABEL, TagResp
 from src.utils.db_errors import is_unique_violation
 from src.utils.query import project_count_filter, project_filter
 
@@ -42,7 +42,11 @@ T = TypeVar("T", bound="SQLModel")
     status_code=200,
     response_model=ListResp[ResourceWithTagsResp],
     summary="Resource List",
-    description="列出资源条目，支持分页、按名称查找、按分类筛选，可按需携带直接标签",
+    description=(
+        "列出资源条目，支持分页、按名称查找、按分类筛选。include_tags=true 时"
+        "每个资源附带其直接挂载标签，并按资源类别并入对应的分类默认标签"
+        "（如材料类资源恒带「材料」默认标签），与用量物化视图按名称合并 tags 口径一致。"
+    ),
 )
 async def list_resources(
     project: CurrentProject,
@@ -98,10 +102,40 @@ async def list_resources(
             if rid is not None:
                 tags_by_resource.setdefault(rid, []).append(TagResp.model_validate(tag))
 
+    # 应用层补充「分类默认标签」：与 usage_snapshot 口径一致，资源恒带其
+    # 分类显示名（默认标签行，is_default=true）作为标签之一。默认标签不落
+    # resource_tag 行（禁手工挂载），故需在此按 resource.category 并入。
+    default_tag_by_name: dict[str, Tag] = {}
+    if items:
+        default_tag_rows = (
+            await session.exec(
+                select(Tag)
+                .where(
+                    Tag.project_id == project.id,
+                    Tag.is_default == True,  # noqa: E712
+                )
+                .order_by(col(Tag.id).asc())
+            )
+        ).all()
+        default_tag_by_name = {t.name: t for t in default_tag_rows if t.name}
+
+    def _resource_tags(r: Resource) -> list[TagResp]:
+        rid = r.id or -1
+        tags = list(tags_by_resource.get(rid, []))
+        category_code = r.category.value if hasattr(r.category, "value") else r.category
+        label = RESOURCE_CATEGORY_LABEL.get(category_code)
+        if label:
+            default_tag = default_tag_by_name.get(label)
+            if default_tag is not None and not any(
+                t.id == default_tag.id for t in tags
+            ):
+                tags.append(TagResp.model_validate(default_tag))
+        # 与既有契约一致：标签按 tag_id 升序返回
+        tags.sort(key=lambda t: t.id)
+        return tags
+
     items_with_tags = [
-        ResourceWithTagsResp.model_validate(
-            r, update={"tags": tags_by_resource.get(r.id or -1, [])}
-        )
+        ResourceWithTagsResp.model_validate(r, update={"tags": _resource_tags(r)})
         for r in items
     ]
     return ListResp[ResourceWithTagsResp](items=items_with_tags, total=count)

@@ -20,8 +20,9 @@ from src.models.resource_usage import TaskResourceUsage
 from src.models.tag import ResourceTag, Tag
 from src.models.task import Task
 from src.schemas.public.pagination import ListResp
-from src.schemas.resource import ResourceResp
+from src.schemas.resource import ResourceCategory, ResourceResp
 from src.schemas.tag import (
+    RESOURCE_CATEGORY_CODE_BY_LABEL,
     ResourceTagAssignReq,
     TagCreate,
     TagGroupResp,
@@ -232,8 +233,13 @@ async def get_tag_endpoint(
     response_model=ListResp[ResourceResp],
     responses={404: {"model": NotFoundResp}},
     status_code=200,
-    summary="获取标签直接关联的资源",
-    description="分页返回直接挂载到该标签的资源，标签不存在时 404",
+    summary="获取标签关联的资源",
+    description=(
+        "分页返回该标签关联的资源。普通标签 = 直接挂载到该标签的资源；"
+        "默认分类标签（人工/机械/材料/运输/其他）不可手工挂载，返回的"
+        "是该项目内该分类下的全部资源（等价 list_resource 按 category 过滤），"
+        "与物化视图按资源类别名合并 tags 的口径一致。标签不存在时 404。"
+    ),
 )
 async def get_tag_resources_endpoint(
     id: int,
@@ -241,30 +247,44 @@ async def get_tag_resources_endpoint(
     session: Annotated[AsyncSession, Depends(get_db_session)],
     paginate: Annotated[PagiCallable, Depends(get_pagination)],
 ):
-    await _get_tag_or_404(session, project.id, id)
+    tag = await _get_tag_or_404(session, project.id, id)
 
-    stmt = (
-        select(Resource)
-        .join(ResourceTag, col(ResourceTag.resource_id) == col(Resource.id))
-        .where(
-            ResourceTag.tag_id == id,
-            ResourceTag.project_id == project.id,
+    category_code = RESOURCE_CATEGORY_CODE_BY_LABEL.get(tag.name)
+    if category_code is not None:
+        # 默认分类标签：资源类别语义，等价 list_resource?category=<code>
+        stmt = select(Resource).where(
+            Resource.category == ResourceCategory(category_code)
         )
-        .order_by(col(Resource.id).asc())
-    )
-    stmt_count = (
-        select(func.count())
-        .select_from(Resource)
-        .join(ResourceTag, col(ResourceTag.resource_id) == col(Resource.id))
-        .where(
-            ResourceTag.tag_id == id,
-            ResourceTag.project_id == project.id,
+        stmt_count = (
+            select(func.count())
+            .select_from(Resource)
+            .where(Resource.category == ResourceCategory(category_code))
         )
-    )
+    else:
+        # 普通标签：直接挂载到该标签的资源
+        stmt = (
+            select(Resource)
+            .join(ResourceTag, col(ResourceTag.resource_id) == col(Resource.id))
+            .where(
+                ResourceTag.tag_id == id,
+                ResourceTag.project_id == project.id,
+            )
+        )
+        stmt_count = (
+            select(func.count())
+            .select_from(Resource)
+            .join(ResourceTag, col(ResourceTag.resource_id) == col(Resource.id))
+            .where(
+                ResourceTag.tag_id == id,
+                ResourceTag.project_id == project.id,
+            )
+        )
 
     stmt = project_filter(stmt, Resource, project.id)
     stmt_count = project_count_filter(stmt_count, Resource, project.id)
 
+    # 稳定排序，保证分页间不漂移（与 list_resource 一致）
+    stmt = stmt.order_by(col(Resource.id).asc())
     stmt = paginate(stmt)
     items = (await session.exec(stmt)).all()
     count = (await session.exec(stmt_count)).one()

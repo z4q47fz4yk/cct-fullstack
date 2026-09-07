@@ -467,6 +467,164 @@ async def test_get_tag_resources_direct_only(
     assert resp.json()["total"] == 2
 
 
+async def _mk_default_tag_project(db_session, name):
+    """ORM 直插项目 + 该项目的资源类别默认标签（模拟项目创建路由种子）。"""
+    p = Project(name=name, is_active=True)
+    db_session.add(p)
+    await db_session.commit()
+    await db_session.refresh(p)
+    pid = cast(int, p.id)
+    labels = {
+        ResourceCategory.labor: "人工",
+        ResourceCategory.machinery: "机械",
+        ResourceCategory.material: "材料",
+        ResourceCategory.transport: "运输",
+        ResourceCategory.others: "其他",
+    }
+    db_session.add_all([
+        Tag(
+            project_id=pid,
+            name=label,
+            group="资源类别",
+            description="d",
+            is_default=True,
+        )
+        for label in labels.values()
+    ])
+    await db_session.commit()
+    return p
+
+
+async def test_get_default_tag_resources_returns_category_resources(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """默认标签（材料）的关联资源 = 该项目材料分类下的全部资源。
+
+    默认标签不可手工挂载，直接关联查询恒空；语义上应与物化视图一致按
+    资源类别返回（等价 list_resource?category=material）。
+    """
+    p = await _mk_default_tag_project(db_session, "默认标签资源")
+    pid = cast(int, p.id)
+    mat_tag = (
+        await db_session.exec(
+            select(Tag).where(Tag.project_id == pid, Tag.name == "材料")
+        )
+    ).one()
+    db_session.add_all([
+        Resource(
+            project_id=pid,
+            name="商品砼",
+            description="d",
+            category=ResourceCategory.material,
+        ),
+        Resource(
+            project_id=pid,
+            name="钢筋",
+            description="d",
+            category=ResourceCategory.material,
+        ),
+        Resource(
+            project_id=pid,
+            name="重型卡车",
+            description="d",
+            category=ResourceCategory.transport,
+        ),
+        Resource(
+            project_id=pid,
+            name="挖掘机",
+            description="d",
+            category=ResourceCategory.machinery,
+        ),
+    ])
+    await db_session.commit()
+
+    resp = await client.get(f"/projects/{pid}/tag/{mat_tag.id}/resources")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 2
+    assert {it["name"] for it in body["items"]} == {"商品砼", "钢筋"}
+
+    # 与 list_resource?category=material 完全一致
+    list_resp = await client.get(
+        f"/projects/{pid}/resource?category=material&per_page=100"
+    )
+    assert {it["name"] for it in list_resp.json()["items"]} == {"商品砼", "钢筋"}
+
+
+async def test_get_default_tag_resources_pagination(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """默认标签资源列表遵循分页与稳定排序（按资源 id 升序）。"""
+    p = await _mk_default_tag_project(db_session, "默认标签分页")
+    pid = cast(int, p.id)
+    tag_id = cast(
+        int,
+        (
+            await db_session.exec(
+                select(Tag.id).where(Tag.project_id == pid, Tag.name == "材料")
+            )
+        ).one(),
+    )
+    for i in range(3):
+        db_session.add(
+            Resource(
+                project_id=pid,
+                name=f"材料{i}",
+                description="d",
+                category=ResourceCategory.material,
+            )
+        )
+    await db_session.commit()
+
+    resp = await client.get(f"/projects/{pid}/tag/{tag_id}/resources?page=2&per_page=2")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 3
+    assert len(body["items"]) == 1
+    assert body["items"][0]["name"] == "材料2"
+
+
+async def test_get_default_tag_resources_not_in_category_excluded(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """默认标签不因名称巧合混入其他分类资源（隔离性）。"""
+    p = await _mk_default_tag_project(db_session, "默认标签隔离")
+    pid = cast(int, p.id)
+    transport_tag = (
+        await db_session.exec(
+            select(Tag).where(Tag.project_id == pid, Tag.name == "运输")
+        )
+    ).one()
+    db_session.add_all([
+        Resource(
+            project_id=pid,
+            name="卡车A",
+            description="d",
+            category=ResourceCategory.transport,
+        ),
+        Resource(
+            project_id=pid,
+            name="卡车B",
+            description="d",
+            category=ResourceCategory.transport,
+        ),
+        Resource(
+            project_id=pid,
+            name="钢模板",
+            description="d",
+            category=ResourceCategory.material,
+        ),
+    ])
+    await db_session.commit()
+
+    resp = await client.get(
+        f"/projects/{pid}/tag/{transport_tag.id}/resources?per_page=100"
+    )
+    assert resp.status_code == 200
+    names = {it["name"] for it in resp.json()["items"]}
+    assert names == {"卡车A", "卡车B"}
+
+
 async def test_get_tag_resources_tag_404(client: AsyncClient, project: Project):
     resp = await client.get(f"/projects/{project.id}/tag/999999/resources")
     assert resp.status_code == 404
