@@ -33,7 +33,7 @@ const { tags, isLoading, error, refresh, createTag, updateTag, deleteTag, isSubm
 const { groups, refresh: refreshGroups } = useTagGroups()
 const { currentProjectId } = useProjectContext()
 const { confirmDanger } = useConfirm()
-const { notifySuccess } = useToast()
+const { notifySuccess, notifyWarning } = useToast()
 
 // ─── 左侧：分组列表 ────────────────────────────────────────
 
@@ -115,6 +115,10 @@ function openCreate(group = '') {
 }
 
 function openEdit(tag: TagResp) {
+  if (tag.isDefault) {
+    notifyWarning('默认标签由系统生成，不允许编辑')
+    return
+  }
   editingTag.value = tag
   formName.value = tag.name
   formGroup.value = tag.group ?? ''
@@ -152,6 +156,11 @@ async function handleFormSubmit() {
 
 // ─── 删除 ──────────────────────────────────────────────────
 async function handleDelete(tag: TagResp) {
+  if (tag.isDefault) {
+    // 默认标签由系统在项目创建时写入，应用层禁止删除。
+    notifyWarning('默认标签由系统生成，不允许删除')
+    return
+  }
   const { confirmed } = await confirmDanger(`确定要删除标签「${tag.name}」吗？`)
   if (!confirmed) return
   try {
@@ -195,7 +204,8 @@ const groupCount = (g: TagGroupResp): number => g.count
       <span class="material-symbols-outlined text-primary icon-md shrink-0">label</span>
       <p class="text-xs text-fg-muted leading-relaxed">
         标签为扁平结构，名称在项目内唯一；「分组」仅用于列表/选择器分组展示，不参与碳排放统计。
-        资源、任务、用量分别打标，饼图按其标签命中统计。
+        资源、任务、用量分别打标，饼图按其标签命中统计。 项目创建时系统会写入「默认」标签（如
+        人工/机械/材料/运输/其他），它们仅供识别，不允许编辑或删除。
       </p>
     </section>
 
@@ -309,7 +319,15 @@ const groupCount = (g: TagGroupResp): number => g.count
                     {{ tag.group }}
                   </p>
                 </div>
+                <span
+                  v-if="tag.isDefault"
+                  class="shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-primary/12 text-primary"
+                  title="项目级默认标签，由系统在项目创建时生成，不允许编辑/删除"
+                >
+                  默认
+                </span>
                 <div
+                  v-if="!tag.isDefault"
                   class="flex items-center gap-0.5 shrink-0"
                   :class="selectedId === tag.id ? '' : 'hidden group-hover:flex'"
                 >
@@ -352,14 +370,25 @@ const groupCount = (g: TagGroupResp): number => g.count
               </span>
               <div class="flex items-start justify-between gap-4 mt-1">
                 <div>
-                  <h2 id="tag-detail-title" class="text-lg font-semibold text-base-content">
-                    {{ selectedTag.name }}
-                  </h2>
+                  <div class="flex items-center gap-2">
+                    <h2 id="tag-detail-title" class="text-lg font-semibold text-base-content">
+                      {{ selectedTag.name }}
+                    </h2>
+                    <span
+                      v-if="selectedTag.isDefault"
+                      class="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-primary/12 text-primary"
+                    >
+                      默认
+                    </span>
+                  </div>
                   <p v-if="selectedTag.description" class="text-xs text-fg-subtle mt-1">
                     {{ selectedTag.description }}
                   </p>
+                  <p v-if="selectedTag.isDefault" class="text-xs text-fg-subtle mt-1">
+                    该标签由系统在项目创建时生成，禁止修改或删除。
+                  </p>
                 </div>
-                <div class="flex items-center gap-2 shrink-0">
+                <div v-if="!selectedTag.isDefault" class="flex items-center gap-2 shrink-0">
                   <button class="btn btn-ghost" @click="openEdit(selectedTag)">
                     <span class="material-symbols-outlined icon-sm">edit</span>
                     编辑

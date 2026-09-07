@@ -1,6 +1,6 @@
 """项目 CRUD 路由"""
 
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import col, func, select
@@ -16,6 +16,7 @@ from src.schemas.project import (
     ProjectUpdate,
 )
 from src.schemas.public.pagination import ListResp
+from src.services.tag_defaults import ensure_default_tags
 from src.utils.china_region import validate_province_city
 
 router = APIRouter(
@@ -78,11 +79,19 @@ async def create_project(
     session: Annotated[AsyncSession, Depends(get_db_session)],
     data: ProjectCreate,
 ):
-    """创建新项目"""
+    """创建新项目。
+
+    在同一事务内写入项目记录与若干系统默认标签（见
+    ``src.services.tag_defaults.ensure_default_tags``），确保项目即开即用，
+    避免用户首次进入标签设置页时出现“空白列表”。
+    """
     project = Project.model_validate(data)
     # status 为唯一事实来源，is_active 随其同步（兼容保留字段）
     project.is_active = project.status == ProjectStatus.CONSTRUCTION
     session.add(project)
+    # 先 flush 让 project.id 生效，默认标签依赖该 FK
+    await session.flush()
+    await ensure_default_tags(session, cast(int, project.id))
     await session.commit()
     await session.refresh(project)
     return project

@@ -4,19 +4,18 @@ import { useForm } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/valibot'
 import VChart from 'vue-echarts'
 import { vChartCreate } from '@/client/valibot.gen'
-import type { ChartResp, SliceResp, SliceTagResp, TagResp } from '@/client/types.gen'
+import type { ChartResp, SliceResp, TagResp } from '@/client/types.gen'
 import { getSliceColor } from '@/utils/themeColors'
-import { categoryConfigMap } from '@/types/resource'
 import { useTagApi } from '@/composables/useTagApi'
 import { useTagPieChart, type PieSliceDatum } from '@/composables/useTagPieChart'
-import TagPicker from '@/components/tag/TagPicker.vue'
 
 /**
  * 图表编辑抽屉
  *
  * - 左侧：名称 / 描述 / 切片列表（每个切片 = 名称 + 若干标签组）
  * - 组语义：同组标签**且**（须同时命中），不同组之间**或**
- * - 标签可选：普通标签 + 内置分类标签（材料/机械/运输等，按资源分类命中）
+ * - 标签可选：项目内全部标签（含「资源类别」默认标签 人工/机械/材料/…，
+ *   它们按资源分类自动命中，等效旧版“分类过滤”）
  * - 保存 = updateChart（若编辑）+ setChartSlices（顺序即 sortOrder）
  */
 const props = defineProps<{
@@ -50,22 +49,11 @@ const { handleSubmit, resetForm, errors, meta, defineField } = useForm({
 const [name, nameAttrs] = defineField('name')
 const [description, descriptionAttrs] = defineField('description')
 
-// 标签（扁平）与内置分类标签
+// 项目内全部标签（含「资源类别」默认标签，按分组展示）
 const { tags } = useTagApi()
 
-/** 内置分类伪标签（按 resource.category 命中，id 与后端负 id 约定一致） */
-const BUILTIN_OPTIONS: Array<{ id: number; code: string; name: string }> = (
-  Object.keys(categoryConfigMap) as Array<keyof typeof categoryConfigMap>
-).map((code, i) => ({ id: -(i + 1), code, name: categoryConfigMap[code]!.label }))
-
-// 内置 id → 名称
-const builtinIdName = computed(() => new Map(BUILTIN_OPTIONS.map((b) => [b.id, b.name])))
-
-/** 所有可选标签项：普通标签 → (id, name)；内置分类 → (负id, name) */
-const selectable = computed<Array<{ id: number; name: string; isBuiltin: boolean }>>(() => {
-  const normal = tags.value.map((t) => ({ id: t.id, name: t.name, isBuiltin: false }))
-  return [...normal, ...BUILTIN_OPTIONS.map((b) => ({ id: b.id, name: b.name, isBuiltin: true }))]
-})
+/** 所有可选标签项：普通标签 + 默认分类标签（均以真实 tag id 引用） */
+const selectable = computed<TagResp[]>(() => tags.value)
 
 const idName = computed(() => {
   const m = new Map<number, string>()
@@ -84,7 +72,6 @@ interface EditableSlice {
 const editing = reactive<EditableSlice[]>([])
 /** 正在编辑的切片索引（null=收起） */
 const expandedSlice = ref<number | null>(null)
-const sliceTagSearch = ref('')
 
 function cloneFromResp(slices: SliceResp[] | undefined): EditableSlice[] {
   return (slices ?? []).map((s) => {
@@ -110,7 +97,6 @@ watch(
     })
     editing.splice(0, editing.length, ...cloneFromResp(c?.slices))
     expandedSlice.value = editing.length > 0 ? 0 : null
-    sliceTagSearch.value = ''
   },
 )
 
@@ -198,10 +184,6 @@ function onSubmit() {
 }
 
 const isEditing = computed(() => props.chart !== null)
-
-function builtinBadge(tagId: number): string | null {
-  return tagId < 0 ? (builtinIdName.value.get(tagId) ?? null) : null
-}
 </script>
 
 <template>
@@ -437,7 +419,7 @@ function builtinBadge(tagId: number): string | null {
                         "
                         @click="toggleTagInSlice(slice, opt.id)"
                       >
-                        {{ opt.name }}<template v-if="opt.isBuiltin">（分类）</template>
+                        {{ opt.name }}<template v-if="opt.isDefault">（默认）</template>
                       </button>
                     </div>
                   </div>
@@ -447,8 +429,8 @@ function builtinBadge(tagId: number): string | null {
 
             <p class="text-[11px] text-fg-muted leading-relaxed flex items-start gap-1.5">
               <span class="material-symbols-outlined icon-sm shrink-0 text-primary">info</span>
-              内置「分类」标签按资源类别自动命中（如「材料」=
-              所有材料类资源），可与普通标签混用「且/或」组合。
+              「资源类别」默认标签（如「材料」）按资源分类自动命中（材料=所有材料类
+              资源），可与普通标签混用「且/或」组合。
               多条用量命中同一图表多个切片时会重复计入（可在「数据体检」检查重叠）。
             </p>
 

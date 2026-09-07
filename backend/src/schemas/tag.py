@@ -1,4 +1,4 @@
-"""标签（展平）相关 schema 与内置分类标签常量"""
+"""标签（展平）相关 schema 与资源类别常量"""
 
 from typing import Annotated
 
@@ -8,52 +8,47 @@ from pydantic import Field, field_validator
 from src.schemas.public.mixin import CamelCaseRespMixin, TimeStampRespMixin
 from src.schemas.public.validators import reject_explicit_none
 
-
-# 内置分类标签（伪标签，全项目共享，不落 tag 表）
-#
-# 每个分类对应一条「内置标签」：id 取固定负数，name 取该分类的中文显示名。
-# usage_snapshot 物化视图会把每条用量所在资源的 category 作为一条同名标签
-# 并入 tags[]；slice 可通过负 tag_id 引用内置分类标签，实现「分类过滤」的
-# 且/或统一命中语义。
-#
-# 约束：
-# - 正 id 空间归普通标签（FK tag.id），负 id 空间归内置分类，永不冲突；
-# - 内置标签不允许用户增删改，也不允许通过 resource_tag 等关联表手工挂载
-#   （服务层写入期校验拒绝负 id）。
-class BuiltinTagInfo:
-    """内置分类标签的单一事实来源。"""
-
-    # 负 id → 分类 code（对应 ResourceCategory 枚举值）
-    id_to_category: dict[int, str] = {
-        -1: "labor",
-        -2: "machinery",
-        -3: "material",
-        -4: "transport",
-        -5: "others",
-    }
-    # 分类 code → 内置标签（负）id
-    category_to_id: dict[str, int] = {v: k for k, v in id_to_category.items()}
-    # 分类 code → 中文显示名（与 usage_snapshot 展开进 tags[] 的名称一致）
-    category_label: dict[str, str] = {
-        "labor": "人工",
-        "machinery": "机械",
-        "material": "材料",
-        "transport": "运输",
-        "others": "其他",
-    }
-
-    @classmethod
-    def is_builtin_id(cls, tag_id: int) -> bool:
-        return tag_id in cls.id_to_category
-
-    @classmethod
-    def builtin_tag_name(cls, tag_id: int) -> str | None:
-        cat = cls.id_to_category.get(tag_id)
-        return cls.category_label.get(cat) if cat else None
+#: 资源分类 code → 中文显示名（对应 ``ResourceCategory`` 枚举值）。
+#:
+#: 该名称是「分类标签」的语义载体，存在三处必须保持一致的副本：
+#: 1. 本常量（决定项目默认标签与 AI 上下文展示）；
+#: 2. ``usage_snapshot`` 物化视图 SQL 里的 VALUES 列表（把每条用量所在
+#:    资源的 category 按该中文名并入 tags[]，见迁移 c4d5e6f7a8b9）；
+#: 3. 迁移/种子数据内嵌（Alembic 独立执行不得依赖业务代码）。
+#:
+#: 项目创建时会按此表把每个分类写为一条「默认标签」（``is_default=true``，
+#: 见 ``DEFAULT_PROJECT_TAGS``），切片引用这些真实标签行即实现按资源类别
+#: 过滤（物化视图已按名称合并，命中仍是纯名称语义）。分类新增/重命名时
+#: 请同步上述三处。
+RESOURCE_CATEGORY_LABEL: dict[str, str] = {
+    "labor": "人工",
+    "machinery": "机械",
+    "material": "材料",
+    "transport": "运输",
+    "others": "其他",
+}
 
 
-#: 供 SQL / 物化视图 / 迁移复用的分类显示名常量
-CATEGORY_TAG_NAME: dict[str, str] = BuiltinTagInfo.category_label
+# 默认标签分组（项目创建时随系统写入，用于前端分组展示）
+DEFAULT_TAG_GROUP: str = "资源类别"
+
+
+# 项目创建时由系统写入的默认标签规格。
+# 名称与 ``RESOURCE_CATEGORY_LABEL`` 完全一致，确保与 usage_snapshot
+# 物化视图按名称合并标签的口径一致。分类新增/重命名时务必同步：
+# - ``RESOURCE_CATEGORY_LABEL``
+# - 本表
+# - 物化视图 SQL（迁移 c4d5e6f7a8b9 中的 VALUES 列表）
+DEFAULT_PROJECT_TAGS: list[str] = [
+    RESOURCE_CATEGORY_LABEL[code]
+    for code in (
+        "labor",
+        "machinery",
+        "material",
+        "transport",
+        "others",
+    )
+]
 
 
 class TagFields:
@@ -67,6 +62,12 @@ class TagFields:
         Field(max_length=100, description="展示分组（空字符串=未分组，仅前端分组用）"),
     ]
     Description = Annotated[str, Field(max_length=500, description="描述")]
+    IsDefault = Annotated[
+        bool,
+        Field(
+            description="是否为项目级默认标签（项目初始化时由系统生成，禁止更新/删除）"
+        ),
+    ]
     ResourceId = Annotated[int, Field(description="资源ID")]
     TaskId = Annotated[int, Field(description="任务ID")]
     UsageId = Annotated[int, Field(description="用量记录ID")]
@@ -108,6 +109,7 @@ class TagResp(CamelCaseRespMixin, TimeStampRespMixin):
     name: TagFields.Name
     group: TagFields.Group
     description: TagFields.Description
+    is_default: TagFields.IsDefault
 
 
 class TagGroupResp(CamelCaseRespMixin):
@@ -120,24 +122,31 @@ class TagGroupResp(CamelCaseRespMixin):
 class ResourceTagAssignReq(CamelCaseRespMixin):
     """为资源替换式赋值标签。"""
 
-    tag_ids: list[int] = Field(description="标签ID列表（替换式赋值，仅允许普通正 id）")
+    tag_ids: list[int] = Field(
+        description="标签ID列表（替换式赋值；默认分类标签不可手工打标）"
+    )
 
 
 class TaskTagAssignReq(CamelCaseRespMixin):
     """为任务替换式赋值标签。"""
 
-    tag_ids: list[int] = Field(description="标签ID列表（替换式赋值，仅允许普通正 id）")
+    tag_ids: list[int] = Field(
+        description="标签ID列表（替换式赋值；默认分类标签不可手工打标）"
+    )
 
 
 class UsageTagAssignReq(CamelCaseRespMixin):
     """为用量记录替换式赋值标签。"""
 
-    tag_ids: list[int] = Field(description="标签ID列表（替换式赋值，仅允许普通正 id）")
+    tag_ids: list[int] = Field(
+        description="标签ID列表（替换式赋值；默认分类标签不可手工打标）"
+    )
 
 
 __all__ = [
-    "BuiltinTagInfo",
-    "CATEGORY_TAG_NAME",
+    "RESOURCE_CATEGORY_LABEL",
+    "DEFAULT_PROJECT_TAGS",
+    "DEFAULT_TAG_GROUP",
     "TagCreate",
     "TagUpdate",
     "TagResp",

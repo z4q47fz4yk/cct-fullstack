@@ -7,8 +7,10 @@ DB 配置（PK / 唯一约束 / 索引）。
 标签名在项目内唯一（``UNIQUE(project_id, name)``）——usage_snapshot
 物化视图按标签名合并标签、切片按名称命中，名称唯一性是语义前提。
 
-内置分类标签（负 id）不落库，定义见 ``src.schemas.tag.BUILTIN_TAG``；
-普通标签 id 恒为正整数，两者互不冲突。
+``is_default`` 标记项目创建时由系统生成的默认标签（落库正 id，名称即资源
+分类显示名，如 人工/机械/材料/运输/其他），应用层禁止更新/删除，详见
+``src/routers/tag.py``。所有标签（含默认标签）id 均为正整数，为
+``slice_tag_mapping.tag_id`` 与三类关联表的唯一合法引用来源。
 """
 
 from typing import Annotated
@@ -43,6 +45,13 @@ class Tag(TimeStampMixin, ProjectScopeMixin, SQLModel, table=True):
     group: Annotated[TagFields.Group, Field(default="")]
 
     description: TagFields.Description
+
+    # 是否项目级默认标签（项目初始化时由系统生成）。
+    # 应用层禁止 PUT/DELETE；只能由项目创建路由与迁移写入。
+    is_default: Annotated[
+        bool,
+        Field(default=False, nullable=False),
+    ]
 
 
 class TagLinkBase(TimeStampMixin, ProjectScopeMixin, SQLModel):

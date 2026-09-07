@@ -4,6 +4,10 @@
 ``SliceTagMapping`` 组织为若干「组」：同组标签**且**（须同时命中），
 不同组**或**。slice 不作为独立 CRUD 资源，随图表整体配置
 （``PUT /chart/{id}/slices`` 整组替换，数组顺序即 sortOrder）。
+
+标签引用一律为项目内真实标签行（正 id）；「资源类别」默认标签（人工/
+机械/材料/运输/其他，``is_default=true``）可直接作为分类过滤条件，命中
+语义见 usage_snapshot 物化视图按名称合并后的 tags[]。
 """
 
 from typing import Annotated
@@ -28,7 +32,7 @@ class SliceTagFields:
     """slice_tag_mapping 字段定义命名空间。"""
 
     SliceId = Annotated[int, Field(description="切片ID")]
-    TagId = Annotated[int, Field(description="标签ID（>0=普通标签；<0=内置分类标签）")]
+    TagId = Annotated[int, Field(description="标签ID（项目内标签，一律为正）")]
     TagGroup = Annotated[int, Field(ge=0, description="或/且组号：同组=且，异组=或")]
 
 
@@ -36,12 +40,7 @@ class SliceTagResp(CamelCaseRespMixin):
     """切片内一个标签（含归属组）。"""
 
     tag_id: SliceTagFields.TagId
-    tag_name: str = Field(
-        description="标签名称（普通标签取 tag.name；内置分类取分类名）"
-    )
-    is_builtin: bool = Field(
-        description="是否内置分类标签（仅按 resource.category 命中）"
-    )
+    tag_name: str = Field(description="标签名称（取自 tag.name）")
     group: SliceTagFields.TagGroup
 
 

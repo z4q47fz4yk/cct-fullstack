@@ -35,7 +35,7 @@ router = APIRouter(
     summary="读取合并标签后的用量记录",
     description=(
         "从 usage_snapshot 物化视图读取用量记录：每行附带资源/任务/用量三类实体"
-        "标签与资源分类（内置标签）按名称去重合并的 tags 数组。可先 GET "
+        "标签与资源分类（按分类显示名并入）按名称去重合并的 tags 数组。可先 GET "
         "/refresh-info 了解数据新鲜度（视图约 30 分钟自动刷新）。"
     ),
 )

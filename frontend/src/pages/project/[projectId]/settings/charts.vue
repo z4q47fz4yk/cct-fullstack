@@ -137,7 +137,8 @@ async function handleDelete(chart: ChartResp) {
       <span class="material-symbols-outlined text-violet-400 icon-md shrink-0">pie_chart</span>
       <p class="text-xs text-fg-muted leading-relaxed">
         每个切片 =
-        若干标签组：同组标签需同时命中（且），组间命中任一（或）；支持「分类」内置标签按资源类别命中。
+        若干标签组：同组标签需同时命中（且），组间命中任一（或）；支持「资源类别」默认标签
+        （人工/机械/材料/运输/其他）按资源类别命中。
         切片重叠时同一用量会重复计入，可在「数据体检」检查。
       </p>
     </section>

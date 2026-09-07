@@ -1,6 +1,7 @@
 """标签赋值服务（泛型实现）。
 
-打标已不做图表切片互斥校验（移到「数据体检」）；仅校验普通正 id 且存在。
+打标已不做图表切片互斥校验（移到「数据体检」）；仅校验标签存在且非
+默认分类标签（is_default=true，见 ``tag_assign.validate_assign_tag_ids``）。
 日报导入的用量同样走此服务补标/改标。
 """
 
@@ -11,7 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.tag import ResourceTag, Tag, TagLinkBase, TaskTag, UsageTag
 from src.services.tag_assign import (
-    BuiltinTagAssignError,
+    DefaultTagAssignError,
     TagNotInProjectError,
     validate_assign_tag_ids,
 )
@@ -78,7 +79,7 @@ class TagAssignmentService[T: TagLinkBase]:
                         self.link_id_field: entity_id,
                         "tag_id": tag_id,
                         "project_id": self.project_id,
-                    }) # pyright: ignore[reportArgumentType]
+                    })  # pyright: ignore[reportArgumentType]
                 )
         await self.session.commit()
 
@@ -149,6 +150,6 @@ __all__ = [
     "get_resource_tag_service",
     "get_task_tag_service",
     "get_usage_tag_service",
-    "BuiltinTagAssignError",
+    "DefaultTagAssignError",
     "TagNotInProjectError",
 ]

@@ -4321,7 +4321,7 @@
           "tag"
         ],
         "summary": "删除标签",
-        "description": "删除项目内标签（资源/任务/用量关联、slice_tag_mapping 中的正 id 引用随同清理；内置分类标签不能删除）",
+        "description": "删除项目内标签（资源/任务/用量关联、slice_tag_mapping 引用随 FK 级联清理；项目级默认标签不能删除）",
         "operationId": "delete_tag",
         "parameters": [
           {
@@ -4525,7 +4525,7 @@
           "resource-tag"
         ],
         "summary": "替换式设置资源的标签",
-        "description": "整组替换资源挂载的标签（仅普通标签；不做图表切片互斥校验，冲突检查在数据体检）",
+        "description": "整组替换资源挂载的标签（默认分类标签不可手工打标；不做图表切片互斥校验，冲突检查在数据体检）",
         "operationId": "set_resource_tags",
         "parameters": [
           {
@@ -4583,7 +4583,7 @@
             }
           },
           "422": {
-            "description": "标签不存在/不属于当前项目，或为内置分类标签",
+            "description": "标签不存在/不属于当前项目，或为默认分类标签",
             "content": {
               "application/json": {
                 "schema": {
@@ -4665,7 +4665,7 @@
           "task-tag"
         ],
         "summary": "替换式设置任务的标签",
-        "description": "整组替换任务挂载的标签（仅普通标签；不做图表切片互斥校验，冲突检查在数据体检）",
+        "description": "整组替换任务挂载的标签（默认分类标签不可手工打标；不做图表切片互斥校验，冲突检查在数据体检）",
         "operationId": "set_task_tags",
         "parameters": [
           {
@@ -4723,7 +4723,7 @@
             }
           },
           "422": {
-            "description": "标签不存在/不属于当前项目，或为内置分类标签",
+            "description": "标签不存在/不属于当前项目，或为默认分类标签",
             "content": {
               "application/json": {
                 "schema": {
@@ -4805,7 +4805,7 @@
           "usage-tag"
         ],
         "summary": "替换式设置用量的标签",
-        "description": "整组替换用量记录挂载的标签（含日报导入的用量；仅普通标签；不做图表切片互斥校验，冲突检查在数据体检）",
+        "description": "整组替换用量记录挂载的标签（含日报导入的用量；默认分类标签不可手工打标；不做图表切片互斥校验，冲突检查在数据体检）",
         "operationId": "set_usage_tags",
         "parameters": [
           {
@@ -4863,7 +4863,7 @@
             }
           },
           "422": {
-            "description": "标签不存在/不属于当前项目，或为内置分类标签",
+            "description": "标签不存在/不属于当前项目，或为默认分类标签",
             "content": {
               "application/json": {
                 "schema": {
@@ -5219,7 +5219,7 @@
           "chart"
         ],
         "summary": "整组替换图表的切片",
-        "description": "整组替换图表切片（数组顺序即 sortOrder）。每个切片含 name 与标签项；标签项 group 同号=且（须同时命中），异号=或。标签可为普通正 id 或内置分类负 id（按资源类别命中）。不做切片互斥校验，重叠重复计入。",
+        "description": "整组替换图表切片（数组顺序即 sortOrder）。每个切片含 name 与标签项；标签项 group 同号=且（须同时命中），异号=或。标签为项目内真实标签（含「资源类别」默认标签，按资源类别命中）。不做切片互斥校验，重叠重复计入。",
         "operationId": "set_chart_slices",
         "parameters": [
           {
@@ -5415,7 +5415,7 @@
           "usage-snapshot"
         ],
         "summary": "读取合并标签后的用量记录",
-        "description": "从 usage_snapshot 物化视图读取用量记录：每行附带资源/任务/用量三类实体标签与资源分类（内置标签）按名称去重合并的 tags 数组。可先 GET /refresh-info 了解数据新鲜度（视图约 30 分钟自动刷新）。",
+        "description": "从 usage_snapshot 物化视图读取用量记录：每行附带资源/任务/用量三类实体标签与资源分类（按分类显示名并入）按名称去重合并的 tags 数组。可先 GET /refresh-info 了解数据新鲜度（视图约 30 分钟自动刷新）。",
         "operationId": "list_usage_snapshot",
         "parameters": [
           {
@@ -11739,7 +11739,7 @@
             },
             "type": "array",
             "title": "Tagids",
-            "description": "标签ID列表（替换式赋值，仅允许普通正 id）"
+            "description": "标签ID列表（替换式赋值；默认分类标签不可手工打标）"
           }
         },
         "type": "object",
@@ -12551,7 +12551,7 @@
           "tagId": {
             "type": "integer",
             "title": "Tagid",
-            "description": "标签ID（>0=普通标签；<0=内置分类标签）"
+            "description": "标签ID（项目内标签，一律为正）"
           },
           "group": {
             "type": "integer",
@@ -12573,17 +12573,12 @@
           "tagId": {
             "type": "integer",
             "title": "Tagid",
-            "description": "标签ID（>0=普通标签；<0=内置分类标签）"
+            "description": "标签ID（项目内标签，一律为正）"
           },
           "tagName": {
             "type": "string",
             "title": "Tagname",
-            "description": "标签名称（普通标签取 tag.name；内置分类取分类名）"
-          },
-          "isBuiltin": {
-            "type": "boolean",
-            "title": "Isbuiltin",
-            "description": "是否内置分类标签（仅按 resource.category 命中）"
+            "description": "标签名称（取自 tag.name）"
           },
           "group": {
             "type": "integer",
@@ -12596,7 +12591,6 @@
         "required": [
           "tagId",
           "tagName",
-          "isBuiltin",
           "group"
         ],
         "title": "SliceTagResp",
@@ -12719,7 +12713,7 @@
             },
             "type": "array",
             "title": "Tags",
-            "description": "合并标签名（资源/任务/用量三类实体标签 + 资源分类内置标签，按名称去重）"
+            "description": "合并标签名（资源/任务/用量三类实体标签 + 资源分类显示名，按名称去重）"
           }
         },
         "type": "object",
@@ -12917,6 +12911,11 @@
             "maxLength": 500,
             "title": "Description",
             "description": "描述"
+          },
+          "isDefault": {
+            "type": "boolean",
+            "title": "Isdefault",
+            "description": "是否为项目级默认标签（项目初始化时由系统生成，禁止更新/删除）"
           }
         },
         "type": "object",
@@ -12926,7 +12925,8 @@
           "id",
           "name",
           "group",
-          "description"
+          "description",
+          "isDefault"
         ],
         "title": "TagResp",
         "description": "标签响应。"
@@ -13499,7 +13499,7 @@
             },
             "type": "array",
             "title": "Tagids",
-            "description": "标签ID列表（替换式赋值，仅允许普通正 id）"
+            "description": "标签ID列表（替换式赋值；默认分类标签不可手工打标）"
           }
         },
         "type": "object",
@@ -13665,7 +13665,7 @@
             },
             "type": "array",
             "title": "Tagids",
-            "description": "标签ID列表（替换式赋值，仅允许普通正 id）"
+            "description": "标签ID列表（替换式赋值；默认分类标签不可手工打标）"
           }
         },
         "type": "object",

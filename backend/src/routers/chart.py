@@ -23,7 +23,6 @@ from src.models.tag import Tag
 from src.schemas.chart import ChartCreate, ChartResp, ChartUpdate, PieSlice
 from src.schemas.public.pagination import ListResp
 from src.schemas.slice import ChartSlicesReq, SliceResp
-from src.schemas.tag import BuiltinTagInfo
 from src.services.carbon_chart import CarbonChartService
 from src.utils.db_errors import is_unique_violation
 from src.utils.query import project_count_filter, project_filter
@@ -244,8 +243,8 @@ async def delete_chart_endpoint(
     summary="整组替换图表的切片",
     description=(
         "整组替换图表切片（数组顺序即 sortOrder）。每个切片含 name 与标签项；"
-        "标签项 group 同号=且（须同时命中），异号=或。标签可为普通正 id 或"
-        "内置分类负 id（按资源类别命中）。不做切片互斥校验，重叠重复计入。"
+        "标签项 group 同号=且（须同时命中），异号=或。标签为项目内真实标签"
+        "（含「资源类别」默认标签，按资源类别命中）。不做切片互斥校验，重叠重复计入。"
     ),
 )
 async def set_chart_slices_endpoint(
@@ -256,7 +255,7 @@ async def set_chart_slices_endpoint(
 ):
     chart = await _get_chart_or_404(session, project.id, id)
 
-    # 1. 校验标签（正 id 存在且属于项目；负 id 在内置字典）
+    # 1. 校验标签（均须存在且属于当前项目；默认标签等同普通标签可引用）
     names = [s.name for s in data.slices]
     if len(set(names)) != len(names):
         raise HTTPException(status_code=422, detail="同一图表内切片名称不能重复")
@@ -268,25 +267,19 @@ async def set_chart_slices_endpoint(
                 status_code=422, detail=f"切片「{s.name}」未配置任何标签"
             )
         for t in s.tags:
-            if t.tag_id == 0:
-                raise HTTPException(status_code=422, detail="标签 ID 不能为 0")
+            if t.tag_id <= 0:
+                raise HTTPException(status_code=422, detail="标签 ID 必须为正整数")
     all_ids = {t.tag_id for s in data.slices for t in s.tags}
-    pos_ids = {i for i in all_ids if i > 0}
-    bad_neg = {i for i in all_ids if i < 0 and not BuiltinTagInfo.is_builtin_id(i)}
-    if bad_neg:
-        raise HTTPException(
-            status_code=422, detail=f"未知的内置分类标签 ID：{sorted(bad_neg)}"
-        )
-    if pos_ids:
+    if all_ids:
         tag_rows = (
             await session.exec(
                 select(Tag.id)
-                .where(col(Tag.id).in_(pos_ids))
+                .where(col(Tag.id).in_(all_ids))
                 .where(col(Tag.project_id) == project.id)
             )
         ).all()
         found = {int(row) for row in tag_rows}
-        missing = pos_ids - found
+        missing = all_ids - found
         if missing:
             raise HTTPException(
                 status_code=422,

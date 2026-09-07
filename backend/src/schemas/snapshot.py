@@ -25,7 +25,7 @@ class SnapshotUsageResp(CamelCaseRespMixin):
     tags: list[str] = Field(
         default_factory=list,
         description=(
-            "合并标签名（资源/任务/用量三类实体标签 + 资源分类内置标签，按名称去重）"
+            "合并标签名（资源/任务/用量三类实体标签 + 资源分类显示名，按名称去重）"
         ),
     )
 

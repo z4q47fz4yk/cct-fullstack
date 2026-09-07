@@ -3,9 +3,10 @@
 切片命中语义（写入期不再做互斥校验，重叠**重复计入**）：
 - 每个 slice 由若干「组」标签组成：同组标签之间为**且**（须同时命中），
   不同组之间为**或**；
-- 普通标签命中 = usage 行合并 tags[] 含该标签名；
-- 内置分类标签命中 = usage 行的 resource_category 等于该分类（物化视图已把
-  resource.category 作为分类名并入 tags[]，因此统一按名称比对）。
+- 标签命中 = usage 行合并 tags[] 含该标签名（按名称比对）。标签一律为
+  项目内真实 tag 行；「资源类别」默认标签（人工/机械/材料/运输/其他）
+  之所以能过滤分类，是因为物化视图已把 resource.category 的中文显示名
+  作为同名标签并入 tags[]（见迁移 c4d5e6f7a8b9 的 VALUES 列表）。
 
 一条 usage 可能命中多个 slice → 重复计入（如实反映配置重叠，由数据体检
 提示修正）。碳排放/成本口径与月度报表一致：Python 侧逐行乘因子/单价，
@@ -27,7 +28,6 @@ from src.models.slice import ChartSlice, SliceTagMapping
 from src.models.tag import Tag
 from src.schemas.chart import PieSlice
 from src.schemas.slice import SliceTagResp
-from src.schemas.tag import BuiltinTagInfo
 from src.services.usage_snapshot import refresh_if_stale
 from src.services.usage_snapshot_query import fetch_usage_rows
 from src.utils.carbon import compute_resource_emission, get_effective_unit_price
@@ -92,28 +92,21 @@ class CarbonChartService:
             )
         ).all()
 
-        # 普通标签名解析（正 id，一次加载）
-        pos_ids = {m.tag_id for m in mappings if m.tag_id > 0}
+        # 标签名解析（全为正 id，一次加载；默认标签等同普通标签）
+        all_ids = {m.tag_id for m in mappings if m.tag_id is not None}
         tag_name_map: dict[int, str] = {}
-        if pos_ids:
+        if all_ids:
             tag_rows = (
                 await self.session.exec(
                     select(Tag.id, Tag.name)
-                    .where(col(Tag.id).in_(pos_ids))
+                    .where(col(Tag.id).in_(all_ids))
                     .where(col(Tag.project_id) == self.project_id)
-                    # project_filter(
-                    #     select(Tag.id, Tag.name).where(col(Tag.id).in_(pos_ids)),
-                    #     Tag,
-                    #     self.project_id,
-                    # )
                 )
             ).all()
             tag_name_map = {tid: name for tid, name in tag_rows if tid is not None}
 
         def tag_name(tag_id: int) -> str | None:
-            if tag_id > 0:
-                return tag_name_map.get(tag_id)
-            return BuiltinTagInfo.builtin_tag_name(tag_id)
+            return tag_name_map.get(tag_id)
 
         # 组装 SliceSpec
         by_slice: dict[int, list[SliceTagMapping]] = defaultdict(list)
@@ -134,12 +127,7 @@ class CarbonChartService:
                 items.append((m.tag_group, m.tag_id, name))
             items.sort(key=lambda t: (t[0], t[1]))
             spec.tag_items = [
-                SliceTagResp(
-                    tag_id=tag_id,
-                    tag_name=nm,
-                    is_builtin=tag_id < 0,
-                    group=grp,
-                )
+                SliceTagResp(tag_id=tag_id, tag_name=nm, group=grp)
                 for grp, tag_id, nm in items
             ]
             specs.append(spec)

@@ -1,7 +1,8 @@
 """usage_snapshot 物化视图刷新与查询服务。
 
 usage_snapshot 由 alembic 迁移创建（非 ORM 表），把每条 task_resource_usage
-的资源/任务/用量三类实体标签 + resource.category 内置分类名合并为 tags[]。
+的资源/任务/用量三类实体标签 + resource.category 分类显示名（与「资源类别」
+默认标签同名）合并为 tags[]。
 本服务负责：
 
 - ``refresh()``：执行 ``REFRESH MATERIALIZED VIEW usage_snapshot``；

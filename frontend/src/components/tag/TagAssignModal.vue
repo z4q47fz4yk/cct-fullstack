@@ -12,8 +12,9 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 /**
  * 通用打标弹窗（资源 / 任务 / 用量）
  *
- * 扁平标签多选（按展示分组展示）；后端不再做互斥校验（错误仅剩 422 标签不存在/
- * 内置分类禁挂），失败时内联展示详情并抑制全局 toast。
+ * 扁平标签多选（按展示分组展示）；「资源类别」默认标签（人工/机械/…）由系统
+ * 按资源分类自动命中、不可手工挂载，故不出现在选择器；后端不再做互斥校验
+ * （错误仅剩 422 标签不存在/默认分类禁挂），失败时内联展示详情并抑制全局 toast。
  *
  * 支持两种模式：
  * - 单实体：传 `entity`，当前标签通过 useEntityTags 查询
@@ -37,6 +38,10 @@ const emit = defineEmits<{
 }>()
 
 const { tags: allTags } = useTagApi()
+
+// 打标选择器只展示普通标签；「资源类别」默认标签由系统按资源分类自动命中，
+// 不允许手工挂载（后端 is_default 保护），从候选中剔除避免误导
+const assignableTags = computed(() => allTags.value.filter((t) => !t.isDefault))
 
 const entityRef = ref<TagEntityRef | null>(null)
 const batchEntities = ref<TagEntityRef[]>([])
@@ -125,7 +130,7 @@ async function handleSubmit() {
     </div>
     <p v-else class="text-[11px] text-fg-subtle mb-4">尚未选择标签</p>
 
-    <!-- 错误（标签不存在/内置分类） -->
+    <!-- 错误（标签不存在/默认分类禁挂） -->
     <div v-if="formError" class="alert alert-error alert-sm mb-4" role="alert">
       <span class="material-symbols-outlined icon-sm shrink-0">error</span>
       <div class="min-w-0">
@@ -140,7 +145,7 @@ async function handleSubmit() {
     >
       <TagPicker
         v-if="!tagsLoading || batchEntities.length > 0"
-        :tags="allTags"
+        :tags="assignableTags"
         v-model="checkedTagIds"
         :disabled="isSetting"
       />

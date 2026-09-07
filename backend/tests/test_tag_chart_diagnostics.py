@@ -83,22 +83,33 @@ async def test_overlap_slices_detected(
     assert "地下工程" in items[0]["overlapTags"]
 
 
-async def test_builtin_category_overlap_detected(
+async def test_default_category_overlap_detected(
     client: AsyncClient, db_session: AsyncSession, project: Project
 ):
-    """内置分类切片（材料）与普通标签（材料-商品砼）也可报告重叠。"""
+    """「材料」默认分类标签切片与普通标签（材料-商品砼）可同图共存而不误报。"""
     pid = cast(int, project.id)
     t1 = Tag(project_id=pid, name="商品混凝土", group="材料", description="d")
-    db_session.add(t1)
+    default_tag = Tag(
+        project_id=pid,
+        name="材料",
+        group="资源类别",
+        description="系统默认资源类别标签",
+        is_default=True,
+    )
+    db_session.add_all([t1, default_tag])
     await db_session.commit()
     await db_session.refresh(t1)
+    await db_session.refresh(default_tag)
 
     chart = ChartDefinition(project_id=pid, name="材料图", description="d")
     db_session.add(chart)
     await db_session.commit()
     await db_session.refresh(chart)
     cid = cast(int, chart.id)
-    await _mk_slice(db_session, project, cid, "全部材料", 0, [(-3, 0)])  # 内置 材料
+    # 默认「材料」标签行（语义等价旧内置分类负 id）
+    await _mk_slice(
+        db_session, project, cid, "全部材料", 0, [(cast(int, default_tag.id), 0)]
+    )
     await _mk_slice(db_session, project, cid, "商砼", 1, [(cast(int, t1.id), 0)])
 
     resp = await client.get(f"/projects/{pid}/diagnostics/tag-chart")

@@ -1,7 +1,8 @@
 """图表定义、切片配置与饼图数据 API 测试。
 
 饼图口径：切片由标签组构成（同组=且，组间=或），命中基于 usage_snapshot
-物化视图合并的标签名（含资源分类内置标签）。切片重叠 → 重复计入。
+物化视图合并的标签名（含资源分类显示名，与「资源类别」默认标签同名）。
+切片重叠 → 重复计入。
 """
 # pyright: reportCallIssue=false
 
@@ -10,6 +11,7 @@ from typing import TYPE_CHECKING, cast
 
 import pytest_asyncio
 from httpx2 import AsyncClient
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.project import Project
@@ -20,14 +22,30 @@ from src.models.tag import ResourceTag, Tag
 from src.models.task import Task
 from src.schemas.resource import ResourceCategory
 
+# 项目创建时由系统写入的「资源类别」默认标签（与后端 RESOURCE_CATEGORY_LABEL 一致）
+_DEFAULT_TAG_NAMES = ("人工", "机械", "材料", "运输", "其他")
+
 
 @pytest_asyncio.fixture
 async def project(db_session: AsyncSession) -> Project:
-    """测试项目（CurrentProject 依赖需要）。"""
+    """测试项目（CurrentProject 依赖需要；含系统「资源类别」默认标签）。"""
     p = Project(name="Chart Test Project", is_active=True)
     db_session.add(p)
     await db_session.commit()
     await db_session.refresh(p)
+    pid = p.id
+    assert pid is not None
+    db_session.add_all([
+        Tag(
+            project_id=pid,
+            name=name,
+            group="资源类别",
+            description="系统默认资源类别标签",
+            is_default=True,
+        )
+        for name in _DEFAULT_TAG_NAMES
+    ])
+    await db_session.commit()
     return p
 
 
@@ -225,42 +243,50 @@ async def test_set_slices(client: AsyncClient, project: Project, tags):
     assert slices[0]["name"] == "材料部分"
     assert slices[0]["sortOrder"] == 0
     assert slices[0]["tags"][0]["tagName"] == "施工用材"
-    assert slices[0]["tags"][0]["isBuiltin"] is False
+    assert "isBuiltin" not in slices[0]["tags"][0]
 
 
-async def test_set_slices_builtin_category(client: AsyncClient, project: Project):
-    """切片可含内置分类标签（负 id）表达资源分类过滤。"""
+async def test_set_slices_default_category(client: AsyncClient, project: Project):
+    """切片可引用「资源类别」默认标签行表达资源分类过滤。"""
     pid = project.id
     resp = await client.post(f"/projects/{pid}/chart", json={"name": "材料图"})
     chart_id = resp.json()["id"]
+
+    tags = (await client.get(f"/projects/{pid}/tag")).json()["items"]
+    by_name = {it["name"]: it for it in tags}
+    material_id = by_name["材料"]["id"]
+    transport_id = by_name["运输"]["id"]
+    assert by_name["材料"]["isDefault"] is True
+
     resp = await client.put(
         f"/projects/{pid}/chart/{chart_id}/slices",
         json={
             "slices": [
-                {"name": "材料", "tags": [{"tagId": -3, "group": 0}]},  # 材料
-                {"name": "运输", "tags": [{"tagId": -4, "group": 0}]},  # 运输
+                {"name": "材料", "tags": [{"tagId": material_id, "group": 0}]},
+                {"name": "运输", "tags": [{"tagId": transport_id, "group": 0}]},
             ]
         },
     )
     assert resp.status_code == 200
     by_name = {s["name"]: s for s in resp.json()["slices"]}
     assert by_name["材料"]["tags"][0]["tagName"] == "材料"
-    assert by_name["材料"]["tags"][0]["isBuiltin"] is True
+    assert "isBuiltin" not in by_name["材料"]["tags"][0]
 
 
 async def test_set_slices_unknown_tag_422(client: AsyncClient, project: Project):
     pid = project.id
     resp = await client.post(f"/projects/{pid}/chart", json={"name": "图B"})
     chart_id = resp.json()["id"]
+    # 不属于当前项目的正 id → 422
     resp = await client.put(
         f"/projects/{pid}/chart/{chart_id}/slices",
         json={"slices": [{"name": "x", "tags": [{"tagId": 999999}]}]},
     )
     assert resp.status_code == 422
-    # 未知内置 id
+    # 非正 id → 422
     resp = await client.put(
         f"/projects/{pid}/chart/{chart_id}/slices",
-        json={"slices": [{"name": "x", "tags": [{"tagId": -99}]}]},
+        json={"slices": [{"name": "x", "tags": [{"tagId": -3}]}]},
     )
     assert resp.status_code == 422
 
@@ -393,7 +419,7 @@ async def test_pie_data_date_window(
     assert resp.json() == [{"name": "地下工程支护", "value": 0.0, "sortOrder": 0}]
 
 
-async def test_pie_data_builtin_category_filter(
+async def test_pie_data_default_category_filter(
     client: AsyncClient,
     db_session: AsyncSession,
     project: Project,
@@ -401,7 +427,7 @@ async def test_pie_data_builtin_category_filter(
     resources: list[Resource],
     task: Task,
 ):
-    """内置分类切片（材料）只聚合该分类资源用量，过滤运输等其他分类。"""
+    """「材料」默认标签切片只聚合材料类资源用量，过滤运输等其他分类。"""
     pid = project.id
     if TYPE_CHECKING:
         assert pid
@@ -435,11 +461,21 @@ async def test_pie_data_builtin_category_filter(
     ])
     await db_session.commit()
 
+    # 引用项目默认标签「材料」行（等同旧内置负 id 语义）
+    default = (
+        await db_session.exec(
+            select(Tag)
+            .where(Tag.project_id == pid, Tag.name == "材料")
+            .where(Tag.is_default)
+        )
+    ).first()
+    assert default is not None and default.id is not None
+
     chart_id = await _create_chart(
         client,
         pid,
         "材料图",
-        [{"name": "材料", "tags": [{"tagId": -3}]}],  # 内置材料
+        [{"name": "材料", "tags": [{"tagId": default.id}]}],
     )
     await _snapshot_flush(client, pid)
 

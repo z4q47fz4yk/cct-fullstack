@@ -30,7 +30,7 @@ from src.schemas.tag import (
     TaskTagAssignReq,
     UsageTagAssignReq,
 )
-from src.services.tag_assign import BuiltinTagAssignError, TagNotInProjectError
+from src.services.tag_assign import DefaultTagAssignError, TagNotInProjectError
 from src.services.x_tag import ResourceTagService, TaskTagService, UsageTagService
 from src.utils.db_errors import is_unique_violation
 from src.utils.query import project_count_filter, project_filter
@@ -292,6 +292,7 @@ async def create_tag_endpoint(
         group=tag.group,
         description=tag.description,
         project_id=project.id,
+        is_default=False,
     )
     session.add(db_tag)
     try:
@@ -328,6 +329,11 @@ async def update_tag_endpoint(
     tag: TagUpdate,
 ):
     db_tag = await _get_tag_or_404(session, project.id, id)
+    if db_tag.is_default:
+        raise HTTPException(
+            status_code=422,
+            detail="默认标签由系统在项目创建时生成，不允许修改",
+        )
     db_tag.sqlmodel_update(tag.model_dump(exclude_unset=True))
     session.add(db_tag)
     try:
@@ -350,8 +356,8 @@ async def update_tag_endpoint(
     status_code=204,
     summary="删除标签",
     description=(
-        "删除项目内标签（资源/任务/用量关联、slice_tag_mapping 中的正 id 引用"
-        "随同清理；内置分类标签不能删除）"
+        "删除项目内标签（资源/任务/用量关联、slice_tag_mapping 引用随 FK 级联"
+        "清理；项目级默认标签不能删除）"
     ),
 )
 async def delete_tag_endpoint(
@@ -359,20 +365,14 @@ async def delete_tag_endpoint(
     project: CurrentProject,
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> None:
-    if id < 0:
-        raise HTTPException(status_code=422, detail="内置分类标签不允许删除")
-    await _get_tag_or_404(session, project.id, id)
-
-    # 显式清理 slice_tag_mapping 中对该标签的引用（该表无 FK）
-    from sqlalchemy import delete as sa_delete
-
-    from src.models.slice import SliceTagMapping
-
-    await session.exec(
-        sa_delete(SliceTagMapping).where(col(SliceTagMapping.tag_id) == id)
-    )
-
     db_tag = await _get_tag_or_404(session, project.id, id)
+    if db_tag.is_default:
+        raise HTTPException(
+            status_code=422,
+            detail="默认标签由系统在项目创建时生成，不允许删除",
+        )
+
+    # slice_tag_mapping.tag_id 已建 FK ON DELETE CASCADE，引用随标签删除自动清除
     await session.delete(db_tag)
     try:
         await session.commit()
@@ -413,12 +413,12 @@ async def get_resource_tags_endpoint(
         404: {"model": NotFoundResp, "description": "资源不存在"},
         422: {
             "model": ConflictResp,
-            "description": "标签不存在/不属于当前项目，或为内置分类标签",
+            "description": "标签不存在/不属于当前项目，或为默认分类标签",
         },
     },
     status_code=200,
     summary="替换式设置资源的标签",
-    description="整组替换资源挂载的标签（仅普通标签；不做图表切片互斥校验，冲突检查在数据体检）",
+    description="整组替换资源挂载的标签（默认分类标签不可手工打标；不做图表切片互斥校验，冲突检查在数据体检）",
 )
 async def set_resource_tags_endpoint(
     resource_id: int,
@@ -430,7 +430,7 @@ async def set_resource_tags_endpoint(
     await _get_resource_or_404(session, project.id, resource_id)
     try:
         return await service.set_resource_tags(resource_id, data.tag_ids)
-    except (BuiltinTagAssignError, TagNotInProjectError) as e:
+    except (DefaultTagAssignError, TagNotInProjectError) as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
 
@@ -464,12 +464,12 @@ async def get_task_tags_endpoint(
         404: {"model": NotFoundResp, "description": "任务不存在"},
         422: {
             "model": ConflictResp,
-            "description": "标签不存在/不属于当前项目，或为内置分类标签",
+            "description": "标签不存在/不属于当前项目，或为默认分类标签",
         },
     },
     status_code=200,
     summary="替换式设置任务的标签",
-    description="整组替换任务挂载的标签（仅普通标签；不做图表切片互斥校验，冲突检查在数据体检）",
+    description="整组替换任务挂载的标签（默认分类标签不可手工打标；不做图表切片互斥校验，冲突检查在数据体检）",
 )
 async def set_task_tags_endpoint(
     task_id: int,
@@ -481,7 +481,7 @@ async def set_task_tags_endpoint(
     await _get_task_or_404(session, project.id, task_id)
     try:
         return await service.set_task_tags(task_id, data.tag_ids)
-    except (BuiltinTagAssignError, TagNotInProjectError) as e:
+    except (DefaultTagAssignError, TagNotInProjectError) as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
 
@@ -515,13 +515,13 @@ async def get_usage_tags_endpoint(
         404: {"model": NotFoundResp, "description": "用量记录不存在"},
         422: {
             "model": ConflictResp,
-            "description": "标签不存在/不属于当前项目，或为内置分类标签",
+            "description": "标签不存在/不属于当前项目，或为默认分类标签",
         },
     },
     status_code=200,
     summary="替换式设置用量的标签",
     description=(
-        "整组替换用量记录挂载的标签（含日报导入的用量；仅普通标签；"
+        "整组替换用量记录挂载的标签（含日报导入的用量；默认分类标签不可手工打标；"
         "不做图表切片互斥校验，冲突检查在数据体检）"
     ),
 )
@@ -535,7 +535,7 @@ async def set_usage_tags_endpoint(
     await _get_usage_or_404(session, project.id, usage_id)
     try:
         return await service.set_usage_tags(usage_id, data.tag_ids)
-    except (BuiltinTagAssignError, TagNotInProjectError) as e:
+    except (DefaultTagAssignError, TagNotInProjectError) as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
 

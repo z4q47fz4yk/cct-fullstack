@@ -9,8 +9,8 @@
 
 命中标签口径：每个 slice 的所有组内标签取并集作为该 slice 的"标签覆盖"；
 两个 slice 的覆盖集合相交即提示（即存在同一条用量同时命中两者的可能）。
-普通标签以 tag_id 表达，内置分类标签以负 id 表达；比较时先解析为统一的
-标签名（内置用分类名）避免 id 空间差异。
+标签一律为项目内真实 tag 行（含「资源类别」默认标签），以 tag_id 解析为
+名称后比较，避免行 id 空间差异。
 """
 
 from collections import defaultdict
@@ -23,7 +23,6 @@ from src.models.chart import ChartDefinition
 from src.models.slice import ChartSlice, SliceTagMapping
 from src.models.tag import Tag
 from src.schemas.diagnostics import TagChartConflictItem, TagChartDiagnosticsResp
-from src.schemas.tag import BuiltinTagInfo
 from src.utils.query import project_filter
 
 
@@ -63,23 +62,21 @@ async def get_tag_chart_diagnostics(
         )
     ).all()
 
-    # 普通标签 id → 名称
-    pos_ids = {m.tag_id for m in mappings if m.tag_id > 0}
+    # 标签 id → 名称（全为正 id；默认标签等同普通标签）
+    tag_ids = {m.tag_id for m in mappings if m.tag_id is not None}
     name_by_id: dict[int, str] = {}
-    if pos_ids:
+    if tag_ids:
         tag_rows = (
             await session.exec(
                 select(Tag.id, Tag.name)
-                .where(col(Tag.id).in_(pos_ids))
+                .where(col(Tag.id).in_(tag_ids))
                 .where(col(Tag.project_id) == project_id),
             )
         ).all()
         name_by_id = {tid: name for tid, name in tag_rows if tid is not None}
 
     def resolve(tag_id: int) -> str | None:
-        if tag_id > 0:
-            return name_by_id.get(tag_id)
-        return BuiltinTagInfo.builtin_tag_name(tag_id)
+        return name_by_id.get(tag_id)
 
     # slice_id → ChartSlice；chart_id → list[(slice, 覆盖标签名集合)]
     slice_by_id = {s.id: s for s in slices if s.id is not None}

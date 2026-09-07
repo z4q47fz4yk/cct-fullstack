@@ -539,8 +539,10 @@ class DailyReportService:
         self.session.add_all(usages_to_create)
         await self.session.flush()
 
-        # 货物类别 → 项目内同名标签（名称项目内唯一，精确匹配；未匹配则跳过，
-        # 用户可事后通过 PUT /resource-usage/{id}/tags 补标）
+        # 货物类别 → 项目内同名普通标签（名称项目内唯一，精确匹配；未匹配则跳过，
+        # 用户可事后通过 PUT /resource-usage/{id}/tags 补标）。
+        # 默认分类标签（人工/机械/…）不参与自动挂载：其分类语义由资源类别
+        # 自动命中，不能因货物类别名巧合（如“材料”）而挂到运输用量上。
         cargo_tag_map: dict[str, int] = {}
         cargo_names = {cargo for _, cargo in usage_cargo if cargo}
         if cargo_names:
@@ -575,13 +577,17 @@ class DailyReportService:
         )
 
     async def _load_cargo_tag_map(self, cargo_names: set[str]) -> dict[str, int]:
-        """按货物类别名称加载项目内标签 ID（标签名项目内唯一，无需维度）。
+        """按货物类别名称加载项目内**普通**标签 ID（默认分类标签除外）。
 
         名称唯一由约束保证（UNIQUE(project_id, name)），同名多标签已不可能；
-        未匹配到的货物类别跳过（用户可事后经 PUT /resource-usage/{id}/tags 补标）。
+        默认分类标签（is_default=true）由系统按资源类别命中，不应自动挂载到
+        用量，此处显式排除；未匹配到的货物类别跳过（用户可事后经
+        PUT /resource-usage/{id}/tags 补标）。
         """
         stmt = project_filter(
-            select(Tag).where(col(Tag.name).in_(cargo_names)),
+            select(Tag)
+            .where(col(Tag.name).in_(cargo_names))
+            .where(col(Tag.is_default) == False),  # noqa: E712
             Tag,
             self.project_id,
         )

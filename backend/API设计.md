@@ -2,10 +2,13 @@
 
 > **设计演进说明（2026-09 标签系统 v3）**：本文下方 v2 方案（维度树 + slice_entity +
 > 打标互斥）为历史设计。现行实现已**展平标签**（无 tag_dimension / parent_id），
-> 新增 **slice（切片）与 slice_tag_mapping**（或/且组，含内置分类负 id 标签），
+> 新增 **slice（切片）与 slice_tag_mapping**（或/且组），
 > 删除 chart_tag_mapping / slice_entity / resource_categories / 打标互斥校验，
-> 聚合改读 **usage_snapshot 物化视图**（30min 自动 + 手动/惰性刷新）。以当前代码为准，
-> v2 保留仅供理解需求来源。
+> 聚合改读 **usage_snapshot 物化视图**（30min 自动 + 手动/惰性刷新）。
+> 项目创建时写入「资源类别」默认标签（is_default，人工/机械/材料/运输/其他），
+> 切片引用这些真实标签行实现按资源类别过滤；slice_tag_mapping.tag_id 一律为
+> FK→tag.id 的正整数（早期负 id 内置伪标签方案已废弃）。
+> 以当前代码为准，v2 保留仅供理解需求来源。
 
 我计划实现一个标签系统，用于区分碳排放类别；再实现一套图定义系统，用来定义需要展示的图表。
 
