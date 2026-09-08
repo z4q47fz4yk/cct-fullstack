@@ -76,7 +76,6 @@ declare module 'vue-router/auto-routes' {
       | '/project/[projectId]/resource-usage'
       | '/project/[projectId]/resource-usage/entry'
       | '/project/[projectId]/resource-usage/history'
-      | '/project/[projectId]/resource-usage/statistics'
       | '/project/[projectId]/schedule'
       | '/project/[projectId]/settings'
       | '/project/[projectId]/settings/'
@@ -84,7 +83,6 @@ declare module 'vue-router/auto-routes' {
       | '/project/[projectId]/settings/constraints'
       | '/project/[projectId]/settings/diagnostics'
       | '/project/[projectId]/settings/info'
-      | '/project/[projectId]/settings/overview'
       | '/project/[projectId]/settings/resources'
       | '/project/[projectId]/settings/reuse-configs'
       | '/project/[projectId]/settings/tags'
@@ -219,7 +217,6 @@ declare module 'vue-router/auto-routes' {
       { projectId: ParamValue<false> },
       | '/project/[projectId]/resource-usage/entry'
       | '/project/[projectId]/resource-usage/history'
-      | '/project/[projectId]/resource-usage/statistics'
     >,
     '/project/[projectId]/resource-usage/entry': RouteRecordInfo<
       '/project/[projectId]/resource-usage/entry',
@@ -231,13 +228,6 @@ declare module 'vue-router/auto-routes' {
     '/project/[projectId]/resource-usage/history': RouteRecordInfo<
       '/project/[projectId]/resource-usage/history',
       '/project/:projectId/resource-usage/history',
-      { projectId: ParamValue<true> },
-      { projectId: ParamValue<false> },
-      | never
-    >,
-    '/project/[projectId]/resource-usage/statistics': RouteRecordInfo<
-      '/project/[projectId]/resource-usage/statistics',
-      '/project/:projectId/resource-usage/statistics',
       { projectId: ParamValue<true> },
       { projectId: ParamValue<false> },
       | never
@@ -259,7 +249,6 @@ declare module 'vue-router/auto-routes' {
       | '/project/[projectId]/settings/constraints'
       | '/project/[projectId]/settings/diagnostics'
       | '/project/[projectId]/settings/info'
-      | '/project/[projectId]/settings/overview'
       | '/project/[projectId]/settings/resources'
       | '/project/[projectId]/settings/reuse-configs'
       | '/project/[projectId]/settings/tags'
@@ -295,13 +284,6 @@ declare module 'vue-router/auto-routes' {
     '/project/[projectId]/settings/info': RouteRecordInfo<
       '/project/[projectId]/settings/info',
       '/project/:projectId/settings/info',
-      { projectId: ParamValue<true> },
-      { projectId: ParamValue<false> },
-      | never
-    >,
-    '/project/[projectId]/settings/overview': RouteRecordInfo<
-      '/project/[projectId]/settings/overview',
-      '/project/:projectId/settings/overview',
       { projectId: ParamValue<true> },
       { projectId: ParamValue<false> },
       | never
@@ -386,7 +368,6 @@ declare module 'vue-router/auto-routes' {
         | '/project/[projectId]/resource-usage'
         | '/project/[projectId]/resource-usage/entry'
         | '/project/[projectId]/resource-usage/history'
-        | '/project/[projectId]/resource-usage/statistics'
         | '/project/[projectId]/schedule'
         | '/project/[projectId]/settings'
         | '/project/[projectId]/settings/'
@@ -394,7 +375,6 @@ declare module 'vue-router/auto-routes' {
         | '/project/[projectId]/settings/constraints'
         | '/project/[projectId]/settings/diagnostics'
         | '/project/[projectId]/settings/info'
-        | '/project/[projectId]/settings/overview'
         | '/project/[projectId]/settings/resources'
         | '/project/[projectId]/settings/reuse-configs'
         | '/project/[projectId]/settings/tags'
@@ -549,7 +529,6 @@ declare module 'vue-router/auto-routes' {
         | '/project/[projectId]/resource-usage'
         | '/project/[projectId]/resource-usage/entry'
         | '/project/[projectId]/resource-usage/history'
-        | '/project/[projectId]/resource-usage/statistics'
       views:
         | 'default'
       pathParamNames:
@@ -571,14 +550,6 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | never
     }
-    'src/pages/project/[projectId]/resource-usage/statistics.vue': {
-      routes:
-        | '/project/[projectId]/resource-usage/statistics'
-      views:
-        | never
-      pathParamNames:
-        | never
-    }
     'src/pages/project/[projectId]/schedule.vue': {
       routes:
         | '/project/[projectId]/schedule'
@@ -595,7 +566,6 @@ declare module 'vue-router/auto-routes' {
         | '/project/[projectId]/settings/constraints'
         | '/project/[projectId]/settings/diagnostics'
         | '/project/[projectId]/settings/info'
-        | '/project/[projectId]/settings/overview'
         | '/project/[projectId]/settings/resources'
         | '/project/[projectId]/settings/reuse-configs'
         | '/project/[projectId]/settings/tags'
@@ -639,14 +609,6 @@ declare module 'vue-router/auto-routes' {
     'src/pages/project/[projectId]/settings/info.vue': {
       routes:
         | '/project/[projectId]/settings/info'
-      views:
-        | never
-      pathParamNames:
-        | never
-    }
-    'src/pages/project/[projectId]/settings/overview.vue': {
-      routes:
-        | '/project/[projectId]/settings/overview'
       views:
         | never
       pathParamNames:

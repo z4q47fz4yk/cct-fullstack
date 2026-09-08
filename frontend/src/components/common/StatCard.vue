@@ -2,7 +2,7 @@
 /**
  * StatCard - KPI 统计卡片（统一模板）
  *
- * 取代散落在 ProjectOverviewCards / OptimizationConfig / EmissionAnalysisTab /
+ * 取代散落在 OptimizationConfig / EmissionAnalysisTab /
  * ResourceStats 等组件中的 createReusableTemplate 重复实现。
  *
  * 工程面板风格：扁平面板 + 小标签行 + 等宽大数值 + 单位。
