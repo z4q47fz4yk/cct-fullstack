@@ -117,15 +117,8 @@ const flagMeta: Record<DiagnosticFlag, { label: string; cls: string }> = {
 
 <template>
   <div class="h-full flex flex-col gap-4 overflow-y-auto">
-    <!-- 头部 -->
-    <div class="flex items-center justify-between gap-4 flex-wrap">
-      <div>
-        <h1 class="text-lg font-semibold text-base-content">数据体检</h1>
-        <p class="text-xs text-fg-subtle mt-0.5">
-          只读检查，不影响任何功能。碳排放计算边界由你决定：若资源仅为 峰值人数 /
-          资源约束而记录用量，零碳因子属正常情况，可忽略。
-        </p>
-      </div>
+    <!-- 用量口径切换 -->
+    <div class="flex items-center justify-end">
       <SegmentControl v-model="usageType" :options="usageTypeOptions" aria-label="用量口径" />
     </div>
 

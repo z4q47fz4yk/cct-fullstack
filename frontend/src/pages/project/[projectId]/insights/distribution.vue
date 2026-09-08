@@ -10,6 +10,7 @@ import { fmtNumber } from '@/utils/format'
 definePage({
   meta: {
     title: '碳排放分布',
+    description: '按「设置 → 碳排放图表」定义的标签切片聚合，可切换碳排放 / 成本',
     icon: 'donut_small',
     showInNav: true,
     parentName: '/project/[projectId]/insights',
@@ -49,13 +50,7 @@ const totalValue = computed(() => Object.values(summaries).reduce((sum, v) => su
 
 <template>
   <div class="h-full flex flex-col gap-4 overflow-y-auto">
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-lg font-semibold text-base-content">碳排放分布</h1>
-        <p class="text-xs text-fg-subtle mt-0.5">
-          按「设置 → 碳排放图表」定义的标签切片聚合（实际用量口径），可切换碳排放 / 成本
-        </p>
-      </div>
+    <div class="flex items-center justify-end">
       <SegmentControl v-model="metric" :options="metricOptions" />
     </div>
 

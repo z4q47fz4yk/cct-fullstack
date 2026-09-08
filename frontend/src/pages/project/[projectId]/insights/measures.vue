@@ -21,6 +21,8 @@ use([BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]
 definePage({
   meta: {
     title: '低碳措施',
+    description:
+      '添加类（光伏等负碳因子资源）即时抵扣 · 替换类按资源流逐日计算 · 状态在施工阶段维护',
     icon: 'energy_savings_leaf',
     showInNav: true,
     parentName: '/project/[projectId]/insights',
@@ -114,13 +116,6 @@ const chartOption = computed(() => ({
 
 <template>
   <div class="h-full flex flex-col gap-4 overflow-y-auto">
-    <div>
-      <h1 class="text-lg font-semibold text-base-content">低碳措施</h1>
-      <p class="text-xs text-fg-subtle mt-0.5">
-        添加类（光伏等负碳因子资源）即时抵扣 · 替换类按资源流逐日计算 · 状态在施工阶段维护
-      </p>
-    </div>
-
     <div class="grid grid-cols-3 gap-4">
       <div class="panel px-4 py-3">
         <p class="text-[11px] text-fg-subtle">预估节碳合计</p>

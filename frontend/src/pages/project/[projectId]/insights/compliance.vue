@@ -9,6 +9,7 @@ import type { ComplianceTaskRow } from '@/client/types.gen'
 definePage({
   meta: {
     title: '计划践行度',
+    description: '以计划编制保存的施工计划基线为基准，对比实际施工数据',
     icon: 'fact_check',
     showInNav: true,
     parentName: '/project/[projectId]/insights',
@@ -76,25 +77,17 @@ const monthlyRows = computed(() => data.value?.monthly ?? [])
 </script>
 
 <template>
-  <div class="h-full flex flex-col gap-4 overflow-y-auto">
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-lg font-semibold text-base-content">计划践行度</h1>
-        <p class="text-xs text-fg-subtle mt-0.5">
-          以计划编制保存的施工计划基线为基准，对比实际施工数据
-        </p>
-      </div>
-      <span
-        v-if="data"
-        class="text-xs font-mono px-2 py-1 rounded-full"
-        :class="
-          data.evaluationUnlocked ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'
-        "
-      >
-        {{ data.evaluationUnlocked ? '评价已解锁' : '评价未解锁' }}
-      </span>
-    </div>
+  <Teleport defer to="#header-actions">
+    <span
+      v-if="data"
+      class="text-xs font-mono px-2 py-1 rounded-full"
+      :class="data.evaluationUnlocked ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'"
+    >
+      {{ data.evaluationUnlocked ? '评价已解锁' : '评价未解锁' }}
+    </span>
+  </Teleport>
 
+  <div class="h-full flex flex-col gap-4 overflow-y-auto">
     <div
       v-if="plan?.isStale"
       class="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5"
