@@ -80,11 +80,9 @@ declare module 'vue-router/auto-routes' {
       | '/project/[projectId]/settings'
       | '/project/[projectId]/settings/'
       | '/project/[projectId]/settings/charts'
-      | '/project/[projectId]/settings/constraints'
       | '/project/[projectId]/settings/diagnostics'
       | '/project/[projectId]/settings/info'
       | '/project/[projectId]/settings/resources'
-      | '/project/[projectId]/settings/reuse-configs'
       | '/project/[projectId]/settings/tags'
     >,
     '/project/[projectId]/': RouteRecordInfo<
@@ -246,11 +244,9 @@ declare module 'vue-router/auto-routes' {
       { projectId: ParamValue<false> },
       | '/project/[projectId]/settings/'
       | '/project/[projectId]/settings/charts'
-      | '/project/[projectId]/settings/constraints'
       | '/project/[projectId]/settings/diagnostics'
       | '/project/[projectId]/settings/info'
       | '/project/[projectId]/settings/resources'
-      | '/project/[projectId]/settings/reuse-configs'
       | '/project/[projectId]/settings/tags'
     >,
     '/project/[projectId]/settings/': RouteRecordInfo<
@@ -263,13 +259,6 @@ declare module 'vue-router/auto-routes' {
     '/project/[projectId]/settings/charts': RouteRecordInfo<
       '/project/[projectId]/settings/charts',
       '/project/:projectId/settings/charts',
-      { projectId: ParamValue<true> },
-      { projectId: ParamValue<false> },
-      | never
-    >,
-    '/project/[projectId]/settings/constraints': RouteRecordInfo<
-      '/project/[projectId]/settings/constraints',
-      '/project/:projectId/settings/constraints',
       { projectId: ParamValue<true> },
       { projectId: ParamValue<false> },
       | never
@@ -291,13 +280,6 @@ declare module 'vue-router/auto-routes' {
     '/project/[projectId]/settings/resources': RouteRecordInfo<
       '/project/[projectId]/settings/resources',
       '/project/:projectId/settings/resources',
-      { projectId: ParamValue<true> },
-      { projectId: ParamValue<false> },
-      | never
-    >,
-    '/project/[projectId]/settings/reuse-configs': RouteRecordInfo<
-      '/project/[projectId]/settings/reuse-configs',
-      '/project/:projectId/settings/reuse-configs',
       { projectId: ParamValue<true> },
       { projectId: ParamValue<false> },
       | never
@@ -372,11 +354,9 @@ declare module 'vue-router/auto-routes' {
         | '/project/[projectId]/settings'
         | '/project/[projectId]/settings/'
         | '/project/[projectId]/settings/charts'
-        | '/project/[projectId]/settings/constraints'
         | '/project/[projectId]/settings/diagnostics'
         | '/project/[projectId]/settings/info'
         | '/project/[projectId]/settings/resources'
-        | '/project/[projectId]/settings/reuse-configs'
         | '/project/[projectId]/settings/tags'
       views:
         | 'default'
@@ -563,11 +543,9 @@ declare module 'vue-router/auto-routes' {
         | '/project/[projectId]/settings'
         | '/project/[projectId]/settings/'
         | '/project/[projectId]/settings/charts'
-        | '/project/[projectId]/settings/constraints'
         | '/project/[projectId]/settings/diagnostics'
         | '/project/[projectId]/settings/info'
         | '/project/[projectId]/settings/resources'
-        | '/project/[projectId]/settings/reuse-configs'
         | '/project/[projectId]/settings/tags'
       views:
         | 'default'
@@ -585,14 +563,6 @@ declare module 'vue-router/auto-routes' {
     'src/pages/project/[projectId]/settings/charts.vue': {
       routes:
         | '/project/[projectId]/settings/charts'
-      views:
-        | never
-      pathParamNames:
-        | never
-    }
-    'src/pages/project/[projectId]/settings/constraints.vue': {
-      routes:
-        | '/project/[projectId]/settings/constraints'
       views:
         | never
       pathParamNames:
@@ -617,14 +587,6 @@ declare module 'vue-router/auto-routes' {
     'src/pages/project/[projectId]/settings/resources.vue': {
       routes:
         | '/project/[projectId]/settings/resources'
-      views:
-        | never
-      pathParamNames:
-        | never
-    }
-    'src/pages/project/[projectId]/settings/reuse-configs.vue': {
-      routes:
-        | '/project/[projectId]/settings/reuse-configs'
       views:
         | never
       pathParamNames:

@@ -4,8 +4,10 @@ from typing import Annotated
 # 必须从 pydantic 导入 Field，使用 sqlmodel 的 Field 会导致 description 丢失
 from pydantic import Field, field_validator
 
+from src.schemas.optimize import ResourceConstraintResp
 from src.schemas.public.mixin import CamelCaseRespMixin, TimeStampRespMixin
 from src.schemas.public.validators import reject_explicit_none
+from src.schemas.resource_reuse_config import ResourceReuseConfigResp
 from src.schemas.tag import TagResp
 
 
@@ -93,6 +95,25 @@ class ResourceWithTagsResp(ResourceResp):
     )
 
 
+class ResourceWithConfigResp(ResourceWithTagsResp):
+    """资源列表响应（可附带资源约束与周转复用配置）。
+
+    - ``include_constraint=true`` 时填充 ``constraint`` 字段；项目内无约束则为
+      ``None``。
+    - ``include_reuse_config=true`` 时填充 ``reuse_config`` 字段；项目内无配置则为
+      ``None``。
+    - ``include_*=false`` 时字段默认 ``None``（路由层不会为 ``false`` 开关填充）。
+    """
+
+    constraint: ResourceConstraintResp | None = Field(
+        default=None, description="资源日用量约束（include_constraint=true 时填充）"
+    )
+    reuse_config: ResourceReuseConfigResp | None = Field(
+        default=None,
+        description="资源周转复用配置（include_reuse_config=true 时填充）",
+    )
+
+
 class ResourceCategoryStat(CamelCaseRespMixin):
     category: ResourceFields.Category
     count: int = Field(description="该分类下的资源数量")
@@ -103,6 +124,7 @@ __all__ = [
     "ResourceUpdate",
     "ResourceResp",
     "ResourceWithTagsResp",
+    "ResourceWithConfigResp",
     "ResourceCategory",
     "ResourceCategoryStat",
 ]

@@ -5,10 +5,13 @@ import pytest
 import pytest_asyncio
 from faker import Faker
 from httpx2 import AsyncClient
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.models.optimize import ResourceConstraint
 from src.models.project import Project
 from src.models.resource import Resource
+from src.models.resource_reuse_config import ResourceReuseConfig
 from src.models.tag import ResourceTag, Tag
 from src.schemas.resource import ResourceCategory
 
@@ -453,3 +456,478 @@ async def test_list_resources_include_tags_with_filters(
     assert len(items) == 1
     assert items[0]["name"] == "tagtest-r1"
     assert [t["name"] for t in items[0]["tags"]] == ["材料", "tagtest-A"]
+
+
+# ============================================================
+# constrained / reusable 过滤 & include_constraint / include_reuse_config
+# ============================================================
+
+
+@pytest_asyncio.fixture
+async def cfg_resources(db_session: AsyncSession):
+    """两个材料类资源（cfgr-*）用于测试 constrained/reusable 过滤"""
+    rs = [
+        Resource(
+            project_id=PID,
+            name=f"cfgr-r{i}",
+            description="d",
+            category=ResourceCategory.material,
+        )
+        for i in range(1, 3)
+    ]
+    db_session.add_all(rs)
+    await db_session.commit()
+    for r in rs:
+        await db_session.refresh(r)
+    return rs
+
+
+@pytest_asyncio.fixture
+async def cfg_data(db_session: AsyncSession, cfg_resources):
+    """在 cfg_resources 上插入约束（r1）+ 周转配置（r2）"""
+    r1, r2 = cfg_resources
+    constraint = ResourceConstraint(
+        project_id=PID,
+        resource_id=r1.id,
+        max_usage=100.0,
+        description="cfg-c",
+    )
+    reuse = ResourceReuseConfig(
+        project_id=PID,
+        resource_id=r2.id,
+        max_reuses=3,
+        reuse_count=2,
+        affect_cost=False,
+        description="cfg-r",
+    )
+    db_session.add_all([constraint, reuse])
+    await db_session.commit()
+    await db_session.refresh(constraint)
+    await db_session.refresh(reuse)
+    return r1, r2, constraint, reuse
+
+
+@pytest.mark.parametrize(
+    "query, expected_names",
+    [
+        pytest.param(
+            "constrained=true",
+            {"cfgr-r1"},
+            id="constrained_only_returns_with_constraint",
+        ),
+        pytest.param(
+            "reusable=true",
+            {"cfgr-r2"},
+            id="reusable_only_returns_with_reuse",
+        ),
+        pytest.param(
+            "constrained=true&reusable=false",
+            {"cfgr-r1"},
+            id="constrained_true_reusable_false",
+        ),
+        pytest.param(
+            "constrained=false&reusable=false",
+            {"cfgr-r1", "cfgr-r2"},
+            id="both_false_returns_all",
+        ),
+    ],
+)
+async def test_list_resources_filter_by_config(
+    cfg_data,
+    client: AsyncClient,
+    query: str,
+    expected_names: set[str],
+):
+    """constrained / reusable 过滤：按约束/复用过滤项目内资源（互斥校验）"""
+    resp = await client.get(f"/projects/{PID}/resource?{query}&name=cfgr&per_page=100")
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert {it["name"] for it in items} == expected_names
+
+
+async def test_list_resources_constrained_and_reusable_mutex(
+    cfg_data, client: AsyncClient
+):
+    """constrained=true 与 reusable=true 同时为 true 返回 422。"""
+    resp = await client.get(
+        f"/projects/{PID}/resource?constrained=true&reusable=true&name=cfgr&per_page=100"
+    )
+    assert resp.status_code == 422
+    assert "互斥" in resp.json()["detail"]
+
+
+async def test_list_resources_include_constraint_and_reuse_config(
+    cfg_data, client: AsyncClient
+):
+    """include_constraint / include_reuse_config 填充对应字段；未开启时字段为 null。"""
+    r1, r2, constraint, reuse = cfg_data
+
+    # 仅 include_constraint
+    resp = await client.get(
+        f"/projects/{PID}/resource?include_constraint=true&name=cfgr&per_page=100"
+    )
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    by_name = {it["name"]: it for it in items}
+    # r1 有约束 → constraint 字段填充
+    assert by_name["cfgr-r1"]["constraint"] is not None
+    assert by_name["cfgr-r1"]["constraint"]["maxUsage"] == 100.0
+    assert by_name["cfgr-r1"]["constraint"]["resourceId"] == r1.id
+    # r2 无约束 → constraint 为 null
+    assert by_name["cfgr-r2"]["constraint"] is None
+    # reuseConfig 未开启 → null
+    assert by_name["cfgr-r1"]["reuseConfig"] is None
+    assert by_name["cfgr-r2"]["reuseConfig"] is None
+
+    # 同时 include_constraint + include_reuse_config
+    resp = await client.get(
+        f"/projects/{PID}/resource?include_constraint=true"
+        "&include_reuse_config=true&name=cfgr&per_page=100"
+    )
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    by_name = {it["name"]: it for it in items}
+    assert by_name["cfgr-r1"]["constraint"] is not None
+    assert by_name["cfgr-r1"]["reuseConfig"] is None
+    assert by_name["cfgr-r2"]["constraint"] is None
+    assert by_name["cfgr-r2"]["reuseConfig"] is not None
+    assert by_name["cfgr-r2"]["reuseConfig"]["maxReuses"] == 3
+    assert by_name["cfgr-r2"]["reuseConfig"]["reuseCount"] == 2
+    assert by_name["cfgr-r2"]["reuseConfig"]["resourceId"] == r2.id
+
+
+async def test_list_resources_default_response_has_null_config(
+    cfg_data, client: AsyncClient
+):
+    """默认不带 include_* 时，constraint / reuseConfig 字段为 null（兼容旧契约）。"""
+    resp = await client.get(f"/projects/{PID}/resource?name=cfgr&per_page=100")
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    for it in items:
+        assert it["constraint"] is None
+        assert it["reuseConfig"] is None
+
+
+async def test_list_resources_filter_combined_with_config(
+    cfg_data, client: AsyncClient
+):
+    """constrained=true + include_constraint=true：有约束的资源附带 constraint。"""
+    resp = await client.get(
+        f"/projects/{PID}/resource?constrained=true&include_constraint=true"
+        "&name=cfgr&per_page=100"
+    )
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert len(items) == 1
+    assert items[0]["name"] == "cfgr-r1"
+    assert items[0]["constraint"] is not None
+    assert items[0]["constraint"]["maxUsage"] == 100.0
+    assert items[0]["reuseConfig"] is None
+
+
+async def test_list_resources_filter_isolation_between_projects(
+    cfg_data, db_session: AsyncSession, client: AsyncClient
+):
+    """其他项目的约束/复用配置不串入本项目列表。"""
+    r1, r2, constraint, reuse = cfg_data
+    other = Project(name="Cfg 隔离项目", is_active=True)
+    db_session.add(other)
+    await db_session.commit()
+    await db_session.refresh(other)
+    assert other.id is not None
+    # 在其他项目为 r1/r2 的同名资源建约束/配置
+    other_r1 = Resource(
+        project_id=other.id,
+        name="cfgr-r1",
+        description="d",
+        category=ResourceCategory.material,
+    )
+    other_r2 = Resource(
+        project_id=other.id,
+        name="cfgr-r2",
+        description="d",
+        category=ResourceCategory.material,
+    )
+    db_session.add_all([other_r1, other_r2])
+    await db_session.commit()
+    await db_session.refresh(other_r1)
+    await db_session.refresh(other_r2)
+    assert other_r1.id is not None and other_r2.id is not None
+    db_session.add_all([
+        ResourceConstraint(
+            project_id=other.id, resource_id=other_r1.id, max_usage=999.0
+        ),
+        ResourceReuseConfig(
+            project_id=other.id,
+            resource_id=other_r2.id,
+            max_reuses=9,
+            reuse_count=9,
+            affect_cost=True,
+        ),
+    ])
+    await db_session.commit()
+
+    # constrained=true 时 r1 应被命中，r2 不应；response 内的 constraint 来自本项目
+    resp = await client.get(
+        f"/projects/{PID}/resource?constrained=true&include_constraint=true"
+        "&name=cfgr&per_page=100"
+    )
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert [it["name"] for it in items] == ["cfgr-r1"]
+    assert items[0]["constraint"]["maxUsage"] == 100.0  # 不是 999
+
+    # reusable=true 同理
+    resp = await client.get(
+        f"/projects/{PID}/resource?reusable=true&include_reuse_config=true"
+        "&name=cfgr&per_page=100"
+    )
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert [it["name"] for it in items] == ["cfgr-r2"]
+    assert items[0]["reuseConfig"]["reuseCount"] == 2  # 不是 9
+
+
+# ============================================================
+# tag_ids AND 过滤
+# ============================================================
+
+
+@pytest_asyncio.fixture
+async def tag_id_resources(db_session: AsyncSession):
+    """四个 tagid-* 资源用于 AND 过滤测试"""
+    rs = [
+        Resource(
+            project_id=PID,
+            name=f"tagid-r{i}",
+            description="d",
+            category=ResourceCategory.material,
+        )
+        for i in range(1, 5)
+    ]
+    db_session.add_all(rs)
+    await db_session.commit()
+    for r in rs:
+        await db_session.refresh(r)
+    return rs
+
+
+async def _make_tag(db_session: AsyncSession, name: str) -> Tag:
+    tag = Tag(project_id=PID, name=name, group="测试", description="d")
+    db_session.add(tag)
+    await db_session.commit()
+    await db_session.refresh(tag)
+    assert tag.id is not None
+    return tag
+
+
+async def _link(db_session: AsyncSession, rid: int, tid: int) -> None:
+    db_session.add(ResourceTag(project_id=PID, resource_id=rid, tag_id=tid))
+    await db_session.commit()
+
+
+@pytest.mark.parametrize(
+    "links, query_tag_ids, expected_names",
+    [
+        # 单标签：所有挂该标签的资源
+        pytest.param(
+            [("tagid-r1", "tagid-A"), ("tagid-r2", "tagid-A")],
+            ["tagid-A"],
+            {"tagid-r1", "tagid-r2"},
+            id="single_tag",
+        ),
+        # 双标签 AND：仅同时挂 A 与 B 的资源
+        pytest.param(
+            [
+                ("tagid-r1", "tagid-A"),
+                ("tagid-r2", "tagid-A"),
+                ("tagid-r2", "tagid-B"),
+                ("tagid-r3", "tagid-B"),
+            ],
+            ["tagid-A", "tagid-B"],
+            {"tagid-r2"},
+            id="two_tags_and",
+        ),
+        # 三标签 AND：必须三个都有
+        pytest.param(
+            [
+                ("tagid-r1", "tagid-A"),
+                ("tagid-r2", "tagid-A"),
+                ("tagid-r2", "tagid-B"),
+                ("tagid-r2", "tagid-C"),
+                ("tagid-r3", "tagid-A"),
+                ("tagid-r3", "tagid-B"),
+            ],
+            ["tagid-A", "tagid-B", "tagid-C"],
+            {"tagid-r2"},
+            id="three_tags_and",
+        ),
+    ],
+)
+async def test_list_resources_tag_ids_and(
+    db_session: AsyncSession,
+    tag_id_resources,
+    links: list[tuple[str, str]],
+    query_tag_ids: list[str],
+    expected_names: set[str],
+    client: AsyncClient,
+):
+    """tag_ids 多个值之间为 AND 关系。"""
+    r_by_name = {r.name: r for r in tag_id_resources}
+    tag_cache: dict[str, Tag] = {}
+
+    for rname, tname in links:
+        tag = tag_cache.get(tname) or await _make_tag(db_session, tname)
+        tag_cache[tname] = tag
+        r = r_by_name[rname]
+        assert r.id is not None
+        await _link(db_session, r.id, tag.id)
+
+    qs = "&".join(f"tag_ids={tag_cache[t].id}" for t in query_tag_ids)
+    resp = await client.get(f"/projects/{PID}/resource?{qs}&name=tagid&per_page=100")
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert {it["name"] for it in items} == expected_names
+
+
+async def test_list_resources_tag_ids_empty_returns_all(
+    tag_id_resources, client: AsyncClient
+):
+    """tag_ids 不传时不过滤。"""
+    resp = await client.get(f"/projects/{PID}/resource?name=tagid&per_page=100")
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert {it["name"] for it in items} == {
+        "tagid-r1",
+        "tagid-r2",
+        "tagid-r3",
+        "tagid-r4",
+    }
+
+
+async def test_list_resources_tag_ids_combined_with_category(
+    db_session: AsyncSession,
+    tag_id_resources,
+    client: AsyncClient,
+):
+    """tag_ids 与 category 组合：AND 在所有过滤条件下生效。"""
+    # 给 r1/r2 挂 tagid-X；改 r3 的分类为 labor
+    tag_x = await _make_tag(db_session, "tagid-X")
+    r1, r2, r3, _ = tag_id_resources
+    assert all(r.id is not None for r in (r1, r2, r3))
+    await _link(db_session, r1.id, tag_x.id)
+    await _link(db_session, r2.id, tag_x.id)
+
+    r3.category = ResourceCategory.labor
+    db_session.add(r3)
+    await db_session.commit()
+
+    # 仅 category=material：r1/r2/r4 都属于 material（fixture 默认）
+    resp = await client.get(
+        f"/projects/{PID}/resource?category=material&tag_ids={tag_x.id}"
+        "&name=tagid&per_page=100"
+    )
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert {it["name"] for it in items} == {"tagid-r1", "tagid-r2"}
+
+    # 仅 category=labor（不带 tag_ids）：r3 应被命中（但 r3 没挂 X，仍命中）
+    resp = await client.get(
+        f"/projects/{PID}/resource?category=labor&name=tagid&per_page=100"
+    )
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert {it["name"] for it in items} == {"tagid-r3"}
+
+
+async def test_list_resources_tag_ids_pagination(
+    db_session: AsyncSession,
+    tag_id_resources,
+    client: AsyncClient,
+):
+    """tag_ids 与分页组合：total / items 计数一致。"""
+    tag_x = await _make_tag(db_session, "tagid-P")
+    r1, r2, r3, _ = tag_id_resources
+    assert all(r.id is not None for r in (r1, r2, r3))
+    await _link(db_session, r1.id, tag_x.id)
+    await _link(db_session, r2.id, tag_x.id)
+    await _link(db_session, r3.id, tag_x.id)
+
+    resp = await client.get(
+        f"/projects/{PID}/resource?tag_ids={tag_x.id}&name=tagid&per_page=2&page=1"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 3
+    assert len(data["items"]) == 2
+
+    resp = await client.get(
+        f"/projects/{PID}/resource?tag_ids={tag_x.id}&name=tagid&per_page=2&page=2"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 3
+    assert len(data["items"]) == 1
+
+
+async def test_list_resources_tag_ids_default_label_not_counted(
+    db_session: AsyncSession,
+    tag_id_resources,
+    client: AsyncClient,
+):
+    """默认分类标签（如"材料" is_default=true）不出现在 resource_tag 里，
+    因此不应被 tag_ids 过滤计算在内。
+    """
+    # 找出项目内名为"材料"的默认标签（由 alembic 10f6fdbf450e seed）
+    default_tag = (
+        await db_session.exec(
+            select(Tag).where(
+                Tag.project_id == PID,
+                Tag.is_default == True,  # noqa: E712
+                Tag.name == "材料",
+            )
+        )
+    ).first()
+    if default_tag is None or default_tag.id is None:
+        pytest.skip("项目内不存在默认标签「材料」")
+
+    # fixture 中 r1/r2/r3/r4 都是 material 类，但都没在 resource_tag 挂「材料」
+    resp = await client.get(
+        f"/projects/{PID}/resource?tag_ids={default_tag.id}&name=tagid&per_page=100"
+    )
+    assert resp.status_code == 200
+    assert resp.json()["items"] == []
+
+
+async def test_list_resources_tag_ids_project_isolation(
+    db_session: AsyncSession,
+    tag_id_resources,
+    client: AsyncClient,
+):
+    """其他项目为同名标签挂的 resource_tag 不串入本项目列表。"""
+    other = Project(name="TagIds 隔离项目", is_active=True)
+    db_session.add(other)
+    await db_session.commit()
+    await db_session.refresh(other)
+    assert other.id is not None
+
+    other_tag = Tag(project_id=other.id, name="tagid-O", description="d")
+    db_session.add(other_tag)
+    await db_session.commit()
+    await db_session.refresh(other_tag)
+    assert other_tag.id is not None
+
+    # 在其他项目为 tagid-r1 建 resource_tag
+    r1 = tag_id_resources[0]
+    assert r1.id is not None
+    db_session.add(
+        ResourceTag(project_id=other.id, resource_id=r1.id, tag_id=other_tag.id)
+    )
+    await db_session.commit()
+
+    # 本项目用同名标签过滤应不命中（项目隔离）
+    resp = await client.get(
+        f"/projects/{PID}/resource?tag_ids={other_tag.id}&name=tagid&per_page=100"
+    )
+    assert resp.status_code == 200
+    assert resp.json()["items"] == []

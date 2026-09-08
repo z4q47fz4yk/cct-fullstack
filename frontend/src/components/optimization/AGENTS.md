@@ -12,12 +12,11 @@ optimization/
 ├── RunStatusBar.vue              # 运行状态/进度条
 ├── ParetoChart.vue               # 帕累托解集散点图
 ├── ParetoSolutionsList.vue       # 解集列表
-├── EmissionAnalysisTab.vue       # 碳排放分析
-├── ResourceConstraintForm.vue    # 资源约束表单
-├── ResourceConstraintList.vue    # 约束列表
-├── ResourceReuseConfigForm.vue   # 复用配置表单
-└── ResourceReuseConfigList.vue   # 复用配置列表
+└── EmissionAnalysisTab.vue       # 碳排放分析
 ```
+
+> 资源约束 / 周转复用配置已并入资源管理（`components/resource/ResourceForm.vue`，
+> 通过 `useConstraintApi` / `useReuseConfigApi` 编排增删改）。
 
 ## WHERE TO LOOK
 
@@ -27,8 +26,6 @@ optimization/
 | 监控运行状态 | `RunStatusBar.vue`                            |
 | 查看帕累托解 | `ParetoChart.vue` + `ParetoSolutionsList.vue` |
 | 碳排放分析   | `EmissionAnalysisTab.vue`                     |
-| 资源约束     | `ResourceConstraintForm/List.vue`             |
-| 复用配置     | `ResourceReuseConfigForm/List.vue`            |
 
 ## CONVENTIONS
 

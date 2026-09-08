@@ -69,7 +69,7 @@ const [quantity, quantityAttrs] = defineField('quantity')
 const { tasks } = useScheduleApi()
 const { apiResources } = useResourceApi({
   category: activeCategory,
-  searchQuery: ref(''),
+  name: ref(''),
   page: ref(1),
   pageSize: ref(1000),
 })
@@ -175,7 +175,11 @@ function closeModal() {
       <!-- 资源分类标签 + 资源下拉 -->
       <fieldset class="fieldset">
         <label class="fieldset-label">资源分类</label>
-        <ResourceCategoryTabs v-model:selected-category="activeCategory" :disabled="isSubmitting" />
+        <ResourceCategoryTabs
+          :selected-category="activeCategory"
+          :disabled="isSubmitting"
+          @update:selected-category="(v) => v != null && (activeCategory = v)"
+        />
       </fieldset>
       <fieldset class="fieldset">
         <label class="fieldset-label">资源</label>

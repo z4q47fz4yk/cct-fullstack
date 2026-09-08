@@ -1,62 +1,35 @@
 import { computed } from 'vue'
-import { useQuery, useMutation, useQueryCache } from '@pinia/colada'
-import { useProjectContext } from '@/composables/useProjectContext'
-import type { ResourceConstraintResp } from '@/types/constraint'
+import { useMutation } from '@pinia/colada'
 import {
-  listResourceConstraintsQuery,
-  listResourceConstraintsQueryKey,
   createResourceConstraintMutation,
   updateResourceConstraintMutation,
   deleteResourceConstraintMutation,
 } from '@/client/@pinia/colada.gen'
 
 /**
- * 资源限制 API 封装
- * 提供资源限制的 CRUD 操作和缓存管理
+ * 资源限制 API 封装（仅 mutation）
+ *
+ * 列表查询已统一到 `useResourceApi`（listResourcesQuery 的 include_constraint 选项）。
+ * 资源管理页通过 `useResourceApi({ includeConstraint: true })` 在 list 响应里
+ * 直接拿到每条资源附带的 `constraint` 字段，无需自行拼装 Map。
+ *
+ * 本 composable 仅承担 CRUD 写入；创建/更新/删除成功后由调用方失效资源列表缓存
+ * （资源页 saveResource / handleDeleteResource 自行 refresh useResourceApi）。
  */
 export function useConstraintApi() {
-  const queryCache = useQueryCache()
-  const { currentProjectId } = useProjectContext()
-
-  /**
-   * 缓存失效函数
-   * 用于在创建、更新、删除操作后刷新列表缓存
-   */
-  const invalidateConstraintsCache = async () => {
-    await queryCache.invalidateQueries({
-      key: listResourceConstraintsQueryKey({
-        path: { project_id: currentProjectId.value! },
-      }),
-    })
-  }
-
-  // 查询资源限制列表
-  const { state, asyncStatus, error, refresh } = useQuery(() =>
-    listResourceConstraintsQuery({
-      path: { project_id: currentProjectId.value! },
-    }),
-  )
-
-  const constraints = computed<ResourceConstraintResp[]>(() => state.value?.data?.items ?? [])
-  const totalConstraints = computed(() => state.value?.data?.total ?? 0)
-  const isLoading = computed(() => asyncStatus.value === 'loading')
-
   // 创建资源限制
   const { mutateAsync: createConstraint, asyncStatus: createStatus } = useMutation({
     ...createResourceConstraintMutation(),
-    onSuccess: invalidateConstraintsCache,
   })
 
   // 更新资源限制
   const { mutateAsync: updateConstraint, asyncStatus: updateStatus } = useMutation({
     ...updateResourceConstraintMutation(),
-    onSuccess: invalidateConstraintsCache,
   })
 
   // 删除资源限制
   const { mutateAsync: deleteConstraint, asyncStatus: deleteStatus } = useMutation({
     ...deleteResourceConstraintMutation(),
-    onSuccess: invalidateConstraintsCache,
   })
 
   const isSubmitting = computed(
@@ -67,21 +40,9 @@ export function useConstraintApi() {
   )
 
   return {
-    // 查询相关
-    constraints,
-    totalConstraints,
-    isLoading,
-    error,
-    refresh,
-    // Mutation 相关
     createConstraint,
     updateConstraint,
     deleteConstraint,
     isSubmitting,
-    // 缓存管理
-    invalidateConstraintsCache,
   }
 }
-
-// 导出查询 Key 函数，供外部使用
-export { listResourceConstraintsQueryKey }

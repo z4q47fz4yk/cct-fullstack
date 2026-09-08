@@ -4,35 +4,63 @@ import ResourceCategoryTabs from '@/components/resource/ResourceCategoryTabs.vue
 import BaseModal from '@/components/ui/BaseModal.vue'
 import { useForm } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/valibot'
-import { vResourceCreate } from '@/client/valibot.gen'
+import { vResourceCategory, vResourceCreate } from '@/client/valibot.gen'
 import * as v from 'valibot'
-import { onMounted, watch } from 'vue'
+import { computed, onMounted, watch } from 'vue'
+import type { ConstraintDraft, ReuseDraft } from '@/types/resource'
 
 const showModal = defineModel<boolean>('show', { required: true })
 const data = defineModel<ResourceCreate>('resource', { required: true })
+
+/** 资源限制草稿（仅 resources 页传入 & 编辑） */
+const constraint = defineModel<ConstraintDraft>('constraint', {
+  default: () => ({ enabled: false, maxUsage: null, description: '' }),
+})
+/** 周转复用草稿（仅 resources 页传入 & material） */
+const reuse = defineModel<ReuseDraft>('reuse', {
+  default: () => ({
+    enabled: false,
+    maxReuses: 1,
+    reuseCount: 1,
+    affectCost: false,
+    description: null,
+  }),
+})
 
 const emit = defineEmits<{
   submit: []
   cancel: []
 }>()
 
-const { title, isSubmitting, error } = defineProps<{
+const {
+  title,
+  isSubmitting,
+  error,
+  // 资源管理弹窗开启：显示限制/周转复用区块
+  configurable = false,
+  // 新增资源：分类初始为空并必须显式选择（避免默认 labor 被遗忘）
+  requireCategory = false,
+} = defineProps<{
   title: string
   isSubmitting?: boolean
   error?: string
+  configurable?: boolean
+  requireCategory?: boolean
 }>()
 
 // 基于后端生成的 vResourceCreate，本地补充约束：
-// unitPrice（元）允许小数且须非负（客户端 schema 仅校验 number，min 由本地补）
-const validationSchema = toTypedSchema(
+// unitPrice（元）允许小数且须非负（客户端 schema 仅校验 number，min 由本地补）；
+// category 允许 null（编辑由预填保证非空；新增由 categoryInvalid + submit 守卫强制选择）
+const formSchema = toTypedSchema(
   v.object({
     ...vResourceCreate.entries,
     unitPrice: v.optional(v.pipe(v.number(), v.minValue(0)), 0),
+    category: v.nullable(vResourceCategory),
   }),
 )
 
-const { handleSubmit, resetForm, errors, setValues, meta, defineField } = useForm({
-  validationSchema,
+const { handleSubmit, errors, setValues, meta, defineField } = useForm({
+  validationSchema: formSchema,
   initialValues: data.value,
 })
 const [name, nameAttrs] = defineField('name')
@@ -71,9 +99,14 @@ onMounted(() => {
 
 function syncFromData() {
   if (data.value) {
+    // 新增（requireCategory）时不预填分类，强制用户显式选择；
+    // 编辑 / ReviewTable 等由既有数据预填
+    const initialCategory = requireCategory
+      ? null
+      : ((data.value.category || null) as ResourceCategory | null)
     setValues({
       name: data.value.name || '',
-      category: (data.value.category || 'labor') as ResourceCategory,
+      category: initialCategory,
       unit: data.value.unit || '',
       unitPrice: data.value.unitPrice || 0,
       carbonFactor: data.value.carbonFactor || 0,
@@ -84,10 +117,18 @@ function syncFromData() {
 
 watch(data, syncFromData, { immediate: true })
 
+// 仅 material 分类下可配置周转复用
+const isMaterial = computed(() => category.value === 'material')
+const showReuseSection = computed(() => configurable && isMaterial.value)
+
+// 分类必选错误提示（新增且未选时禁用保存）
+const categoryInvalid = computed(() => requireCategory && !category.value)
+
 function onSubmit() {
+  if (requireCategory && !category.value) return
   data.value = {
     name: name.value ?? '',
-    category: category.value ?? 'labor',
+    category: (category.value ?? 'labor') as ResourceCategory,
     unit: unit.value ?? '',
     unitPrice: unitPrice.value ?? 0,
     carbonFactor: carbonFactor.value ?? 0,
@@ -98,7 +139,7 @@ function onSubmit() {
 </script>
 
 <template>
-  <BaseModal v-model:open="showModal" :title="title" class="max-w-md" @close="emit('cancel')">
+  <BaseModal v-model:open="showModal" :title="title" class="max-w-xl" @close="emit('cancel')">
     <form class="space-y-4" @submit.prevent="handleSubmit(onSubmit)()">
       <div class="grid grid-cols-2 gap-4">
         <!-- 资源名称 -->
@@ -129,6 +170,9 @@ function onSubmit() {
               }
             "
           />
+          <p v-if="categoryInvalid || errors.category" class="text-xs text-error mt-1" role="alert">
+            {{ errors.category || (requireCategory && !category ? '请选择资源分类' : '') }}
+          </p>
         </div>
         <!-- 单价 -->
         <div class="fieldset">
@@ -202,6 +246,152 @@ function onSubmit() {
           </span>
         </div>
       </div>
+
+      <!-- 资源限制（configurable 时可选配置） -->
+      <fieldset
+        v-if="configurable"
+        class="fieldset rounded-field border border-base-content/10 p-3"
+      >
+        <label class="fieldset-label flex items-center gap-2 cursor-pointer select-none">
+          <input
+            v-model="constraint.enabled"
+            type="checkbox"
+            class="checkbox checkbox-sm"
+            :disabled="isSubmitting"
+          />
+          <span class="material-symbols-outlined icon-sm text-warning">rule</span>
+          设置资源限制（日用量上限）
+        </label>
+        <template v-if="constraint.enabled">
+          <div class="grid grid-cols-2 gap-3 mt-2">
+            <div class="fieldset">
+              <label class="fieldset-label">最大日使用量</label>
+              <label class="input flex items-center gap-2">
+                <span class="material-symbols-outlined icon-sm text-warning/70">trending_up</span>
+                <input
+                  v-model.number="constraint.maxUsage"
+                  :disabled="isSubmitting"
+                  class="w-full bg-transparent outline-none"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="如 100"
+                />
+              </label>
+            </div>
+            <div class="fieldset">
+              <label class="fieldset-label">备注（可选）</label>
+              <input
+                v-model="constraint.description"
+                :disabled="isSubmitting"
+                class="input w-full"
+                type="text"
+                placeholder="限制用途说明"
+              />
+            </div>
+          </div>
+        </template>
+      </fieldset>
+
+      <!-- 周转复用（仅材料分类，configurable 时展示） -->
+      <fieldset
+        v-if="configurable && showReuseSection"
+        class="fieldset rounded-field border border-base-content/10 p-3"
+      >
+        <label class="fieldset-label flex items-center gap-2 cursor-pointer select-none">
+          <input
+            v-model="reuse.enabled"
+            type="checkbox"
+            class="checkbox checkbox-sm"
+            :disabled="isSubmitting"
+          />
+          <span class="material-symbols-outlined icon-sm text-cyan">autorenew</span>
+          该材料可周转复用
+        </label>
+        <template v-if="reuse.enabled">
+          <div class="grid grid-cols-2 gap-3 mt-2">
+            <div class="fieldset">
+              <label class="fieldset-label">最大周转次数</label>
+              <label class="input flex items-center gap-2">
+                <input
+                  v-model.number="reuse.maxReuses"
+                  :disabled="isSubmitting"
+                  class="w-full bg-transparent outline-none"
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="理论最大周转次数"
+                />
+              </label>
+            </div>
+            <div class="fieldset">
+              <label class="fieldset-label">实际周转次数</label>
+              <label class="input flex items-center gap-2">
+                <input
+                  v-model.number="reuse.reuseCount"
+                  :disabled="isSubmitting"
+                  class="w-full bg-transparent outline-none"
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="本项目实际周转次数"
+                />
+              </label>
+              <p v-if="reuse.reuseCount > reuse.maxReuses" class="mt-1 text-xs text-warning">
+                实际周转次数已超过最大周转次数，请确认
+              </p>
+            </div>
+            <div class="fieldset col-span-2">
+              <span class="fieldset-label">是否影响成本</span>
+              <div
+                class="flex w-full gap-1 rounded-field border border-base-content/10 bg-base-content/5 p-[0.1rem]"
+                role="group"
+                aria-label="是否影响成本"
+              >
+                <button
+                  type="button"
+                  class="flex-1 rounded-field px-3 py-1 text-sm font-medium transition-colors"
+                  :class="
+                    reuse.affectCost
+                      ? 'bg-primary/15 text-primary shadow-sm'
+                      : 'text-fg-muted hover:bg-base-content/5 hover:text-base-content'
+                  "
+                  :disabled="isSubmitting"
+                  :aria-pressed="reuse.affectCost"
+                  @click="reuse.affectCost = true"
+                >
+                  周转摊薄成本
+                </button>
+                <button
+                  type="button"
+                  class="flex-1 rounded-field px-3 py-1 text-sm font-medium transition-colors"
+                  :class="
+                    !reuse.affectCost
+                      ? 'bg-primary/15 text-primary shadow-sm'
+                      : 'text-fg-muted hover:bg-base-content/5 hover:text-base-content'
+                  "
+                  :disabled="isSubmitting"
+                  :aria-pressed="!reuse.affectCost"
+                  @click="reuse.affectCost = false"
+                >
+                  仅摊薄碳排放
+                </button>
+              </div>
+            </div>
+            <div class="fieldset col-span-2">
+              <label class="fieldset-label">备注（可选）</label>
+              <textarea
+                v-model="reuse.description"
+                :disabled="isSubmitting"
+                rows="2"
+                placeholder="周转配置说明"
+                class="textarea w-full"
+              />
+            </div>
+          </div>
+        </template>
+      </fieldset>
+
       <!-- 错误提示 -->
       <div v-if="error" class="alert alert-error alert-sm">
         <span class="material-symbols-outlined icon-sm"> error </span>
@@ -217,7 +407,11 @@ function onSubmit() {
         >
           取消
         </button>
-        <button class="btn btn-primary" type="submit" :disabled="isSubmitting || !meta.valid">
+        <button
+          class="btn btn-primary"
+          type="submit"
+          :disabled="isSubmitting || !meta.valid || categoryInvalid"
+        >
           <span v-if="isSubmitting" class="loading loading-spinner loading-xs"></span>
           <span>保存</span>
         </button>

@@ -1214,7 +1214,7 @@
           "resource"
         ],
         "summary": "Resource List",
-        "description": "列出资源条目，支持分页、按名称查找、按分类筛选。include_tags=true 时每个资源附带其直接挂载标签，并按资源类别并入对应的分类默认标签（如材料类资源恒带「材料」默认标签），与用量物化视图按名称合并 tags 口径一致。",
+        "description": "列出资源条目，支持分页、按名称查找、按分类筛选、按资源约束/周转复用过滤、按标签 AND 过滤。\n\n过滤器：\n- ``constrained=true`` 仅返回项目内拥有日用量约束的资源；\n- ``reusable=true`` 仅返回项目内拥有周转复用配置的资源；\n- 二者互斥，同时为 true 返回 422；\n- ``tag_ids=1&tag_ids=2`` 仅返回同时挂载所有指定标签的资源（AND 过滤，仅看 ``resource_tag`` 直接挂载行，不含默认分类标签）。\n\n结果选项：\n- ``include_tags=true`` 每个资源附带其直接挂载标签，并按资源类别并入对应的分类默认标签（如材料类资源恒带「材料」默认标签），与用量物化视图按名称合并 tags 口径一致；\n- ``include_constraint=true`` 附带 ``constraint`` 字段；无约束则为 null；\n- ``include_reuse_config=true`` 附带 ``reuse_config`` 字段；无配置则为 null。",
         "operationId": "list_resources",
         "parameters": [
           {
@@ -1259,6 +1259,45 @@
             }
           },
           {
+            "name": "constrained",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Constrained"
+            }
+          },
+          {
+            "name": "reusable",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Reusable"
+            }
+          },
+          {
+            "name": "tag_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag Ids"
+            }
+          },
+          {
             "name": "include_tags",
             "in": "query",
             "required": false,
@@ -1266,6 +1305,26 @@
               "type": "boolean",
               "default": false,
               "title": "Include Tags"
+            }
+          },
+          {
+            "name": "include_constraint",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Constraint"
+            }
+          },
+          {
+            "name": "include_reuse_config",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Reuse Config"
             }
           },
           {
@@ -1298,7 +1357,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ListResp_ResourceWithTagsResp_"
+                  "$ref": "#/components/schemas/ListResp_ResourceWithConfigResp_"
                 }
               }
             }
@@ -8871,11 +8930,11 @@
         ],
         "title": "ListResourceUsageWithTagsResp"
       },
-      "ListResp_ResourceWithTagsResp_": {
+      "ListResp_ResourceWithConfigResp_": {
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/ResourceWithTagsResp"
+              "$ref": "#/components/schemas/ResourceWithConfigResp"
             },
             "type": "array",
             "title": "Items"
@@ -8890,7 +8949,7 @@
           "items",
           "total"
         ],
-        "title": "ListResourceWithTagsResp"
+        "title": "ListResourceWithConfigResp"
       },
       "ListResp_RunResp_": {
         "properties": {
@@ -12659,7 +12718,7 @@
         "title": "ResourceUsageWithTagsResp",
         "description": "资源使用记录列表响应（含直接挂载的标签，includeTags=true 时填充）。"
       },
-      "ResourceWithTagsResp": {
+      "ResourceWithConfigResp": {
         "properties": {
           "createdAt": {
             "type": "string",
@@ -12717,6 +12776,28 @@
             "type": "array",
             "title": "Tags",
             "description": "直接挂载到该资源的标签"
+          },
+          "constraint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResourceConstraintResp"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "资源日用量约束（include_constraint=true 时填充）"
+          },
+          "reuseConfig": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResourceReuseConfigResp"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "资源周转复用配置（include_reuse_config=true 时填充）"
           }
         },
         "type": "object",
@@ -12731,8 +12812,8 @@
           "unitPrice",
           "carbonFactor"
         ],
-        "title": "ResourceWithTagsResp",
-        "description": "资源列表响应（含直接挂载的标签，includeTags=true 时填充）。"
+        "title": "ResourceWithConfigResp",
+        "description": "资源列表响应（可附带资源约束与周转复用配置）。\n\n- ``include_constraint=true`` 时填充 ``constraint`` 字段；项目内无约束则为\n  ``None``。\n- ``include_reuse_config=true`` 时填充 ``reuse_config`` 字段；项目内无配置则为\n  ``None``。\n- ``include_*=false`` 时字段默认 ``None``（路由层不会为 ``false`` 开关填充）。"
       },
       "RunConfig": {
         "properties": {

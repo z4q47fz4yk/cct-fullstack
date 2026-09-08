@@ -2,13 +2,18 @@
 import { computed } from 'vue'
 import type { Resource, ResourceCategory } from '@/types/resource'
 import { categoryConfigMap } from '@/types/resource'
-import type { ResourceWithTagsResp } from '@/client/types.gen'
+import type { ResourceWithConfigResp } from '@/client/types.gen'
 import { fmtNumber } from '@/utils/format'
 import TableEmptyState from '@/components/common/TableEmptyState.vue'
 import TagInput from '@/components/tag/TagInput.vue'
 
 const { resources, category } = defineProps<{
-  resources: ResourceWithTagsResp[]
+  /**
+   * 当前页资源；每条已通过 listResources 的 include_* 选项附带
+   * `tags` / `constraint` / `reuse_config` 字段，无需调用方额外注入 Map。
+   */
+  resources: ResourceWithConfigResp[]
+  /** 当前分类（仅用于表格列的图标与按钮语义） */
   category: ResourceCategory
 }>()
 
@@ -29,21 +34,25 @@ interface TableHeader {
   center?: boolean
 }
 
-const tableHeaders: TableHeader[] = [
-  // { key: 'select', label: '', width: 'w-12' },
-  // { key: 'category', label: '类别', width: 'w-16' },
-  { key: 'name', label: '资源名称', width: 'flex-1' },
-  { key: 'tags', label: '标签', width: 'w-52' },
-  // { key: 'id', label: 'ID', width: 'w-20' },
-  // 单价/碳因子：表头 colspan=2 隐式拆为「数字列 + 单位列」，跨行数字对齐；
-  // 表头居中（覆盖两列），数字与单位间收紧 padding 营造单列观感
-  { key: 'unitPrice', label: '单价', width: 'w-40', colspan: 2, center: true },
-  { key: 'carbonFactor', label: '碳排放因子', width: 'w-44', colspan: 2, center: true },
-  { key: 'actions', label: '操作', width: 'w-28' },
-]
+const tableHeaders = computed<TableHeader[]>(() => {
+  const headers: TableHeader[] = [
+    // { key: 'select', label: '', width: 'w-12' },
+    // { key: 'category', label: '类别', width: 'w-16' },
+    { key: 'name', label: '资源名称', width: 'flex-1' },
+    { key: 'config', label: '', width: 'w-16' },
+    { key: 'tags', label: '标签', width: 'w-52' },
+    // { key: 'id', label: 'ID', width: 'w-20' },
+    // 单价/碳因子：表头 colspan=2 隐式拆为「数字列 + 单位列」，跨行数字对齐；
+    // 表头居中（覆盖两列），数字与单位间收紧 padding 营造单列观感
+    { key: 'unitPrice', label: '单价', width: 'w-40', colspan: 2, center: true },
+    { key: 'carbonFactor', label: '碳排放因子', width: 'w-44', colspan: 2, center: true },
+    { key: 'actions', label: '操作', width: 'w-28' },
+  ]
+  return headers
+})
 
 /** 物理单元格总数（含 colspan 拆出的隐式列） */
-const cellCount = tableHeaders.reduce((sum, h) => sum + (h.colspan ?? 1), 0)
+const cellCount = computed(() => tableHeaders.value.reduce((sum, h) => sum + (h.colspan ?? 1), 0))
 
 const categoryIcon = computed(() => categoryConfigMap[category].icon)
 </script>
@@ -101,6 +110,29 @@ const categoryIcon = computed(() => categoryConfigMap[category].icon)
             </td> -->
             <td>
               <div class="font-medium text-base-content">{{ resource.name }}</div>
+            </td>
+            <td class="w-16">
+              <!-- 状态徽标：图标-only，无文字；title/aria 中文说明 -->
+              <div class="flex items-center gap-1.5">
+                <span
+                  v-if="resource.constraint"
+                  class="material-symbols-outlined icon-sm text-warning"
+                  role="img"
+                  :aria-label="`有限制：日用量上限 ${resource.constraint.maxUsage}`"
+                  :title="`有限制：日用量上限 ${resource.constraint.maxUsage}`"
+                >
+                  rule
+                </span>
+                <span
+                  v-if="resource.reuseConfig"
+                  class="material-symbols-outlined icon-sm text-cyan"
+                  role="img"
+                  :aria-label="`可复用：周转 ${resource.reuseConfig.maxReuses} 次`"
+                  :title="`可复用：周转 ${resource.reuseConfig.maxReuses} 次`"
+                >
+                  autorenew
+                </span>
+              </div>
             </td>
             <td>
               <!-- 标签列：行内 tag-input（悬停 ✕ 移除，(+tag) 虚线新增） -->

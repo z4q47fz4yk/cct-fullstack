@@ -1,62 +1,34 @@
 import { computed } from 'vue'
-import { useQuery, useMutation, useQueryCache } from '@pinia/colada'
-import { useProjectContext } from '@/composables/useProjectContext'
-import type { ResourceReuseConfigResp } from '@/types/reuseConfig'
+import { useMutation } from '@pinia/colada'
 import {
-  listReuseConfigsQuery,
-  listReuseConfigsQueryKey,
   createReuseConfigMutation,
   updateReuseConfigMutation,
   deleteReuseConfigMutation,
 } from '@/client/@pinia/colada.gen'
 
 /**
- * 可周转材料复用配置 API 封装
- * 提供复用配置的 CRUD 操作和缓存管理
+ * 可周转材料复用配置 API 封装（仅 mutation）
+ *
+ * 列表查询已统一到 `useResourceApi`（listResourcesQuery 的 include_reuse_config 选项）。
+ * 资源管理页通过 `useResourceApi({ includeReuseConfig: true })` 在 list 响应里
+ * 直接拿到每条资源附带的 `reuse_config` 字段，无需自行拼装 Map。
+ *
+ * 本 composable 仅承担 CRUD 写入；创建/更新/删除成功后由调用方失效资源列表缓存。
  */
 export function useReuseConfigApi() {
-  const queryCache = useQueryCache()
-  const { currentProjectId } = useProjectContext()
-
-  /**
-   * 缓存失效函数
-   * 用于在创建、更新、删除操作后刷新列表缓存
-   */
-  const invalidateConfigsCache = async () => {
-    await queryCache.invalidateQueries({
-      key: listReuseConfigsQueryKey({
-        path: { project_id: currentProjectId.value! },
-      }),
-    })
-  }
-
-  // 查询复用配置列表
-  const { state, asyncStatus, error, refresh } = useQuery(() =>
-    listReuseConfigsQuery({
-      path: { project_id: currentProjectId.value! },
-    }),
-  )
-
-  const configs = computed<ResourceReuseConfigResp[]>(() => state.value?.data?.items ?? [])
-  const totalConfigs = computed(() => state.value?.data?.total ?? 0)
-  const isLoading = computed(() => asyncStatus.value === 'loading')
-
   // 创建复用配置
   const { mutateAsync: createConfig, asyncStatus: createStatus } = useMutation({
     ...createReuseConfigMutation(),
-    onSuccess: invalidateConfigsCache,
   })
 
   // 更新复用配置
   const { mutateAsync: updateConfig, asyncStatus: updateStatus } = useMutation({
     ...updateReuseConfigMutation(),
-    onSuccess: invalidateConfigsCache,
   })
 
   // 删除复用配置
   const { mutateAsync: deleteConfig, asyncStatus: deleteStatus } = useMutation({
     ...deleteReuseConfigMutation(),
-    onSuccess: invalidateConfigsCache,
   })
 
   const isSubmitting = computed(
@@ -67,21 +39,9 @@ export function useReuseConfigApi() {
   )
 
   return {
-    // 查询相关
-    configs,
-    totalConfigs,
-    isLoading,
-    error,
-    refresh,
-    // Mutation 相关
     createConfig,
     updateConfig,
     deleteConfig,
     isSubmitting,
-    // 缓存管理
-    invalidateConfigsCache,
   }
 }
-
-// 导出查询 Key 函数，供外部使用
-export { listReuseConfigsQueryKey }

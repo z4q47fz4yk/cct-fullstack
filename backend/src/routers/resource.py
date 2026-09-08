@@ -9,16 +9,20 @@ from sqlmodel.sql.expression import SelectOfScalar
 from src.dependencies.public.pagination import PagiCallable, get_pagination
 from src.dependencies.public.project import CurrentProject
 from src.dependencies.public.session import get_db_session
+from src.models.optimize import ResourceConstraint
 from src.models.resource import Resource, ResourceCategory
+from src.models.resource_reuse_config import ResourceReuseConfig
 from src.models.tag import ResourceTag, Tag
+from src.schemas.optimize import ResourceConstraintResp
 from src.schemas.public.pagination import ListResp
 from src.schemas.resource import (
     ResourceCategoryStat,
     ResourceCreate,
     ResourceResp,
     ResourceUpdate,
-    ResourceWithTagsResp,
+    ResourceWithConfigResp,
 )
+from src.schemas.resource_reuse_config import ResourceReuseConfigResp
 from src.schemas.tag import RESOURCE_CATEGORY_LABEL, TagResp
 from src.utils.db_errors import is_unique_violation
 from src.utils.query import project_count_filter, project_filter
@@ -40,12 +44,24 @@ T = TypeVar("T", bound="SQLModel")
 @router.get(
     path="",
     status_code=200,
-    response_model=ListResp[ResourceWithTagsResp],
+    response_model=ListResp[ResourceWithConfigResp],
     summary="Resource List",
     description=(
-        "列出资源条目，支持分页、按名称查找、按分类筛选。include_tags=true 时"
-        "每个资源附带其直接挂载标签，并按资源类别并入对应的分类默认标签"
-        "（如材料类资源恒带「材料」默认标签），与用量物化视图按名称合并 tags 口径一致。"
+        "列出资源条目，支持分页、按名称查找、按分类筛选、按资源约束/周转复用过滤、"
+        "按标签 AND 过滤。\n\n"
+        "过滤器：\n"
+        "- ``constrained=true`` 仅返回项目内拥有日用量约束的资源；\n"
+        "- ``reusable=true`` 仅返回项目内拥有周转复用配置的资源；\n"
+        "- 二者互斥，同时为 true 返回 422；\n"
+        "- ``tag_ids=1&tag_ids=2`` 仅返回同时挂载所有指定标签的资源（AND 过滤，"
+        "仅看 ``resource_tag`` 直接挂载行，不含默认分类标签）。\n\n"
+        "结果选项：\n"
+        "- ``include_tags=true`` 每个资源附带其直接挂载标签，并按资源类别并入对应的"
+        "分类默认标签（如材料类资源恒带「材料」默认标签），与用量物化视图按名称合并"
+        " tags 口径一致；\n"
+        "- ``include_constraint=true`` 附带 ``constraint`` 字段；无约束则为 null；\n"
+        "- ``include_reuse_config=true`` 附带 ``reuse_config`` 字段；无配置则为"
+        " null。"
     ),
 )
 async def list_resources(
@@ -54,8 +70,19 @@ async def list_resources(
     paginate: Annotated[PagiCallable, Depends(get_pagination)],
     name: Annotated[str | None, Query()] = None,
     category: Annotated[ResourceCategory | None, Query()] = None,
+    constrained: Annotated[bool, Query()] = False,
+    reusable: Annotated[bool, Query()] = False,
+    tag_ids: Annotated[list[int] | None, Query()] = None,
     include_tags: Annotated[bool, Query()] = False,
+    include_constraint: Annotated[bool, Query()] = False,
+    include_reuse_config: Annotated[bool, Query()] = False,
 ):
+    if constrained and reusable:
+        raise HTTPException(
+            status_code=422,
+            detail="constrained 与 reusable 互斥，至多只能有一个为 true",
+        )
+
     stmt = select(Resource)
     stmt_count: SelectOfScalar[int] = select(func.count()).select_from(Resource)
 
@@ -63,11 +90,40 @@ async def list_resources(
     stmt = project_filter(stmt, Resource, project.id)
     stmt_count = project_count_filter(stmt_count, Resource, project.id)
 
+    # constrained/reusable 子查询：按 (project_id, resource_id) 命中 uq_* 索引
+    def _constrained_subq() -> SelectOfScalar[int]:
+        return select(ResourceConstraint.resource_id).where(
+            col(ResourceConstraint.project_id) == project.id
+        )
+
+    def _reusable_subq() -> SelectOfScalar[int]:
+        return select(ResourceReuseConfig.resource_id).where(
+            col(ResourceReuseConfig.project_id) == project.id
+        )
+
+    # tag_ids AND 子查询：仅看直接挂载（resource_tag 行）；默认分类标签不入此过滤。
+    def _tag_ids_and_subq(ids: list[int]) -> SelectOfScalar[int]:
+        return (
+            select(ResourceTag.resource_id)
+            .where(
+                col(ResourceTag.project_id) == project.id,
+                col(ResourceTag.tag_id).in_(ids),
+            )
+            .group_by(col(ResourceTag.resource_id))
+            .having(func.count(func.distinct(col(ResourceTag.tag_id))) == len(ids))
+        )
+
     def filter[T](s: SelectOfScalar[T]) -> SelectOfScalar[T]:
         if name is not None:
             s = s.filter(col(Resource.name).contains(name))
         if category is not None:
             s = s.filter(col(Resource.category) == category)
+        if constrained:
+            s = s.filter(col(Resource.id).in_(_constrained_subq()))
+        if reusable:
+            s = s.filter(col(Resource.id).in_(_reusable_subq()))
+        if tag_ids:
+            s = s.filter(col(Resource.id).in_(_tag_ids_and_subq(tag_ids)))
         return s
 
     stmt = filter(stmt)
@@ -80,13 +136,17 @@ async def list_resources(
     items = (await session.exec(stmt)).all()
     count = (await session.exec(stmt_count)).one()
 
-    if not include_tags:
-        return ListResp[ResourceWithTagsResp](items=items, total=count)
+    # 不附带任何附加信息时，行为与旧契约字节级一致（ResourceWithConfigResp 中
+    # constraint/reuse_config 默认 None；Pydantic v2 默认序列化 None 字段，响应会
+    # 出现 "constraint": null、"reuse_config": null——前端代码兼容这两种形态）。
+    if not include_tags and not include_constraint and not include_reuse_config:
+        return ListResp[ResourceWithConfigResp](items=items, total=count)  # type: ignore[arg-type]
 
-    # 批量预取整页资源的直接标签（单次查询，避免 N+1）
     resource_ids = [r.id for r in items if r.id is not None]
+
+    # 标签批量预取
     tags_by_resource: dict[int, list[TagResp]] = {}
-    if resource_ids:
+    if include_tags and resource_ids:
         tag_rows = (
             await session.exec(
                 select(Tag, ResourceTag.resource_id)
@@ -106,7 +166,7 @@ async def list_resources(
     # 分类显示名（默认标签行，is_default=true）作为标签之一。默认标签不落
     # resource_tag 行（禁手工挂载），故需在此按 resource.category 并入。
     default_tag_by_name: dict[str, Tag] = {}
-    if items:
+    if include_tags and items:
         default_tag_rows = (
             await session.exec(
                 select(Tag)
@@ -134,11 +194,52 @@ async def list_resources(
         tags.sort(key=lambda t: t.id)
         return tags
 
-    items_with_tags = [
-        ResourceWithTagsResp.model_validate(r, update={"tags": _resource_tags(r)})
-        for r in items
-    ]
-    return ListResp[ResourceWithTagsResp](items=items_with_tags, total=count)
+    # 约束 / 周转复用批量预取（按 resource_id 建 dict）
+    constraint_by_resource: dict[int, ResourceConstraintResp] = {}
+    if include_constraint and resource_ids:
+        constraint_rows = (
+            await session.exec(
+                select(ResourceConstraint).where(
+                    col(ResourceConstraint.project_id) == project.id,
+                    col(ResourceConstraint.resource_id).in_(resource_ids),
+                )
+            )
+        ).all()
+        for c in constraint_rows:
+            if c.resource_id is not None:
+                constraint_by_resource[c.resource_id] = (
+                    ResourceConstraintResp.model_validate(c)
+                )
+
+    reuse_by_resource: dict[int, ResourceReuseConfigResp] = {}
+    if include_reuse_config and resource_ids:
+        reuse_rows = (
+            await session.exec(
+                select(ResourceReuseConfig).where(
+                    col(ResourceReuseConfig.project_id) == project.id,
+                    col(ResourceReuseConfig.resource_id).in_(resource_ids),
+                )
+            )
+        ).all()
+        for rc in reuse_rows:
+            if rc.resource_id is not None:
+                reuse_by_resource[rc.resource_id] = (
+                    ResourceReuseConfigResp.model_validate(rc)
+                )
+
+    def _build(r: Resource) -> ResourceWithConfigResp:
+        rid = r.id or -1
+        update: dict[str, object] = {}
+        if include_tags:
+            update["tags"] = _resource_tags(r)
+        if include_constraint:
+            update["constraint"] = constraint_by_resource.get(rid)
+        if include_reuse_config:
+            update["reuse_config"] = reuse_by_resource.get(rid)
+        return ResourceWithConfigResp.model_validate(r, update=update)
+
+    items_with_config = [_build(r) for r in items]
+    return ListResp[ResourceWithConfigResp](items=items_with_config, total=count)
 
 
 @router.get(
