@@ -119,7 +119,8 @@ class ResourceUsageFilter(CamelCaseRespMixin):
     task_ids: list[int] | None = Field(default=None, description="任务ID列表")
     batch_id: uuid.UUID | None = Field(default=None, description="导入批次ID")
     manual_batch_id: int | None = Field(default=None, description="手动录入批次ID")
-    date: date_type | None = Field(default=None, description="使用日期")
+    from_date: date_type | None = Field(default=None, description="起始日期（含）")
+    to_date: date_type | None = Field(default=None, description="结束日期（含）")
     usage_type: UsageType | None = Field(
         default=None, description="使用类型过滤 (不传则返回所有类型)"
     )

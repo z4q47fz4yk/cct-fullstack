@@ -13,9 +13,11 @@ import ResourceUsageFilters from '@/components/resource-usage/ResourceUsageFilte
 import TagAssignModal from '@/components/tag/TagAssignModal.vue'
 import {
   useResourceUsageApi,
+  getUsageChunkKey,
   type ResourceUsageFilters as Filters,
 } from '@/composables/useResourceUsageApi'
 import { useProjectContext } from '@/composables/useProjectContext'
+import { daysAgoIsoLocal, todayIsoLocal } from '@/utils/date'
 
 import type { TagEntityRef } from '@/composables/useEntityTagApi'
 import type {
@@ -38,33 +40,27 @@ definePage({
 
 const { currentProjectId } = useProjectContext()
 
-// 筛选与分页
-const filters = ref<Filters>({})
-const historyPage = ref(1)
-const historyPageSize = ref(20)
-
-const { usages, isLoading, error, refresh, updateUsage, deleteUsage, deleteBatch } =
-  useResourceUsageApi({
-    filters,
-    page: historyPage,
-    pageSize: historyPageSize,
-  })
-
-// 当前正在查看详情的 batch 复合 key
-const viewingBatchKey = ref<string | number | null>(null)
-const viewingBatchRecords = computed<ResourceUsageResp[]>(() => {
-  if (viewingBatchKey.value === null) return []
-  return usages.value.filter((u) => {
-    const rawId = u.manualBatchId ?? u.batchId ?? null
-    return rawId !== null && String(rawId) === String(viewingBatchKey.value)
-  })
+// 筛选：进入页面默认查询最近 3 天（含今天），可清空/改范围
+const filters = ref<Filters>({
+  dateFrom: daysAgoIsoLocal(2),
+  dateTo: todayIsoLocal(),
 })
 
-function openBatchDetail(key: string | number) {
-  viewingBatchKey.value = key
+const { usages, isLoading, error, refresh, updateUsage, deleteUsage, deleteBatch } =
+  useResourceUsageApi({ filters })
+
+// 当前正在查看详情的分块复合 key：(usage-date, batch-id)
+const viewingChunkKey = ref<string | null>(null)
+const viewingBatchRecords = computed<ResourceUsageResp[]>(() => {
+  if (viewingChunkKey.value === null) return []
+  return usages.value.filter((u) => getUsageChunkKey(u) === viewingChunkKey.value)
+})
+
+function openBatchDetail(chunkKey: string) {
+  viewingChunkKey.value = chunkKey
 }
 function closeBatchDetail() {
-  viewingBatchKey.value = null
+  viewingChunkKey.value = null
 }
 
 // ─── 记录 / 批次操作 ──────────────────────────────────────
@@ -73,7 +69,7 @@ async function handleDeleteRecord(id: number) {
   try {
     await deleteUsage({ path: { project_id: currentProjectId.value!, id } })
     await refresh()
-    if (viewingBatchKey.value !== null && viewingBatchRecords.value.length === 0) {
+    if (viewingChunkKey.value !== null && viewingBatchRecords.value.length === 0) {
       closeBatchDetail()
     }
   } catch (e) {
@@ -90,10 +86,10 @@ async function handleUpdateRecord(id: number, data: ResourceUsageUpdate) {
   }
 }
 
-async function handleDeleteBatch(_key: string | number, records: ResourceUsageResp[]) {
+async function handleDeleteBatch(chunkKey: string, records: ResourceUsageResp[]) {
   try {
     await deleteBatch(records)
-    if (viewingBatchKey.value === _key) closeBatchDetail()
+    if (viewingChunkKey.value === chunkKey) closeBatchDetail()
     await refresh()
   } catch (e) {
     console.error('Delete batch failed:', e)
@@ -157,7 +153,7 @@ const taggingBatchInitialTags = computed<TagResp[]>(() => {
 
   <ResourceUsageBatchList
     class="panel p-0"
-    v-if="viewingBatchKey === null"
+    v-if="viewingChunkKey === null"
     :usages="usages"
     :loading="isLoading"
     @view-detail="openBatchDetail"
@@ -167,13 +163,13 @@ const taggingBatchInitialTags = computed<TagResp[]>(() => {
 
   <ResourceUsageBatchDetail
     v-else
-    :batch-key="viewingBatchKey"
+    :chunk-key="viewingChunkKey"
     :records="viewingBatchRecords"
     :loading="isLoading"
     @close="closeBatchDetail"
     @update-record="handleUpdateRecord"
     @delete-record="handleDeleteRecord"
-    @delete-batch="handleDeleteBatch(viewingBatchKey!, viewingBatchRecords)"
+    @delete-batch="handleDeleteBatch(viewingChunkKey!, viewingBatchRecords)"
     @tags="openUsageTags"
   />
 

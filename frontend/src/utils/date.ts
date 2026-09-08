@@ -11,3 +11,12 @@ export function todayIsoLocal(): string {
   const day = String(d.getDate()).padStart(2, '0')
   return `${d.getFullYear()}-${m}-${day}`
 }
+
+/** N 天前的本地日期（YYYY-MM-DD），例如 daysAgoIsoLocal(2) = 前天 */
+export function daysAgoIsoLocal(daysAgo: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() - daysAgo)
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${m}-${day}`
+}

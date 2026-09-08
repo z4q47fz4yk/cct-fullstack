@@ -2199,7 +2199,7 @@
           "resource-usage"
         ],
         "summary": "List Resource Usages",
-        "description": "列出资源使用记录，支持多种过滤条件，可按需携带直接标签",
+        "description": "列出资源使用记录，支持日期范围（from/to）等过滤条件，返回筛选窗口内的全部记录（不分页），可按需携带直接标签",
         "operationId": "list_resource_usages",
         "parameters": [
           {
@@ -2283,7 +2283,7 @@
             }
           },
           {
-            "name": "date",
+            "name": "from_date",
             "in": "query",
             "required": false,
             "schema": {
@@ -2296,7 +2296,24 @@
                   "type": "null"
                 }
               ],
-              "title": "Date"
+              "title": "From Date"
+            }
+          },
+          {
+            "name": "to_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To Date"
             }
           },
           {
@@ -2323,29 +2340,6 @@
               "type": "boolean",
               "default": false,
               "title": "Include Tags"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 1,
-              "title": "Page"
-            }
-          },
-          {
-            "name": "per_page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 1000,
-              "minimum": 1,
-              "default": 10,
-              "title": "Per Page"
             }
           }
         ],

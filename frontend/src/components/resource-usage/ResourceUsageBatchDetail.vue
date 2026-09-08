@@ -1,11 +1,11 @@
 <script setup lang="ts">
 /**
- * ResourceUsageBatchDetail - 单个 batch 的详情面板
+ * ResourceUsageBatchDetail - 单个分块的详情面板
  *
- * 复用 ResourceUsageHistoryTable 展示该 batch 的记录
- * 顶部展示 batch 元信息（日期、记录数、来源）
+ * 复用 ResourceUsageHistoryTable 展示该分块（(usage-date, batch-id)）的记录
+ * 顶部展示分块元信息（日期、记录数、来源）
  *
- * batchKey 类型为 string | number：
+ * chunkKey 为复合键 `${usageDate}|${batchId}`：
  * - manual batch 用 manualBatchId（number）
  * - 日报 batch 用 batchId（string UUID）
  */
@@ -14,13 +14,9 @@ import type { ResourceUsageResp } from '@/client/types.gen'
 import type { ResourceUsageUpdate } from '@/client/types.gen'
 import ResourceUsageHistoryTable from './ResourceUsageHistoryTable.vue'
 
-const {
-  batchKey,
-  records,
-  loading = false,
-} = defineProps<{
-  /** 复合 key：manualBatchId (number) 或 batchId (string) */
-  batchKey: string | number
+const { records, loading = false } = defineProps<{
+  /** 复合分块键：(usage-date, batch-id) */
+  chunkKey: string
   records: ResourceUsageResp[]
   loading?: boolean
 }>()
@@ -96,7 +92,7 @@ const batchLabel = computed(() => {
           @click="emit('delete-batch')"
         >
           <span class="material-symbols-outlined icon-sm">delete_sweep</span>
-          删除整批
+          删除分块
         </button>
         <button class="btn btn-ghost btn-sm btn-square" title="关闭" @click="emit('close')">
           <span class="material-symbols-outlined icon-sm">close</span>

@@ -183,15 +183,28 @@ async def test_get_resource_usage(
             1,
             id="filter_both",
         ),
-        pytest.param({"date": "2026-06-01"}, 3, id="filter_date_only"),
-        pytest.param(
-            {"date": "2026-06-01", "resource_ids": [R_ID_BASE + 1]},
-            2,
-            id="filter_date_and_resource",
-        ),
         pytest.param({"batch_id": str(FIXED_BATCH)}, 1, id="filter_batch"),
-        pytest.param({"page": "1", "per_page": "2"}, 5, id="page1_per_page2"),
-        pytest.param({"page": "3", "per_page": "2"}, 5, id="page3_per_page2"),
+        pytest.param(
+            {"from_date": "2026-06-01", "to_date": "2026-06-01"},
+            3,
+            id="filter_exact_day",
+        ),
+        pytest.param({"from_date": "2026-06-02"}, 2, id="filter_from_only"),
+        pytest.param({"to_date": "2026-06-01"}, 3, id="filter_to_only"),
+        pytest.param(
+            {"from_date": "2026-06-01", "to_date": "2026-06-02"},
+            4,
+            id="filter_range_both_ends_inclusive",
+        ),
+        pytest.param(
+            {
+                "from_date": "2026-06-01",
+                "to_date": "2026-06-01",
+                "resource_ids": [R_ID_BASE + 1],
+            },
+            2,
+            id="filter_range_and_resource",
+        ),
     ],
 )
 async def test_list_resource_usages(
@@ -204,12 +217,17 @@ async def test_list_resource_usages(
     assert resp.status_code == 200
     data = resp.json()
     assert data["total"] == expected_total
-    # items 长度校验（仅在分页参数有效时）
-    if "page" in params and "per_page" in params:
-        page = int(params["page"])
-        per_page = int(params["per_page"])
-        expected_items = min(per_page, max(0, expected_total - (page - 1) * per_page))
-        assert len(data["items"]) == expected_items
+    # 无分页：返回窗口内全部记录，items 长度即 total
+    assert len(data["items"]) == expected_total
+
+
+async def test_list_resource_usages_invalid_range(task_resources, client: AsyncClient):
+    """from_date 晚于 to_date → 422"""
+    resp = await client.get(
+        _url(), params={"from_date": "2026-06-05", "to_date": "2026-06-01"}
+    )
+    assert resp.status_code == 422
+    assert "起始日期不能晚于结束日期" in resp.json()["detail"]
 
 
 @pytest.mark.parametrize(
@@ -641,9 +659,7 @@ async def test_list_includes_manual_batch_per_item(task_resources, client: Async
     assert a_id != b_id
 
     # 用 manual_batch_id 过滤后，列表中每条都应带正确的嵌套 manual_batch
-    list_resp_a = await client.get(
-        _url(), params={"manual_batch_id": a_id, "per_page": "50"}
-    )
+    list_resp_a = await client.get(_url(), params={"manual_batch_id": a_id})
     assert list_resp_a.status_code == 200
     items_a = list_resp_a.json()["items"]
     assert items_a, "应当返回至少一条记录"
@@ -653,9 +669,7 @@ async def test_list_includes_manual_batch_per_item(task_resources, client: Async
         assert it["manualBatch"]["id"] == a_id
         assert it["manualBatch"]["name"] == "ListBatchA"
 
-    list_resp_b = await client.get(
-        _url(), params={"manual_batch_id": b_id, "per_page": "50"}
-    )
+    list_resp_b = await client.get(_url(), params={"manual_batch_id": b_id})
     assert list_resp_b.status_code == 200
     items_b = list_resp_b.json()["items"]
     assert items_b
@@ -784,7 +798,7 @@ async def test_list_resource_usages_tags_empty_by_default(
     tagged_usages, client: AsyncClient
 ):
     """默认不带 include_tags 时，每条用量记录返回空 tags 列表。"""
-    resp = await client.get(_url(), params={"per_page": "100"})
+    resp = await client.get(_url())
     assert resp.status_code == 200
     items = resp.json()["items"]
     assert len(items) == 5
@@ -793,7 +807,7 @@ async def test_list_resource_usages_tags_empty_by_default(
 
 async def test_list_resource_usages_include_tags(tagged_usages, client: AsyncClient):
     """include_tags=true 时返回直接标签（按 ID 升序），无标签记录返回空数组。"""
-    resp = await client.get(_url(), params={"include_tags": "true", "per_page": "100"})
+    resp = await client.get(_url(), params={"include_tags": "true"})
     assert resp.status_code == 200
     by_id = {it["id"]: it for it in resp.json()["items"]}
 
@@ -804,20 +818,26 @@ async def test_list_resource_usages_include_tags(tagged_usages, client: AsyncCli
     assert by_id[U_ID_BASE + 4]["tags"] == []
 
 
-async def test_list_resource_usages_include_tags_pagination(
+async def test_list_resource_usages_include_tags_window(
     tagged_usages, client: AsyncClient
 ):
-    """分页只加载当前页用量记录的标签，跨页不串数据。"""
-    # 按 id 倒序（最新在前），page=4 取 id=U_ID_BASE+1（有标签），
-    # page=5 取 id=U_ID_BASE（有标签）
+    """include_tags 与日期窗口组合：只返回窗口内记录且各自携带直接标签。"""
+    # fixture 中 2026-06-01 有 3 条（U_ID_BASE/U_ID_BASE+1/U_ID_BASE+3），前两条带标签
     resp = await client.get(
-        _url(), params={"include_tags": "true", "per_page": "1", "page": "4"}
+        _url(),
+        params={
+            "include_tags": "true",
+            "from_date": "2026-06-01",
+            "to_date": "2026-06-01",
+        },
     )
     assert resp.status_code == 200
-    items = resp.json()["items"]
-    assert len(items) == 1
-    assert items[0]["id"] == U_ID_BASE + 1
-    assert [t["name"] for t in items[0]["tags"]] == ["ru-tag-A"]
+    body = resp.json()
+    by_id = {it["id"]: it for it in body["items"]}
+    assert len(by_id) == body["total"] == 3
+    assert [t["name"] for t in by_id[U_ID_BASE]["tags"]] == ["ru-tag-A", "ru-tag-B"]
+    assert [t["name"] for t in by_id[U_ID_BASE + 1]["tags"]] == ["ru-tag-A"]
+    assert by_id[U_ID_BASE + 3]["tags"] == []
 
 
 async def test_list_resource_usages_include_tags_project_isolated(
@@ -877,7 +897,7 @@ async def test_list_resource_usages_include_tags_project_isolated(
     )
     await db_session.commit()
 
-    resp = await client.get(_url(), params={"include_tags": "true", "per_page": "100"})
+    resp = await client.get(_url(), params={"include_tags": "true"})
     assert resp.status_code == 200
     by_id = {it["id"]: it for it in resp.json()["items"]}
     assert other_usage.id not in by_id
@@ -894,7 +914,6 @@ async def test_list_resource_usages_include_tags_with_filters(
         params={
             "task_ids": [T_ID_BASE + 1],
             "include_tags": "true",
-            "per_page": "100",
         },
     )
     assert resp.status_code == 200

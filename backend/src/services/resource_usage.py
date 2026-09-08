@@ -1,6 +1,6 @@
 """Resource usage service layer."""
 
-from sqlmodel import col, func, select
+from sqlmodel import col, desc, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel.sql.expression import SelectOfScalar
 
@@ -103,9 +103,9 @@ class ResourceUsageService:
         return (await self.session.exec(stmt)).first()
 
     async def get_list(
-        self, filters: ResourceUsageFilter, offset: int = 0, limit: int = 100
+        self, filters: ResourceUsageFilter
     ) -> tuple[list[TaskResourceUsage], int]:
-        """Get filtered list of resource usages with pagination."""
+        """按过滤条件返回全部资源使用记录（不分页，最新在前）与其总数。"""
         stmt = project_filter(
             select(TaskResourceUsage), TaskResourceUsage, self.project_id
         )
@@ -143,10 +143,16 @@ class ResourceUsageService:
                 col(TaskResourceUsage.manual_batch_id) == filters.manual_batch_id
             )
 
-        if filters.date is not None:
-            stmt = stmt.where(col(TaskResourceUsage.usage_date) == filters.date)
+        if filters.from_date is not None:
+            stmt = stmt.where(col(TaskResourceUsage.usage_date) >= filters.from_date)
             stmt_count = stmt_count.where(
-                col(TaskResourceUsage.usage_date) == filters.date
+                col(TaskResourceUsage.usage_date) >= filters.from_date
+            )
+
+        if filters.to_date is not None:
+            stmt = stmt.where(col(TaskResourceUsage.usage_date) <= filters.to_date)
+            stmt_count = stmt_count.where(
+                col(TaskResourceUsage.usage_date) <= filters.to_date
             )
 
         if filters.usage_type is not None:
@@ -155,7 +161,8 @@ class ResourceUsageService:
                 TaskResourceUsage.usage_type == filters.usage_type
             )
 
-        stmt = stmt.offset(offset).limit(limit)
+        # 稳定排序：最新记录在前
+        stmt = stmt.order_by(desc(TaskResourceUsage.id))
 
         items = (await self.session.exec(stmt)).all()
         count = (await self.session.exec(stmt_count)).one()

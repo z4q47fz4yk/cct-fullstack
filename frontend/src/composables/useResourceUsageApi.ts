@@ -2,7 +2,6 @@ import { computed } from 'vue'
 import type { Ref } from 'vue'
 import { useQuery, useMutation, useQueryCache } from '@pinia/colada'
 import { useProjectContext } from '@/composables/useProjectContext'
-import { FETCH_ALL_PAGE_SIZE } from '@/constants/pagination'
 import type {
   ResourceUsageBatchCreate,
   ResourceUsageBatchItem,
@@ -35,8 +34,35 @@ export interface ResourceUsageFilters {
 
 export interface UseResourceUsageApiOptions {
   filters: Ref<ResourceUsageFilters>
-  page: Ref<number>
-  pageSize: Ref<number>
+}
+
+/**
+ * 提取记录所属批次 id：手动 batch 取 manualBatchId，日报 batch 取 batchId。
+ * 二者在业务上互斥；无批次返回 null。
+ */
+export function getUsageBatchId(u: {
+  batchId?: string | null
+  manualBatchId?: number | null
+}): string | number | null {
+  if (u.manualBatchId != null) return u.manualBatchId
+  if (u.batchId != null) return u.batchId
+  return null
+}
+
+/**
+ * (usage-date, batch-id) 复合分块键。
+ * 同一 batch 若含多天记录会被拆成多个分块；无批次记录返回 null。
+ */
+export function getUsageChunkKey(u: {
+  usageDate?: string | null
+  batchId?: string | null
+  manualBatchId?: number | null
+}): string | null {
+  const rawId = getUsageBatchId(u)
+  if (rawId === null) return null
+  const date = u.usageDate?.slice(0, 10) ?? ''
+  if (!date) return null
+  return `${date}|${rawId}`
 }
 
 /**
@@ -45,7 +71,7 @@ export interface UseResourceUsageApiOptions {
  * - 提供列表、批量创建、更新、删除操作
  */
 export function useResourceUsageApi(options: UseResourceUsageApiOptions) {
-  const { filters, page, pageSize } = options
+  const { filters } = options
   const queryCache = useQueryCache()
   const { currentProjectId } = useProjectContext()
 
@@ -62,11 +88,13 @@ export function useResourceUsageApi(options: UseResourceUsageApiOptions) {
   }
 
   // 查询资源使用量列表（include_tags 附带直接挂载的标签，供批次列表标签展示）
+  // 后端该端点不分页：按筛选条件返回窗口内全部记录，前端再按 (usage-date, batch-id) 分块
   const { state, asyncStatus, error, refresh } = useQuery(() =>
     listResourceUsagesQuery({
       path: { project_id: currentProjectId.value! },
       query: {
-        date: filters.value.dateFrom || null,
+        from_date: filters.value.dateFrom || null,
+        to_date: filters.value.dateTo || null,
         task_ids: filters.value.taskIds ?? null,
         resource_ids: filters.value.resourceIds ?? null,
         batch_id: filters.value.batchId || null,
@@ -76,8 +104,6 @@ export function useResourceUsageApi(options: UseResourceUsageApiOptions) {
             ? null
             : filters.value.usageType,
         include_tags: true,
-        page: page.value,
-        per_page: pageSize.value,
       },
     }),
   )
@@ -171,11 +197,11 @@ export function useResourceUsagesByDate(
       ...listResourceUsagesQuery({
         path: { project_id: pid! },
         query: {
-          date: d || null,
+          // 精确日查询 = 起止同为该日期
+          from_date: d || null,
+          to_date: d || null,
           usageType: t || undefined,
           include_tags: true,
-          page: 1,
-          per_page: FETCH_ALL_PAGE_SIZE,
         },
       }),
       // 日期 / 项目为空时禁用

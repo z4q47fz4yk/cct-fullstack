@@ -1,19 +1,20 @@
 <script setup lang="ts">
 /**
- * ResourceUsageBatchList - 历史 tab 的 batch 列表
+ * ResourceUsageBatchList - 历史 tab 的批次分块列表
  *
- * 按 batchId 分组，每行展示一个 batch：
+ * 按 (usage-date, batch-id) 复合分块，每行展示一个分块：
  * - 日期（usageDate）
  * - 记录数
  * - 来源（手动 / 日报）
  * - 备注（手动批次取 manualBatch.name；日报导入为空）
- * - 操作：查看详情、删除整 batch
+ * - 操作：查看详情、删除分块记录
  *
- * 分组键：手动 batch 用 manualBatchId (number)，日报 batch 用 batchId (string)
- * 互斥；同一行记录只会落入其中一种
+ * 分块键：手动 batch 用 manualBatchId (number)，日报 batch 用 batchId (string)，
+ * 与 usageDate 拼接成复合 chunkKey；同一批次含多天记录时会显示为多行。
  */
 import { computed } from 'vue'
 import type { ResourceUsageWithTagsResp, TagResp } from '@/client/types.gen'
+import { getUsageBatchId, getUsageChunkKey } from '@/composables/useResourceUsageApi'
 import { useConfirm } from '@/composables/useConfirm'
 import { getSliceColor } from '@/utils/themeColors'
 import TableEmptyState from '@/components/common/TableEmptyState.vue'
@@ -25,9 +26,9 @@ const { usages, loading = false } = defineProps<{
 
 const emit = defineEmits<{
   /** 点击「查看详情」 */
-  'view-detail': [batchKey: string | number]
-  /** 删除整个 batch */
-  'delete-batch': [batchKey: string | number, records: ResourceUsageWithTagsResp[]]
+  'view-detail': [chunkKey: string]
+  /** 删除该分块（同一 batch 的其它日期分块不受影响） */
+  'delete-batch': [chunkKey: string, records: ResourceUsageWithTagsResp[]]
   /** 为整个 batch 打标 */
   'tags-batch': [records: ResourceUsageWithTagsResp[]]
 }>()
@@ -35,8 +36,8 @@ const emit = defineEmits<{
 const { confirmDanger } = useConfirm()
 
 interface BatchGroup {
-  /** 复合 id：manualBatchId (number) 或 batchId (string) */
-  batchKey: string | number
+  /** 复合键：`${usageDate}|${batchId}`（manualBatchId 或 batchId） */
+  chunkKey: string
   /** 原始 id（number for manual, string for daily-report） */
   rawId: string | number
   usageDate: string
@@ -80,20 +81,15 @@ function tagListText(group: BatchGroup): string {
 const groups = computed<BatchGroup[]>(() => {
   const map = new Map<string, BatchGroup>()
   for (const u of usages) {
-    // 同一记录仅取其中一个字段（互斥）
-    const rawId: string | number | null =
-      u.manualBatchId !== null && u.manualBatchId !== undefined
-        ? u.manualBatchId
-        : u.batchId !== null && u.batchId !== undefined
-          ? u.batchId
-          : null
+    const chunkKey = getUsageChunkKey(u)
+    if (chunkKey === null) continue
+    const rawId = getUsageBatchId(u)
     if (rawId === null) continue
-    const key = String(rawId)
-    if (!map.has(key)) {
-      map.set(key, {
-        batchKey: rawId,
+    if (!map.has(chunkKey)) {
+      map.set(chunkKey, {
+        chunkKey,
         rawId,
-        usageDate: u.usageDate,
+        usageDate: (u.usageDate ?? '').slice(0, 10),
         count: 0,
         latestCreatedAt: u.createdAt,
         remark: u.manualBatch?.name ?? '',
@@ -104,7 +100,7 @@ const groups = computed<BatchGroup[]>(() => {
         tags: [],
       })
     }
-    const g = map.get(key)!
+    const g = map.get(chunkKey)!
     g.count += 1
     g.records.push(u)
     if (u.createdAt > g.latestCreatedAt) g.latestCreatedAt = u.createdAt
@@ -147,8 +143,8 @@ function batchLabel(g: BatchGroup) {
 }
 
 async function handleDelete(group: BatchGroup) {
-  const r = await confirmDanger(`确定要删除该批次（${group.count} 条记录）吗？此操作不可恢复。`)
-  if (r.confirmed) emit('delete-batch', group.batchKey, group.records)
+  const r = await confirmDanger(`确定要删除该分块（${group.count} 条记录）吗？此操作不可恢复。`)
+  if (r.confirmed) emit('delete-batch', group.chunkKey, group.records)
 }
 
 const tableHeaders = [
@@ -177,7 +173,7 @@ const tableHeaders = [
           <template v-if="groups.length > 0">
             <tr
               v-for="g in groups"
-              :key="String(g.batchKey)"
+              :key="g.chunkKey"
               class="hover:bg-base-content/5 transition-colors"
             >
               <td>{{ formatDate(g.usageDate) }}</td>
@@ -250,13 +246,13 @@ const tableHeaders = [
                   <button
                     class="btn btn-ghost btn-xs btn-square"
                     title="查看详情"
-                    @click="emit('view-detail', g.batchKey)"
+                    @click="emit('view-detail', g.chunkKey)"
                   >
                     <span class="material-symbols-outlined icon-sm">visibility</span>
                   </button>
                   <button
                     class="btn btn-ghost btn-xs btn-square text-error hover:bg-error/10"
-                    title="删除整批"
+                    title="删除该分块记录"
                     @click="handleDelete(g)"
                   >
                     <span class="material-symbols-outlined icon-sm">delete_sweep</span>
