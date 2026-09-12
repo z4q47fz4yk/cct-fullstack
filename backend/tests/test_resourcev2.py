@@ -781,6 +781,7 @@ async def test_list_resources_tag_ids_and(
         tag_cache[tname] = tag
         r = r_by_name[rname]
         assert r.id is not None
+        assert tag.id is not None
         await _link(db_session, r.id, tag.id)
 
     qs = "&".join(f"tag_ids={tag_cache[t].id}" for t in query_tag_ids)
@@ -815,6 +816,7 @@ async def test_list_resources_tag_ids_combined_with_category(
     tag_x = await _make_tag(db_session, "tagid-X")
     r1, r2, r3, _ = tag_id_resources
     assert all(r.id is not None for r in (r1, r2, r3))
+    assert tag_x.id is not None
     await _link(db_session, r1.id, tag_x.id)
     await _link(db_session, r2.id, tag_x.id)
 
@@ -849,6 +851,7 @@ async def test_list_resources_tag_ids_pagination(
     tag_x = await _make_tag(db_session, "tagid-P")
     r1, r2, r3, _ = tag_id_resources
     assert all(r.id is not None for r in (r1, r2, r3))
+    assert tag_x.id is not None
     await _link(db_session, r1.id, tag_x.id)
     await _link(db_session, r2.id, tag_x.id)
     await _link(db_session, r3.id, tag_x.id)

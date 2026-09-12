@@ -26,7 +26,7 @@ import asyncio
 import datetime as dt
 import logging
 
-from sqlalchemy import text
+from sqlmodel import text
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import settings
@@ -77,14 +77,14 @@ def is_stale() -> bool:
 
 async def _refresh_on_conn(conn) -> None:
     """在给定连接上执行带 advisory lock 的刷新（调用方负责提交）。"""
-    await conn.execute(
-        text("SELECT pg_advisory_lock(:key)"), {"key": _REFRESH_LOCK_KEY}
+    await conn.exec(
+        text("SELECT pg_advisory_lock(:key)"), params={"key": _REFRESH_LOCK_KEY}
     )
     try:
-        await conn.execute(text(f"REFRESH MATERIALIZED VIEW {MATVIEW_NAME}"))
+        await conn.exec(text(f"REFRESH MATERIALIZED VIEW {MATVIEW_NAME}"))
     finally:
-        await conn.execute(
-            text("SELECT pg_advisory_unlock(:key)"), {"key": _REFRESH_LOCK_KEY}
+        await conn.exec(
+            text("SELECT pg_advisory_unlock(:key)"), params={"key": _REFRESH_LOCK_KEY}
         )
 
 

@@ -9,7 +9,7 @@ usage_type / task_name / resource_name / resource_category / unit / tags[]。
 
 import datetime as dt
 
-from sqlalchemy import text
+from sqlmodel import text
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.models.resource_usage import UsageType
@@ -51,7 +51,7 @@ async def fetch_usage_rows(
         ORDER BY usage_id
         """
     )
-    result = await session.execute(sql, params)  # ty: ignore[deprecated]
+    result = await session.exec(sql, params=params)
     rows = result.all()
     cols = list(result.keys())
     return [dict(zip(cols, row, strict=False)) for row in rows]
