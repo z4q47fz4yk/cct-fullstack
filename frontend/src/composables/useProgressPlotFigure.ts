@@ -167,11 +167,11 @@ export function buildProgressPlotFigure(d: ProgressPlotData): PlotlyDataLayoutCo
     const yy: number[] = []
     const pcts: number[] = []
     x.push(toMs(t.actualStart))
-    yy.push(y - ACT_H / 2)
+    yy.push(y + ACT_H / 2)
     pcts.push(0)
     for (const [dateStr, pct] of t.series) {
       x.push(toMs(dateStr))
-      yy.push(y - ACT_H / 2 + (pct / 100) * ACT_H)
+      yy.push(y + ACT_H / 2 - (pct / 100) * ACT_H)
       pcts.push(pct)
     }
     data.push({
@@ -283,7 +283,7 @@ export function buildProgressPlotFigure(d: ProgressPlotData): PlotlyDataLayoutCo
       range: xRange,
       domain: [0, 1],
       anchor: 'y' as '/^y([2-9]|[1-9][0-9]+)?( domain)?$/', // plotly.js 内部类型错误
-      matches: 'x2' as '/^x([2-9]|[1-9][0-9]+)?( domain)?$/',
+      matches: 'x3' as '/^x([2-9]|[1-9][0-9]+)?( domain)?$/',
       dtick,
       tickformat,
       tickangle: isDay ? -30 : 0,
@@ -308,9 +308,11 @@ export function buildProgressPlotFigure(d: ProgressPlotData): PlotlyDataLayoutCo
       range: xRange,
       domain: [0, 1],
       anchor: 'y2' as '/^y([2-9]|[1-9][0-9]+)?( domain)?$/',
+      matches: 'x3' as '/^x([2-9]|[1-9][0-9]+)?( domain)?$/',
       dtick,
       tickformat,
       tickangle: isDay ? -30 : 0,
+      showticklabels: false, // 隐藏刻度标签
       showgrid: true,
       gridcolor: colors.splitLine,
     },
@@ -344,8 +346,6 @@ export function buildProgressPlotFigure(d: ProgressPlotData): PlotlyDataLayoutCo
     yaxis4: {
       title: { text: '降水 mm' },
       domain: [0, 0.18],
-      anchor: 'free',
-      position: 0,
       overlaying: 'y3' as '/^y([2-9]|[1-9][0-9]+)?( domain)?$/',
       side: 'right',
       showgrid: false,
