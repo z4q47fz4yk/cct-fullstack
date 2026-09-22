@@ -22,6 +22,6 @@ if ! git diff --exit-code -- openapi.json; then
 fi
 
 bash "$ROOT/scripts/gen-client.sh"
-( cd "$ROOT/frontend" && vpr type-check )
+( cd "$ROOT/frontend" && vp run type-check )
 
 echo "契约校验通过：openapi.json 与后端代码一致，前端客户端可离线重新生成。"

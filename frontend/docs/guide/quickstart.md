@@ -155,7 +155,7 @@ ty check                         # 类型检查
 ```bash
 bash ../scripts/dev-frontend.sh  # 启动开发服务器（端口取根 .env 的 FRONTEND_PORT，默认 5173）
 vp build                         # 构建生产版本（含类型检查）
-vpr build-only                   # 仅构建，不进行类型检查
+vp run build-only                # 仅构建，不进行类型检查
 vp check --fix                   # 代码检查 + 格式化
 bash ../scripts/gen-client.sh    # 从入库 openapi.json 离线生成客户端
 bash ../scripts/check-contract.sh # 契约一致性校验（后端代码 ↔ openapi.json ↔ 前端）

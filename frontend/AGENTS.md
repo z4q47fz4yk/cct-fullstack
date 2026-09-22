@@ -70,7 +70,7 @@ src/
 
 ### API 客户端（@hey-api 生成物）
 
-客户端由 `scripts/gen-client.sh`（`vpr generate-api`）从入库根 `openapi.json` 离线生成。
+客户端由 `scripts/gen-client.sh`（`vp run generate-api`）从入库根 `openapi.json` 离线生成。
 
 ```typescript
 import { useQuery } from '@pinia/colada'
@@ -187,7 +187,7 @@ try {
 
 ## ANTI-PATTERNS
 
-- **禁止** 直接修改 `src/client/` — 运行 `scripts/gen-client.sh`（`vpr generate-api`，从入库根 `openapi.json` 离线生成）
+- **禁止** 直接修改 `src/client/` — 运行 `scripts/gen-client.sh`（`vp run generate-api`，从入库根 `openapi.json` 离线生成）
 - **禁止** 手动编辑 `typed-router.d.ts` — 自动生成
 - **禁止** UI 使用英文 — 所有界面文本必须中文
   - 例外：专有名词（NSGA-II、Pareto/帕累托 等）；控制台日志中英文均可
@@ -225,13 +225,13 @@ try {
 项目由 `vp` 管理（vite 封装），**禁止** 使用 npm/pnpm 命令：
 
 ```bash
-vp dev           # 启动开发服务器
-vp build         # 构建生产版本（含类型检查）
-vpr build-only   # 仅构建，不进行类型检查
-vpr type-check   # 类型检查（vp check 不检查类型：oxlint 不支持 vue 模板）
-vp check --fix   # 代码检查 + 格式化 (oxlint + oxfmt)
-vp preview       # 预览生产构建
-vpr generate-api # 从入库根 openapi.json 离线生成客户端（无后端运行亦可；推荐 scripts/gen-client.sh）
+vp dev             # 启动开发服务器
+vp build           # 构建生产版本（含类型检查）
+vp run build-only  # 仅构建，不进行类型检查
+vp run type-check  # 类型检查（vp check 不检查类型：oxlint 不支持 vue 模板）
+vp check --fix     # 代码检查 + 格式化 (oxlint + oxfmt)
+vp preview         # 预览生产构建
+vp run generate-api # 从入库根 openapi.json 离线生成客户端（无后端运行亦可；推荐 scripts/gen-client.sh）
 ```
 
 ## NOTES

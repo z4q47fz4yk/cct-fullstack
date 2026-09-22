@@ -28,12 +28,12 @@
 项目由 `vp` 管理（vite 封装），**禁止** 使用 npm/pnpm 命令：
 
 ```bash
-vp dev           # 启动开发服务器
-vp build         # 构建生产版本（含类型检查）
-vpr build-only   # 仅构建，不进行类型检查
-vpr type-check   # 类型检查
-vp check --fix   # 代码检查 + 格式化 (oxlint + oxfmt)
-vpr generate-api # 从 OpenAPI 生成客户端 (需后端运行)
+vp dev             # 启动开发服务器
+vp build           # 构建生产版本（含类型检查）
+vp run build-only  # 仅构建，不进行类型检查
+vp run type-check  # 类型检查
+vp check --fix     # 代码检查 + 格式化 (oxlint + oxfmt)
+vp run generate-api # 从 OpenAPI 生成客户端 (需后端运行)
 ```
 
 ## 项目结构

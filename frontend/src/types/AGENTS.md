@@ -35,4 +35,4 @@
 ## ANTI-PATTERNS
 
 - **禁止** 重复定义已生成的类型 — 用 `src/client/types.gen.ts`
-- **禁止** 修改 `src/client/` 下的类型 — 运行 `vpr generate-api` 重新生成
+- **禁止** 修改 `src/client/` 下的类型 — 运行 `vp run generate-api` 重新生成

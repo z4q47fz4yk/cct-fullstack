@@ -13,10 +13,10 @@ echo "==> 后端依赖 (uv sync --all-groups)"
 echo "==> 前端依赖 (vp install)"
 ( cd "$ROOT/frontend" && vp install )
 
-echo "==> 从入库 openapi.json 离线生成客户端 (vpr generate-api)"
-( cd "$ROOT/frontend" && vpr generate-api )
+echo "==> 从入库 openapi.json 离线生成客户端 (vp run generate-api)"
+( cd "$ROOT/frontend" && vp run generate-api )
 
-echo "==> 类型检查 (vpr type-check)"
-( cd "$ROOT/frontend" && vpr type-check )
+echo "==> 类型检查 (vp run type-check)"
+( cd "$ROOT/frontend" && vp run type-check )
 
 echo "bootstrap 完成。启动：scripts/dev-backend.sh / scripts/dev-frontend.sh / scripts/dev-docs.sh"

@@ -4,4 +4,4 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT/frontend"
-exec vpr generate-api
+exec vp run generate-api
