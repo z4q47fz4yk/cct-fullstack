@@ -5,6 +5,7 @@ import { categoryConfigMap } from '@/types/resource'
 import type { ResourceWithConfigResp } from '@/client/types.gen'
 import { fmtNumber } from '@/utils/format'
 import TableEmptyState from '@/components/common/TableEmptyState.vue'
+import InfoTooltip from '@/components/common/InfoTooltip.vue'
 import TagInput from '@/components/tag/TagInput.vue'
 
 const { resources, category } = defineProps<{
@@ -55,6 +56,11 @@ const tableHeaders = computed<TableHeader[]>(() => {
 const cellCount = computed(() => tableHeaders.value.reduce((sum, h) => sum + (h.colspan ?? 1), 0))
 
 const categoryIcon = computed(() => categoryConfigMap[category].icon)
+
+/** description 为空白（空串/纯空格）时不加下划线、不显示气泡，退化为纯文本 */
+function hasDescription(resource: ResourceWithConfigResp): boolean {
+  return (resource.description ?? '').trim().length > 0
+}
 </script>
 
 <template>
@@ -109,7 +115,13 @@ const categoryIcon = computed(() => categoryConfigMap[category].icon)
               </span>
             </td> -->
             <td>
-              <div class="font-medium text-base-content">{{ resource.name }}</div>
+              <!-- 有 description 的名称：虚线示意可悬停，延迟显示气泡（见 InfoTooltip） -->
+              <div class="font-medium text-base-content">
+                <InfoTooltip v-if="hasDescription(resource)" :content="resource.description">
+                  {{ resource.name }}
+                </InfoTooltip>
+                <template v-else>{{ resource.name }}</template>
+              </div>
             </td>
             <td class="w-16">
               <!-- 状态徽标：图标-only，无文字；title/aria 中文说明 -->

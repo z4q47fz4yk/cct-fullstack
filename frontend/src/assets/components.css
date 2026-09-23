@@ -9,7 +9,8 @@
  *   - collapse   → 原生 <details>/<summary>（checkbox hack 也兼容）
  *   - tabs       → 纯 CSS 状态类（tab-active 由 JS 切换）
  *   - checkbox / radio / toggle → 原生 input 的 :checked/:indeterminate
- *   - tooltip    → 纯 CSS :hover / :focus-visible（当前无 UI 需求，未实现）
+ *   - tooltip    → Vuetify0 Tooltip（原生 popover 进 top layer + CSS anchor positioning），
+ *                  皮肤类 tooltip-trigger / tooltip-surface
  *
  * 工程面板默认值（Engineering Data Panel）：
  *   - 背景：color-mix(in oklch, --color-base-content 5%, transparent)（中性半透明）
@@ -1283,4 +1284,38 @@ dialog.modal[open] {
     opacity: 1;
     transform: scale(1);
   }
+}
+
+/* ═══════════ 提示气泡 Tooltip（Vuetify0 无样式 → 项目皮肤） ═══════════ */
+/* 结构由 <InfoTooltip> 产出：
+ *   <span class="tooltip-trigger" tabindex="0">名称</span>       ← 触发器（CSS 锚点）
+ *   <div  class="tooltip-surface" popover role="tooltip">…</div>  ← 内容（top layer）
+ * 定位（position / inset / margin / anchor-name / position-area）由 v0 默认适配器
+ * 以内联样式给出，此处不得覆写，否则气泡定位失效。 */
+
+@utility tooltip-trigger {
+  text-decoration: underline dotted;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.25em;
+  cursor: help;
+
+  &:focus-visible {
+    outline: none;
+    border-radius: 2px;
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-primary) 40%, transparent);
+  }
+}
+
+@utility tooltip-surface {
+  max-width: 20rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: var(--radius-field);
+  border: 1px solid var(--color-panel-border);
+  background: var(--color-surface-deep);
+  color: var(--color-base-content);
+  box-shadow: var(--shadow-glass-3);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

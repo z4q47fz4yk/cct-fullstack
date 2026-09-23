@@ -2,7 +2,7 @@
 
 ## OVERVIEW
 
-跨模块共享的通用 UI 组件 (16 files)。写新页面前先扫一遍，避免重复造轮子。
+跨模块共享的通用 UI 组件 (17 files)。写新页面前先扫一遍，避免重复造轮子。
 
 ## WHERE TO LOOK
 
@@ -15,6 +15,7 @@
 | 图标按钮        | `IconAction.vue` (min 32px 触控)                 |
 | 错误占位        | `ErrorState.vue` (支持 #actions slot)            |
 | 表格空状态      | `TableEmptyState.vue`                            |
+| 悬停说明气泡    | `InfoTooltip.vue` (Vuetify0 Tooltip，0.5s 延迟)  |
 | 分页            | `PaginationBar.vue`                              |
 | 确认弹窗        | `ConfirmModal.vue`                               |
 | 搜索选择        | `SearchableSelect.vue`                           |

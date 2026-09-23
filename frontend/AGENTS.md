@@ -21,7 +21,7 @@ src/
 │   ├── schedule/       # 任务管理组件
 │   ├── resource/       # 资源管理组件
 │   ├── optimization/   # 优化配置组件
-│   ├── common/         # 通用组件 (16 files)
+│   ├── common/         # 通用组件 (17 files)
 │   ├── ui/             # 基础 UI 组件 (BaseModal)
 │   ├── daily-report/   # 日报处理组件
 │   ├── resource-usage/ # 资源使用组件
@@ -204,21 +204,22 @@ try {
 
 写新页面前先扫一遍，避免重复造轮子：
 
-| 场景             | 用什么                                       |
-| ---------------- | -------------------------------------------- |
-| KPI 数字卡片     | `<StatCard>`                                 |
-| 图表空/加载状态  | `<ChartEmptyState>`                          |
-| 长列表骨架       | `<LoadingState variant="skeleton">`          |
-| 单条方案         | `<SchemeCard>`                               |
-| 图标按钮         | `<IconAction>`                               |
-| 错误占位         | `<ErrorState>`                               |
-| 模态框           | `<BaseModal>` (原生 dialog 派，v-model:open) |
-| 危险操作确认     | `useConfirm().confirmDanger`                 |
-| Toast 通知       | `useToast().notifySuccess/Error/Warning`     |
-| 图表主题色       | `getThemeColors()`                           |
-| 资源类别色       | `getCategoryColor()`                         |
-| 面板容器         | `panel` / `panel-hover` / `panel-grid`       |
-| 项目范围状态隔离 | `useProjectStorage`                          |
+| 场景             | 用什么                                                               |
+| ---------------- | -------------------------------------------------------------------- |
+| KPI 数字卡片     | `<StatCard>`                                                         |
+| 图表空/加载状态  | `<ChartEmptyState>`                                                  |
+| 长列表骨架       | `<LoadingState variant="skeleton">`                                  |
+| 单条方案         | `<SchemeCard>`                                                       |
+| 图标按钮         | `<IconAction>`                                                       |
+| 错误占位         | `<ErrorState>`                                                       |
+| 悬停说明气泡     | `<InfoTooltip :content="描述">文本</InfoTooltip>` (Vuetify0 Tooltip) |
+| 模态框           | `<BaseModal>` (原生 dialog 派，v-model:open)                         |
+| 危险操作确认     | `useConfirm().confirmDanger`                                         |
+| Toast 通知       | `useToast().notifySuccess/Error/Warning`                             |
+| 图表主题色       | `getThemeColors()`                                                   |
+| 资源类别色       | `getCategoryColor()`                                                 |
+| 面板容器         | `panel` / `panel-hover` / `panel-grid`                               |
+| 项目范围状态隔离 | `useProjectStorage`                                                  |
 
 ## COMMANDS
 

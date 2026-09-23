@@ -15,6 +15,7 @@ import { PiniaColada } from '@pinia/colada'
 import { PiniaColadaAutoRefetch } from '@pinia/colada-plugin-auto-refetch'
 
 import App from './App.vue'
+import vuetify0 from './plugins/vuetify0'
 import router, { setupRouter } from './router'
 import { setupApiInterceptors } from '@/composables/setupApiInterceptors'
 import { useTheme } from '@/composables/useTheme'
@@ -27,6 +28,7 @@ useTheme()
 await setupRouter()
 
 const app = createApp(App)
+vuetify0(app)
 app.use(createPinia())
 app.use(PiniaColada, {
   plugins: [PiniaColadaAutoRefetch({ autoRefetch: false })],

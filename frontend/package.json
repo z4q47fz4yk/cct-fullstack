@@ -23,6 +23,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@valibot/i18n": "^1.2.0",
     "@vee-validate/valibot": "^4.15.1",
+    "@vuetify/v0": "^1.2.2",
     "@vueuse/core": "^14.4.0",
     "echarts": "^5.6.0",
     "echarts-gl": "^2.1.0",
