@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+# 由 frontend/.vite-hooks/_/pre-push stub（vite-plus 分发器）调用。
+# core.hooksPath 指向本目录后，git-lfs 的官方 pre-push 钩子不会被安装，必须显式转发：
+# 否则 push 只传 Git 对象，LFS 对象静默漏传，协作者 clone 时报
+# `smudge filter lfs failed`（frontend/.gitattributes 将 *.csv 交由 git-lfs 跟踪）。
+# 注意：不得在本脚本内读取 stdin，ref 列表需原样透传给 git-lfs。
+exec git lfs pre-push "$@"
