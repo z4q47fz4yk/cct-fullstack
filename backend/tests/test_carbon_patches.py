@@ -481,7 +481,7 @@ def test_compute_peak_personnel_no_labor():
 
 # ============================================================================
 # 回归测试：Bug 1（int 截断）+ Bug 2（Pareto 去重）
-# 参考 plan：/Users/pengyongtang/.claude/plans/nsga2-bug-shiny-stearns.md
+# 参考 plan：nsga2-bug-shiny-stearns.md
 # ============================================================================
 
 

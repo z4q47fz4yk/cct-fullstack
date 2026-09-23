@@ -1,6 +1,6 @@
 """施工日报解析引擎单元测试
 
-使用合成 polars DataFrame 覆盖解析引擎分支，不依赖真实样本文件。
+使用合成 polars DataFrame 覆盖解析引擎分支，不依赖外部样本文件。
 """
 # pyright: reportCallIssue=false
 
@@ -458,8 +458,8 @@ class TestDefaultConfig:
         assert cfg1 is not cfg2
         assert len(cfg1.blocks) == len(cfg2.blocks) == 3
 
-    def test_default_parses_real_sample(self):
-        """默认配置对真实样本的解析结果与历史一致"""
+    def test_default_parses_sample(self):
+        """默认配置对示例样本的解析结果与历史一致"""
         csv = (Path(__file__).parent.parent / "docs" / "20251214.csv").read_bytes()
         result = parse_daily_report("test.csv", csv)
         labor = {i.name: i.count for i in result.items if i.category == "labor"}
