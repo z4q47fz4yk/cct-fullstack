@@ -26,10 +26,28 @@ class ResourceFields:
     Description = Annotated[str, Field(max_length=500, description="细节")]
     Category = Annotated[ResourceCategory, Field(description="资源分类")]
 
-    # 单位、价格、碳排放因子：Base 不要求（仅 Create 时），但 Update / Resp 共享约束
+    # 单位、价格、碳排放因子：Base 不要求（仅 Create 时）。
+    # 共享字段（Update / Resp / 数据模型 / 解析产物）不带数值边界——
+    # 边界若作用于 Resp，存量超限脏数据（如审计留下的超大单价）读取会 500；
+    # 输入侧边界见 UnitPriceInput / CarbonFactorInput（仅 Create/Update）。
     Unit = Annotated[str, Field(max_length=20, description="单位")]
-    UnitPrice = Annotated[float, Field(description="单价")]
-    CarbonFactor = Annotated[float, Field(description="碳排放因子")]
+    UnitPrice = Annotated[float, Field(description="单价（元）；非负")]
+    # 碳排放因子允许负值（如光伏抵消，低碳措施「添加类」依赖负碳因子资源）
+    CarbonFactor = Annotated[
+        float, Field(description="碳排放因子（kg/单位）；可为负（如光伏抵消）")
+    ]
+    # 输入侧数值边界（1e9 量级）：超限输入属明显脏数据，直接 422 并给出可见提示。
+    UnitPriceInput = Annotated[
+        float, Field(ge=0, le=1e9, description="单价（元）；非负，上限 1e9")
+    ]
+    CarbonFactorInput = Annotated[
+        float,
+        Field(
+            ge=-1e9,
+            le=1e9,
+            description="碳排放因子（kg/单位）；可为负（如光伏抵消），绝对值上限 1e9",
+        ),
+    ]
 
 
 class ResourceBase(CamelCaseRespMixin):
@@ -44,8 +62,8 @@ class ResourceCreate(ResourceBase):
     """创建资源请求。Unit/UnitPrice/CarbonFactor 在 Create 中提供应用层默认。"""
 
     unit: Annotated[ResourceFields.Unit, Field(default="1")]
-    unit_price: Annotated[ResourceFields.UnitPrice, Field(default=0.0)]
-    carbon_factor: Annotated[ResourceFields.CarbonFactor, Field(default=0.0)]
+    unit_price: Annotated[ResourceFields.UnitPriceInput, Field(default=0.0)]
+    carbon_factor: Annotated[ResourceFields.CarbonFactorInput, Field(default=0.0)]
 
 
 class ResourceUpdate(CamelCaseRespMixin):
@@ -60,8 +78,8 @@ class ResourceUpdate(CamelCaseRespMixin):
     description: Annotated[ResourceFields.Description, Field(default=None)]
     category: Annotated[ResourceFields.Category, Field(default=None)]
     unit: Annotated[ResourceFields.Unit, Field(default=None)]
-    unit_price: Annotated[ResourceFields.UnitPrice, Field(default=None)]
-    carbon_factor: Annotated[ResourceFields.CarbonFactor, Field(default=None)]
+    unit_price: Annotated[ResourceFields.UnitPriceInput, Field(default=None)]
+    carbon_factor: Annotated[ResourceFields.CarbonFactorInput, Field(default=None)]
 
     @field_validator(
         "name",

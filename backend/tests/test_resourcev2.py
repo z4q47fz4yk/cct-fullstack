@@ -181,6 +181,48 @@ async def test_get_resource(resources, selector: str, code: int, client: AsyncCl
             422,
             id="invalid_category",
         ),
+        pytest.param(
+            {
+                "name": "test-负碳光伏",
+                "description": "负碳因子资源",
+                "category": "others",
+                "unit": "kWh",
+                "unitPrice": 0,
+                "carbonFactor": -0.5,
+            },
+            201,
+            id="negative_carbon_factor_allowed",
+        ),
+        pytest.param(
+            {
+                "name": "越界单价",
+                "description": "d",
+                "category": "labor",
+                "unitPrice": 1e9 + 1,
+            },
+            422,
+            id="unit_price_over_limit",
+        ),
+        pytest.param(
+            {
+                "name": "越界碳因子下限",
+                "description": "d",
+                "category": "labor",
+                "carbonFactor": -1e9 - 1,
+            },
+            422,
+            id="carbon_factor_below_limit",
+        ),
+        pytest.param(
+            {
+                "name": "越界碳因子上限",
+                "description": "d",
+                "category": "labor",
+                "carbonFactor": 1e9 + 1,
+            },
+            422,
+            id="carbon_factor_over_limit",
+        ),
     ],
 )
 async def test_create_resource(client: AsyncClient, payload: dict, code: int):
@@ -215,6 +257,15 @@ async def test_create_resource(client: AsyncClient, payload: dict, code: int):
             "first", {"description": "d" * 501}, 422, id="invalid description"
         ),
         pytest.param("first", {"category": "test"}, 422, id="invalid category"),
+        # 负碳因子合法（如光伏抵消）；单价 / 碳因子超上限拒绝
+        pytest.param("first", {"carbonFactor": -0.5}, 200, id="negative carbon factor"),
+        pytest.param("first", {"unitPrice": 1e9 + 1}, 422, id="unit price over limit"),
+        pytest.param(
+            "first", {"carbonFactor": -1e9 - 1}, 422, id="carbon factor below limit"
+        ),
+        pytest.param(
+            "first", {"carbonFactor": 1e9 + 1}, 422, id="carbon factor over limit"
+        ),
     ],
 )
 async def test_update_resource(
@@ -873,33 +924,121 @@ async def test_list_resources_tag_ids_pagination(
     assert len(data["items"]) == 1
 
 
-async def test_list_resources_tag_ids_default_label_not_counted(
-    db_session: AsyncSession,
-    tag_id_resources,
-    client: AsyncClient,
-):
-    """默认分类标签（如"材料" is_default=true）不出现在 resource_tag 里，
-    因此不应被 tag_ids 过滤计算在内。
-    """
-    # 找出项目内名为"材料"的默认标签（由 alembic 10f6fdbf450e seed）
-    default_tag = (
+async def _default_tag_by_name(db_session: AsyncSession, name: str) -> Tag | None:
+    """取项目内指定名称的默认分类标签（由 alembic 10f6fdbf450e seed）。"""
+    return (
         await db_session.exec(
             select(Tag).where(
                 Tag.project_id == PID,
                 Tag.is_default == True,  # noqa: E712
-                Tag.name == "材料",
+                Tag.name == name,
             )
         )
     ).first()
+
+
+async def test_list_resources_tag_ids_default_label_matches_category(
+    db_session: AsyncSession,
+    tag_id_resources,
+    client: AsyncClient,
+):
+    """按默认分类标签（如"材料" is_default=true）筛选时，
+    命中该分类下的资源（默认标签由资源类别派生，与 include_tags 返回的 tags 口径一致）。
+    """
+    default_tag = await _default_tag_by_name(db_session, "材料")
     if default_tag is None or default_tag.id is None:
         pytest.skip("项目内不存在默认标签「材料」")
 
-    # fixture 中 r1/r2/r3/r4 都是 material 类，但都没在 resource_tag 挂「材料」
+    # fixture 中 r1/r2/r3/r4 都是 material 类，按「材料」应全部命中
     resp = await client.get(
         f"/projects/{PID}/resource?tag_ids={default_tag.id}&name=tagid&per_page=100"
     )
     assert resp.status_code == 200
-    assert resp.json()["items"] == []
+    assert {it["name"] for it in resp.json()["items"]} == {
+        "tagid-r1",
+        "tagid-r2",
+        "tagid-r3",
+        "tagid-r4",
+    }
+
+
+async def test_list_resources_tag_ids_default_label_consistent_with_include_tags(
+    db_session: AsyncSession,
+    tag_id_resources,
+    client: AsyncClient,
+):
+    """默认分类标签筛选结果与 include_tags 返回的 tags 完全一致：
+    命中的每个资源都带该默认标签，未命中的都不带。
+    """
+    default_tag = await _default_tag_by_name(db_session, "材料")
+    if default_tag is None or default_tag.id is None:
+        pytest.skip("项目内不存在默认标签「材料」")
+
+    resp = await client.get(
+        f"/projects/{PID}/resource?tag_ids={default_tag.id}&name=tagid"
+        "&include_tags=true&per_page=100"
+    )
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert items
+    for it in items:
+        assert any(t["id"] == default_tag.id for t in it["tags"])
+
+    # 未按默认标签过滤的全量列表里，material 类资源的 tags 同样含该默认标签
+    resp_all = await client.get(
+        f"/projects/{PID}/resource?name=tagid&include_tags=true&per_page=100"
+    )
+    assert resp_all.status_code == 200
+    for it in resp_all.json()["items"]:
+        has_default = any(t["id"] == default_tag.id for t in it["tags"])
+        assert has_default == (it["id"] in {x["id"] for x in items})
+
+
+async def test_list_resources_tag_ids_default_label_and_custom_tag(
+    db_session: AsyncSession,
+    tag_id_resources,
+    client: AsyncClient,
+):
+    """默认分类标签与自建标签之间保持 AND 语义：
+    默认标签按类别派生命中，自建标签按 resource_tag 直接挂载命中。
+    """
+    default_material = await _default_tag_by_name(db_session, "材料")
+    default_labor = await _default_tag_by_name(db_session, "人工")
+    if (
+        default_material is None
+        or default_material.id is None
+        or default_labor is None
+        or default_labor.id is None
+    ):
+        pytest.skip("项目内不存在默认标签「材料」/「人工」")
+
+    r1, r2, r3, _ = tag_id_resources
+    assert all(r.id is not None for r in (r1, r2, r3))
+    tag_a = await _make_tag(db_session, "tagid-A")
+    assert tag_a.id is not None
+    await _link(db_session, r1.id, tag_a.id)
+    await _link(db_session, r2.id, tag_a.id)
+    # r3 改为 labor 类并挂同一自建标签：不应被「材料」命中
+    r3.category = ResourceCategory.labor
+    db_session.add(r3)
+    await db_session.commit()
+    await _link(db_session, r3.id, tag_a.id)
+
+    # 「材料」默认标签 AND tagid-A：r1/r2（material + 挂 A）
+    resp = await client.get(
+        f"/projects/{PID}/resource?tag_ids={default_material.id}&tag_ids={tag_a.id}"
+        "&name=tagid&per_page=100"
+    )
+    assert resp.status_code == 200
+    assert {it["name"] for it in resp.json()["items"]} == {"tagid-r1", "tagid-r2"}
+
+    # 「人工」默认标签 AND tagid-A：仅 r3（labor + 挂 A）
+    resp = await client.get(
+        f"/projects/{PID}/resource?tag_ids={default_labor.id}&tag_ids={tag_a.id}"
+        "&name=tagid&per_page=100"
+    )
+    assert resp.status_code == 200
+    assert {it["name"] for it in resp.json()["items"]} == {"tagid-r3"}
 
 
 async def test_list_resources_tag_ids_project_isolation(

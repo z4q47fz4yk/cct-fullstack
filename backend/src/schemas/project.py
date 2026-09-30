@@ -167,7 +167,12 @@ class ProjectBase(SQLModel):
 class ProjectCreate(ProjectBase):
     """创建项目请求"""
 
-    pass
+    @model_validator(mode="after")
+    def validate_coordinates(self) -> "ProjectCreate":
+        """纬度 / 经度必须成对提供（同为数值或同为 null），禁止只保存半个坐标。"""
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("纬度与经度需成对填写（同为数值或同时留空）")
+        return self
 
 
 class ProjectUpdate(SQLModel):
@@ -245,6 +250,17 @@ class ProjectUpdate(SQLModel):
     @model_validator(mode="after")
     def validate_region(self) -> "ProjectUpdate":
         validate_province_city(self.province, self.city)
+        return self
+
+    @model_validator(mode="after")
+    def validate_coordinates(self) -> "ProjectUpdate":
+        """纬度 / 经度必须成对（同为数值或同为 null）。
+
+        只带一半数值（含另一半显式 null 或省略）会 422，防止静默保存半个坐标；
+        二者同为 null 的显式清空仍按 nullable 字段约定放行（PUT 清空语义）。
+        """
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("纬度与经度需成对填写（同为数值或同时留空）")
         return self
 
 

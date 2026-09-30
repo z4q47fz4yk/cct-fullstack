@@ -62,9 +62,16 @@ const visibleTags = computed<TagResp[]>(() => {
 
 const selectedId = ref<number | null>(null)
 
-const selectedTag = computed<TagResp | null>(
-  () => tags.value.find((t) => t.id === selectedId.value) ?? null,
-)
+const selectedTag = computed<TagResp | null>(() => {
+  const tag = tags.value.find((t) => t.id === selectedId.value) ?? null
+  // 搜索 / 分组过滤后选中项已不在可见列表时，右侧显示空态，
+  // 避免"搜索无结果却仍展示上一次选中的标签"的误导
+  if (tag && !visibleTags.value.some((t) => t.id === tag.id)) return null
+  return tag
+})
+
+// 有选中记录、但已被搜索 / 分组过滤隐藏（右侧应显示"未选中标签"空态）
+const hiddenSelection = computed(() => selectedId.value !== null && selectedTag.value === null)
 
 const { state: tagDetailState } = useQuery(() => ({
   ...getTagQuery({
@@ -359,7 +366,12 @@ const groupCount = (g: TagGroupResp): number => g.count
             >
               <span class="material-symbols-outlined icon-2xl text-fg-subtle">label_off</span>
             </div>
-            <p class="text-fg-muted text-sm">从左侧选择一个标签查看详情</p>
+            <p class="text-fg-muted text-sm">
+              {{ hiddenSelection ? '未选中标签' : '从左侧选择一个标签查看详情' }}
+            </p>
+            <p v-if="hiddenSelection" class="text-xs text-fg-subtle mt-1">
+              当前搜索或分组下没有匹配结果，请调整关键词后重新选择标签
+            </p>
           </div>
           <div v-else class="space-y-4">
             <div>

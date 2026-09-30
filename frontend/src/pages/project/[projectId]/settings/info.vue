@@ -107,10 +107,15 @@ const cityOptions = computed(() => {
 })
 
 // 表单 schema：复用后端生成的 vProjectUpdate（约束零漂移），仅覆盖 name 为必填
+// （后端 name 上限 100 字符，中文提示作为重命名的前端长度预检）
 const formSchema = toTypedSchema(
   v.object({
     ...vProjectUpdate.entries,
-    name: v.pipe(v.string(), v.minLength(1), v.maxLength(100)),
+    name: v.pipe(
+      v.string(),
+      v.minLength(1, '项目名称不能为空'),
+      v.maxLength(100, '项目名称不能超过 100 个字符'),
+    ),
   }),
 )
 
@@ -296,7 +301,19 @@ function parseNullableNumber(raw: string): number | null {
   return Number.isNaN(n) ? null : n
 }
 
+// 经纬度成对校验：缺一时给出可见提示，不允许只保存半个坐标
+// （与后端 ProjectCreate / ProjectUpdate 的成对校验保持一致）
+const coordinateError = computed(() => {
+  const hasLat = latitude.value != null
+  const hasLng = longitude.value != null
+  return hasLat !== hasLng ? '纬度与经度需成对填写（或同时留空）' : ''
+})
+
 const submit = handleSubmit(async (values) => {
+  if (coordinateError.value) {
+    notifyError({ title: '无法保存', description: coordinateError.value })
+    return
+  }
   try {
     await updateProject({
       ...values,
@@ -765,7 +782,7 @@ onBeforeRouteLeave(async () => {
                   v-bind="latitudeAttrs"
                   :disabled="isUpdatingProject"
                   class="input w-full"
-                  :class="{ 'input-error': errors.latitude }"
+                  :class="{ 'input-error': errors.latitude || coordinateError }"
                   placeholder="如 39.9075"
                   type="number"
                   step="any"
@@ -791,7 +808,7 @@ onBeforeRouteLeave(async () => {
                   v-bind="longitudeAttrs"
                   :disabled="isUpdatingProject"
                   class="input w-full"
-                  :class="{ 'input-error': errors.longitude }"
+                  :class="{ 'input-error': errors.longitude || coordinateError }"
                   placeholder="如 116.39723"
                   type="number"
                   step="any"
@@ -808,6 +825,11 @@ onBeforeRouteLeave(async () => {
                   {{ errors.longitude }}
                 </span>
               </div>
+
+              <!-- 经纬度成对校验：缺一时给出可见提示，阻止静默保存半个坐标 -->
+              <p v-if="coordinateError" class="md:col-span-2 text-xs text-error" role="alert">
+                {{ coordinateError }}
+              </p>
             </div>
           </div>
         </section>
