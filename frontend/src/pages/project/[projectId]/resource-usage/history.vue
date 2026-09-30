@@ -56,8 +56,9 @@ const viewingBatchRecords = computed<ResourceUsageResp[]>(() => {
   return usages.value.filter((u) => getUsageChunkKey(u) === viewingChunkKey.value)
 })
 
-function openBatchDetail(chunkKey: string) {
-  viewingChunkKey.value = chunkKey
+/** 展开/收起切换：点击「查看详情」展开行内详情，再次点击同一分块收起（E-6） */
+function toggleBatchDetail(chunkKey: string) {
+  viewingChunkKey.value = viewingChunkKey.value === chunkKey ? null : chunkKey
 }
 function closeBatchDetail() {
   viewingChunkKey.value = null
@@ -151,27 +152,30 @@ const taggingBatchInitialTags = computed<TagResp[]>(() => {
 
   <ResourceUsageFilters v-model:filters="filters" />
 
+  <!-- 批次列表常驻渲染；详情以「展开行」嵌在对应分块行下方，与列表并存（E-6） -->
   <ResourceUsageBatchList
     class="panel p-0"
-    v-if="viewingChunkKey === null"
     :usages="usages"
     :loading="isLoading"
-    @view-detail="openBatchDetail"
+    :active-chunk-key="viewingChunkKey"
+    @view-detail="toggleBatchDetail"
+    @close-detail="closeBatchDetail"
     @delete-batch="handleDeleteBatch"
     @tags-batch="openBatchTags"
-  />
-
-  <ResourceUsageBatchDetail
-    v-else
-    :chunk-key="viewingChunkKey"
-    :records="viewingBatchRecords"
-    :loading="isLoading"
-    @close="closeBatchDetail"
-    @update-record="handleUpdateRecord"
-    @delete-record="handleDeleteRecord"
-    @delete-batch="handleDeleteBatch(viewingChunkKey!, viewingBatchRecords)"
-    @tags="openUsageTags"
-  />
+  >
+    <template #detail>
+      <ResourceUsageBatchDetail
+        :chunk-key="viewingChunkKey!"
+        :records="viewingBatchRecords"
+        :loading="isLoading"
+        @close="closeBatchDetail"
+        @update-record="handleUpdateRecord"
+        @delete-record="handleDeleteRecord"
+        @delete-batch="handleDeleteBatch(viewingChunkKey!, viewingBatchRecords)"
+        @tags="openUsageTags"
+      />
+    </template>
+  </ResourceUsageBatchList>
 
   <!-- 用量打标模态框 -->
   <TagAssignModal

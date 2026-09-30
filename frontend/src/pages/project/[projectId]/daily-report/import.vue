@@ -7,6 +7,7 @@ import { listConfigsQuery, parseDailyReportMutation } from '@/client/@pinia/cola
 import { useProjectContext } from '@/composables/useProjectContext'
 import { useUsageDateType } from '@/composables/useUsageDateType'
 import { useCapabilities } from '@/composables/useCapabilities'
+import { formatHttpError } from '@/utils/error'
 
 definePage({
   meta: {
@@ -30,6 +31,16 @@ const { usageDate, effectiveUsageType } = useUsageDateType()
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
+/** 文件格式预检提示（选择文件时校验，E-7） */
+const fileError = ref('')
+
+/** 支持的日报文件扩展名 */
+const ALLOWED_EXTENSIONS = ['.xlsx', '.xls']
+
+function isSupportedExcel(name: string): boolean {
+  const lower = name.toLowerCase()
+  return ALLOWED_EXTENSIONS.some((ext) => lower.endsWith(ext))
+}
 
 // ─── AI 生成解析配置入口 ─────────────────────────────────────
 function gotoAiConfig() {
@@ -86,20 +97,32 @@ const { mutateAsync: parseDailyReport, data, isLoading } = useMutation(parseDail
 function handleFileChange(event: Event) {
   const target = event.target as HTMLInputElement
   const file = target.files?.[0]
-  if (file) {
-    selectedFile.value = file
+  fileError.value = ''
+  if (!file) return
+  // 扩展名预检：非法格式在选择处即给出格式类提示，避免提交后只得到服务器错误（E-7）
+  if (!isSupportedExcel(file.name)) {
+    selectedFile.value = null
+    target.value = ''
+    fileError.value = `请上传 .xlsx / .xls 格式的日报文件（当前文件：${file.name}）`
+    return
   }
+  selectedFile.value = file
 }
 
 async function handleParse() {
-  if (!selectedFile.value || !usageDate.value) return
+  const file = selectedFile.value
+  if (!file || !usageDate.value) return
+  if (!isSupportedExcel(file.name)) {
+    fileError.value = `请上传 .xlsx / .xls 格式的日报文件（当前文件：${file.name}）`
+    return
+  }
 
   storeV2.error = ''
 
   await parseDailyReport({
     path: { project_id: currentProjectId.value! },
     body: {
-      file: selectedFile.value,
+      file,
       usage_date: usageDate.value,
       config_id: selectedConfigId.value,
     },
@@ -109,13 +132,16 @@ async function handleParse() {
       storeV2.batchId = result.batchId
     })
     .catch((error) => {
-      storeV2.error = error
+      // 服务器 500 常见于文件内容非标准日报表；后端错误文案另行优化，
+      // 这里先补充格式类提示，避免只显示「服务器错误，请联系管理员」（E-7）
+      storeV2.error = `日报解析失败：${formatHttpError(error, '未知错误')}。请确认上传的是 .xlsx / .xls 格式的标准 Excel 日报文件`
     })
 }
 
 function resetImport() {
   storeV2.reset()
   selectedFile.value = null
+  fileError.value = ''
   if (fileInput.value) {
     fileInput.value.value = ''
   }
@@ -234,10 +260,16 @@ function goToReview() {
           type="file"
           class="hidden"
           placeholder=""
-          accept=".application/vnd.ms-excel"
+          accept=".xlsx,.xls"
           @change="handleFileChange"
         />
       </label>
+
+      <!-- 文件格式预检提示（E-7） -->
+      <div v-if="fileError" class="alert alert-error alert-sm" role="alert">
+        <span class="material-symbols-outlined icon-sm">error</span>
+        <span>{{ fileError }}</span>
+      </div>
 
       <div v-if="storeV2.error" class="alert alert-error alert-sm" role="alert">
         <span class="material-symbols-outlined icon-sm">error</span>

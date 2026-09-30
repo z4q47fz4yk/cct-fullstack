@@ -139,7 +139,17 @@ const taskById = computed(() => new Map((scheduleTasks.value ?? []).map((t) => [
 // ─── 统一提交：完成一天的录入 ──────────────────────────────
 const { notifySuccess, notifyError } = useToast()
 
+/** 当前本地时间（HH:mm），用于批次备注区分同日多批次（M-10/E-8） */
+function nowHmLocal(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 async function handleCompleteDay() {
+  // 防重复提交：提交中忽略再次触发（E-10，配合粘性操作条单按钮实例）
+  if (submitting.value || isRecording.value) return
+
   const manualRows = pendingRows.value.filter((r) => !pendingRowDuplicateKeys.value.has(r._key))
   if (
     manualRows.length === 0 &&
@@ -173,7 +183,8 @@ async function handleCompleteDay() {
         usage_type: effectiveUsageType.value,
       }))
       const body: ResourceUsageBatchCreate = {
-        name: `手动录入 - ${usageDate.value}`,
+        // 备注带提交时刻（HH:mm），同日多批次可区分（M-10/E-8）
+        name: `手动录入 - ${usageDate.value} ${nowHmLocal()}`,
         items,
       }
       try {
@@ -394,7 +405,9 @@ const infoTone = computed(() => (isForced.value ? 'warning' : 'info'))
     <span class="text-sm">{{ submitErrorMessage }}</span>
   </div>
 
-  <div class="pt-4">
+  <!-- 粘性底部操作条：小视口（如 1280×633）下提交入口始终可达（E-10）；
+       仅保留这一个提交按钮实例，提交中禁用 + 入口防重入，不会重复提交 -->
+  <div class="sticky bottom-0 z-10 mt-4 border-t border-base-content/10 bg-base-100 px-4 pb-4 pt-3">
     <button
       class="btn btn-primary btn-block"
       :disabled="
