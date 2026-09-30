@@ -559,17 +559,35 @@ const kindOptions: ReadonlyArray<SegmentOption<MeasureKind>> = [
         <template v-if="form.kind === 'ADD'">
           <label class="fieldset">
             <span class="fieldset-legend">负碳因子资源（如光伏）</span>
-            <select v-model.number="form.resourceId" class="select select-bordered">
-              <option :value="null" disabled>请选择资源</option>
+            <select
+              v-model.number="form.resourceId"
+              class="select select-bordered"
+              :disabled="addResources.length === 0"
+            >
+              <option v-if="addResources.length > 0" :value="null" disabled>请选择资源</option>
+              <option v-else :value="null">暂无负碳因子资源</option>
               <option v-for="r in addResources" :key="r.id" :value="r.id">
                 {{ r.name }}（{{ categoryConfigMap[r.category].label }} · 因子
                 {{ r.carbonFactor }}）
               </option>
             </select>
           </label>
-          <p v-if="addResources.length === 0" class="text-xs text-warning">
-            尚无负碳因子资源，请先在「资源管理」中创建碳因子为负的资源（如光伏）。
-          </p>
+          <!-- 空态引导：不允许静默空下拉，给出创建路径并可直接跳转 -->
+          <div
+            v-if="addResources.length === 0"
+            class="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5"
+          >
+            <p class="text-xs text-base-content">
+              暂无负碳因子资源，请先到「资源管理」创建碳因子为负的资源（如光伏），再回到本表单选择。
+            </p>
+            <RouterLink
+              :to="`/project/${currentProjectId}/settings/resources`"
+              class="link link-primary text-xs inline-flex items-center gap-1 mt-1"
+            >
+              <span class="material-symbols-outlined icon-sm">open_in_new</span>
+              去资源管理创建
+            </RouterLink>
+          </div>
         </template>
 
         <template v-else>

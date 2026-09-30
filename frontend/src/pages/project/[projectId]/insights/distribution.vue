@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import { useQueryCache } from '@pinia/colada'
 import SegmentControl, { type SegmentOption } from '@/components/common/SegmentControl.vue'
 import TagPieChartCard from '@/components/chart/TagPieChartCard.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
 import { useChartApi, type ChartPieMetric } from '@/composables/useChartApi'
 import { useProjectContext } from '@/composables/useProjectContext'
+import { useSnapshotManualRefresh, useSnapshotRefreshInfo } from '@/composables/useSnapshotApi'
+import { notifyError, notifySuccess } from '@/composables/useToast'
 import { fmtNumber } from '@/utils/format'
+import { formatHttpError } from '@/utils/error'
 
 definePage({
   meta: {
@@ -46,11 +50,52 @@ watch(
 )
 
 const totalValue = computed(() => Object.values(summaries).reduce((sum, v) => sum + v, 0))
+
+// ──── 数据新鲜度（物化视图聚合最长约 30 分钟延迟，提供手动刷新入口） ────
+const queryCache = useQueryCache()
+const { info: snapshotInfo, refresh: refreshSnapshotInfo } = useSnapshotRefreshInfo()
+const { refreshSnapshot, isRefreshing } = useSnapshotManualRefresh()
+
+async function handleManualRefresh() {
+  try {
+    await refreshSnapshot({ path: { project_id: currentProjectId.value! } })
+    // 饼图数据来自物化视图：强制刷新后立即重查
+    await queryCache.invalidateQueries({ key: ['getChartPieData'] })
+    await refreshSnapshotInfo()
+    notifySuccess({ title: '数据已刷新', description: '碳排放分布已按最新用量重新聚合' })
+  } catch (e) {
+    console.error('Manual snapshot refresh failed:', e)
+    notifyError({ title: '刷新失败', description: formatHttpError(e) })
+  }
+}
+
+function fmtTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('zh-CN', { hour12: false })
+}
 </script>
 
 <template>
   <div class="h-full flex flex-col gap-4 overflow-y-auto">
-    <div class="flex items-center justify-end">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <!-- 数据新鲜度提示：录入后图表可能滞后于物化视图刷新周期 -->
+      <div class="flex items-center gap-2 text-xs text-fg-subtle min-w-0 flex-wrap">
+        <span class="material-symbols-outlined icon-sm shrink-0">schedule</span>
+        <span>数据由物化视图聚合，录入后最长约 30 分钟延迟</span>
+        <span v-if="snapshotInfo?.lastRefreshedAt" class="font-mono">
+          上次刷新 {{ fmtTime(snapshotInfo.lastRefreshedAt) }}
+        </span>
+        <button
+          class="btn btn-ghost btn-xs shrink-0"
+          :disabled="isRefreshing"
+          @click="handleManualRefresh"
+        >
+          <span v-if="isRefreshing" class="loading loading-spinner loading-xs"></span>
+          <span v-else class="material-symbols-outlined icon-sm">refresh</span>
+          立即刷新
+        </button>
+      </div>
       <SegmentControl v-model="metric" :options="metricOptions" />
     </div>
 

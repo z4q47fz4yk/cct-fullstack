@@ -12,8 +12,10 @@ import { complianceQuery } from '@/client/@pinia/colada.gen'
 export function useComplianceApi() {
   const { currentProjectId } = useProjectContext()
 
+  // silent: 409「尚无 PLANNED 基线」是正常的空态信号（页面已展示引导），
+  // 不应走全局错误拦截器弹「操作冲突」误导 toast
   const query = useQuery(() => ({
-    ...complianceQuery({ path: { project_id: currentProjectId.value! } }),
+    ...complianceQuery({ path: { project_id: currentProjectId.value! }, silent: true }),
     enabled: !!currentProjectId.value,
   }))
 

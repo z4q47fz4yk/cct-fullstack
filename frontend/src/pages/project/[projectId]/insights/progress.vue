@@ -57,7 +57,7 @@ const { plan } = usePlanApi()
 const { projectSummaries, isLoadingProjectSummaries, progressTimeline } = useProgressApi()
 const { weather, createRecord, updateRecord, deleteRecord, refresh, syncWeather, isSyncing } =
   useWeatherApi()
-const { confirmDanger } = useConfirm()
+const { confirm, confirmDanger } = useConfirm()
 const C = getThemeColors()
 
 const MS_DAY = 86_400_000
@@ -437,10 +437,13 @@ async function handleDeleteWeather(w: WeatherResp) {
 async function handleSyncWeather() {
   const coords = project.value?.latitude ?? null
   if (coords == null || project.value?.longitude == null) {
-    const r = await confirmDanger(
-      '项目未设置经纬度，无法自动同步历史天气。是否前往「项目信息」填写纬度/经度？',
-      '缺少经纬度',
-    )
+    // 非破坏性引导跳转：用 confirm 传中性按钮文案/样式（行为 = 前往项目信息填经纬度）
+    const r = await confirm({
+      title: '缺少经纬度',
+      message: '项目未设置经纬度，无法自动同步历史天气。是否前往「项目信息」填写纬度/经度？',
+      confirmText: '去填写',
+      confirmType: 'primary',
+    })
     if (r.confirmed && currentProjectId.value !== null) {
       router.push({
         name: '/project/[projectId]/settings/info',

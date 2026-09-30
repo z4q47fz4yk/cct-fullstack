@@ -23,6 +23,10 @@ from src.services.progress import TaskProgressService
 from src.utils.carbon import get_effective_carbon_factor, get_effective_unit_price
 from src.utils.query import project_filter
 
+# 项目未填工期日期时，计划基线推算使用的哨兵锚点（2000-01-01）；
+# 由它派生的「月份」是无中生有的脏数据，逐月对照中需要剔除。
+_UNDATED_ANCHOR = dt.date(2000, 1, 1)
+
 
 def _month_index(anchor: dt.date, month: dt.date) -> int:
     """锚点所在自然月为第 1 期。"""
@@ -210,7 +214,14 @@ async def get_compliance(
     ]
 
     # 逐月对照
-    months = sorted(set(planned_monthly_cost) | set(actual_monthly_cost))
+    # 计划基线在项目未填工期日期时以哨兵锚点 2000-01-01 推算月份
+    # （见 services/plan_estimate.py / optimization_adapter.py 的锚点兜底），
+    # 这类月份是编造的脏数据：不进入逐月对照，引导用户先填工期日期。
+    months = sorted(
+        m
+        for m in (set(planned_monthly_cost) | set(actual_monthly_cost))
+        if m.year > _UNDATED_ANCHOR.year
+    )
     monthly = [
         ComplianceMonthly(
             month=month,

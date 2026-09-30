@@ -15,6 +15,7 @@ import RunStatusBar from '@/components/optimization/RunStatusBar.vue'
 import { sortTasksForGantt } from '@/utils/schedule'
 import { fmtNumber, fmtWanYuan } from '@/utils/format'
 import { formatHttpError } from '@/utils/error'
+import { validateRunConfig, type RunConfigKey } from '@/utils/runConfig'
 import type { RunResp, RunStatusEnum, TaskMode } from '@/client/types.gen'
 import { notifyError, notifyInfo, notifySuccess, notifyWarning } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
@@ -164,6 +165,17 @@ const { zeroFactorCount: diagZeroFactorCount } = useDiagnosticsApi(() => 'ALL')
 async function handleStartOptimization() {
   const name = runName.value.trim()
   if (!name) return
+  // 提交前字段级校验：参数非法（如种群/代数为 0）时不发请求，展开参数面板并给出可见提示
+  const configErrors = validateRunConfig(store.config)
+  const errorKeys = Object.keys(configErrors) as RunConfigKey[]
+  if (errorKeys.length > 0) {
+    showConfig.value = true
+    notifyWarning({
+      title: '优化参数有误',
+      description: configErrors[errorKeys[0]!] ?? '请检查优化参数',
+    })
+    return
+  }
   try {
     await store.startOptimization(name)
     runName.value = ''

@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import ChartEmptyState from '@/components/common/ChartEmptyState.vue'
 import { useComplianceApi } from '@/composables/useComplianceApi'
 import { usePlanApi } from '@/composables/usePlanApi'
+import { useProjectContext } from '@/composables/useProjectContext'
 import { fmtNumber, fmtWanYuan } from '@/utils/format'
 import type { ComplianceTaskRow } from '@/client/types.gen'
 
@@ -21,6 +22,7 @@ definePage({
 const { data, isLoading, isNoPlan, refresh } = useComplianceApi()
 // 基线过期状态来自 GET /plans 的存储值（数据体检页手动检查后更新），此处只读
 const { plan } = usePlanApi()
+const { currentProjectId } = useProjectContext()
 
 function statusBadge(diff: number): { label: string; cls: string } {
   const good = diff <= 0
@@ -30,22 +32,19 @@ function statusBadge(diff: number): { label: string; cls: string } {
 const cards = computed(() => {
   const d = data.value
   if (!d) return []
+  // 「项目信息 → 工期」日期缺失时后端兜底出 0 实际工期：
+  // 前端按缺失处理显示「—」，不展示「实际 0.0 天」脏数据
+  const hasActualDuration = (d.actualDuration ?? 0) > 0
+  const actualDuration = d.actualDuration ?? 0
   return [
     {
       label: '总工期',
       planned: `${fmtNumber(d.plannedDuration, 1)} 天`,
-      actual:
-        d.actualDuration !== null && d.actualDuration !== undefined
-          ? `${fmtNumber(d.actualDuration, 1)} 天`
-          : '—',
-      diff:
-        d.actualDuration !== null && d.actualDuration !== undefined
-          ? `${d.actualDuration - d.plannedDuration > 0 ? '+' : ''}${fmtNumber(d.actualDuration - d.plannedDuration, 1)} 天`
-          : '—',
-      badge:
-        d.actualDuration !== null && d.actualDuration !== undefined
-          ? statusBadge(d.actualDuration - d.plannedDuration)
-          : null,
+      actual: hasActualDuration ? `${fmtNumber(actualDuration, 1)} 天` : '—',
+      diff: hasActualDuration
+        ? `${actualDuration - d.plannedDuration > 0 ? '+' : ''}${fmtNumber(actualDuration - d.plannedDuration, 1)} 天`
+        : '—',
+      badge: hasActualDuration ? statusBadge(actualDuration - d.plannedDuration) : null,
     },
     {
       label: '总成本',
@@ -74,6 +73,18 @@ function taskBadge(row: ComplianceTaskRow): { label: string; cls: string } {
 }
 
 const monthlyRows = computed(() => data.value?.monthly ?? [])
+
+/**
+ * 哨兵月份识别：「项目信息 → 工期」日期未填写时，后端把无归属日期的数据
+ * 兜底进 2000-01-01 这类月份行；前端不渲染该脏日期，改标「未填写日期」。
+ */
+function isSentinelMonth(month: string): boolean {
+  const year = Number(month.slice(0, 4))
+  return Number.isFinite(year) && year < 2001
+}
+
+/** 各工序完成时间 0 行 = 工期日期未填写（后端 taskRows 兜底为空），需给出填写引导 */
+const isScheduleDateMissing = computed(() => (data.value?.taskRows.length ?? 0) === 0)
 </script>
 
 <template>
@@ -139,7 +150,20 @@ const monthlyRows = computed(() => data.value?.monthly ?? [])
 
       <div class="panel p-4">
         <h2 class="text-sm font-semibold text-base-content mb-3">各工序完成时间</h2>
-        <div class="overflow-x-auto">
+        <ChartEmptyState
+          v-if="isScheduleDateMissing"
+          icon="event_busy"
+          title="尚未填写工期日期"
+          description="「项目信息 → 工期」的计划 / 实际日期为空，无法生成各工序完成时间对照"
+        >
+          <RouterLink
+            :to="`/project/${currentProjectId}/settings/info`"
+            class="btn btn-primary btn-sm"
+          >
+            去填写日期
+          </RouterLink>
+        </ChartEmptyState>
+        <div v-else class="overflow-x-auto">
           <table class="table table-sm">
             <thead>
               <tr>
@@ -227,7 +251,17 @@ const monthlyRows = computed(() => data.value?.monthly ?? [])
             </thead>
             <tbody>
               <tr v-for="m in monthlyRows" :key="m.month">
-                <td class="font-num">{{ m.month }}</td>
+                <td class="font-num">
+                  <!-- 哨兵月份（如 2000-01-01）不渲染脏日期，标注为「未填写日期」 -->
+                  <span
+                    v-if="isSentinelMonth(m.month)"
+                    class="text-fg-subtle"
+                    :title="`工期日期未填写，后端兜底月份 ${m.month}`"
+                  >
+                    未填写日期
+                  </span>
+                  <template v-else>{{ m.month }}</template>
+                </td>
                 <td class="table-num">{{ fmtWanYuan(m.plannedCost) }}</td>
                 <td class="table-num">{{ fmtWanYuan(m.actualCost) }}</td>
                 <td class="table-num">{{ fmtNumber(m.plannedEmission / 1000, 2) }} t</td>

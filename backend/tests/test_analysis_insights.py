@@ -684,6 +684,32 @@ async def test_compliance_with_and_without_baseline(
     assert data["projectCompleted"] is True
 
 
+async def test_compliance_hides_undated_sentinel_months(
+    client: AsyncClient, insight_project
+):
+    """工期日期缺失时（M-5）：计划基线按哨兵锚点 2000-01-01 推月份，
+    逐月对照不得出现 2000 年脏月份；逐工序对照为空、不编造日期。"""
+    pid = insight_project["pid"]
+    resp = await client.put(
+        f"/project/{pid}",
+        json={
+            "planned_start_date": None,
+            "planned_completion_date": None,
+            "actual_start_date": None,
+            "actual_completion_date": None,
+        },
+    )
+    assert resp.status_code == 200
+    resp = await client.post(f"/projects/{pid}/plans", json={})
+    assert resp.status_code == 201
+
+    data = (await client.get(f"/projects/{pid}/evaluation/compliance")).json()
+    assert data["taskRows"] == []
+    assert all(not m["month"].startswith("2000") for m in data["monthly"])
+    # 总量口径不受逐月脏数据剔除影响
+    assert data["plannedEmission"] != 0
+
+
 # ============================================================================
 # 计划基线过期检查（B-4 修复：数据体检页手动触发，不监听业务变更）
 # ============================================================================

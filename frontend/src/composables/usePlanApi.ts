@@ -34,8 +34,10 @@ export function usePlanApi() {
   const { currentProjectId } = useProjectContext()
 
   // ──── 计划基线读取（404 = 尚未保存任何计划） ─────────────
+  // silent: 404「尚未创建施工计划基线」是正常的空态信号（页面正文已展示引导），
+  // 不应走全局错误拦截器弹「资源不存在」误导 toast
   const planQuery = useQuery(() => ({
-    ...getPlanQuery({ path: { project_id: currentProjectId.value! } }),
+    ...getPlanQuery({ path: { project_id: currentProjectId.value! }, silent: true }),
     enabled: !!currentProjectId.value,
   }))
 
