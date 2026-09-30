@@ -97,7 +97,7 @@ bash ../scripts/dev-docs.sh
 
 ### 1. 创建项目
 
-打开首页（<http://localhost:5173>），点击「新建项目」，输入项目名称（如"某商业综合体项目"）并保存。
+打开首页（<http://localhost:5173>），点击「创建项目」，输入项目名称（如"某商业综合体项目"）并保存。
 
 ### 2. 建立工序
 
@@ -229,4 +229,4 @@ location / {
 - 应用 → 文档：使用 `docsHref('/guide/intro')`（`site.config.ts`），如应用导航栏的「文档」入口；
 - 文档 → 应用：Markdown 中使用 `<AppLink to="/project/1">` 组件（自定义主题已注册），或在导航栏点击「打开系统」；
 - 文档站导航/侧边栏中**不要**直接写应用路径——会被 VitePress `withBase` 加上 `/docs/` 前缀，请使用 `<AppLink>`；
-- 应用跳转文档时可在 URL 带 `?projectId=123`，文档页用 `<BackToProject>` 组件渲染「回到项目」链接。
+- `?projectId=123` + `<BackToProject>`：文档深链机制——主题已注册该组件，URL 带 projectId 时渲染「回到项目」链接；当前应用内「文档」入口不携带 projectId，因此该链接默认不显示，返回应用请用导航栏「打开系统」。

@@ -13,9 +13,6 @@ export type ThemeMode = Theme | 'auto'
 const stored = useStorage<ThemeMode>('app-theme', 'auto')
 const preferredDark = usePreferredDark()
 
-/** 三态循环顺序：auto → 浅色 → 深色 → auto */
-const CYCLE_ORDER: ThemeMode[] = ['auto', 'starglass-light', 'starglass']
-
 /** 解析后的实际主题 */
 const resolved = computed<Theme>(() => {
   if (stored.value === 'auto') {
@@ -37,11 +34,10 @@ watch(
 export function useTheme() {
   const isDark = computed(() => resolved.value === 'starglass')
 
-  /** 三态循环：auto → 浅色 → 深色 → auto */
-  function cycle() {
-    const i = CYCLE_ORDER.indexOf(stored.value)
-    stored.value = CYCLE_ORDER[(i + 1) % CYCLE_ORDER.length]
+  /** 显式设置主题偏好（自动 / 浅色 / 深色 三选一），写入 localStorage 持久化 */
+  function setMode(m: ThemeMode) {
+    stored.value = m
   }
 
-  return { mode: stored, theme: resolved, isDark, cycle }
+  return { mode: stored, theme: resolved, isDark, setMode }
 }

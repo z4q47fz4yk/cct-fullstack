@@ -1,23 +1,44 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import BasicLayout from '@/components/layout/BasicLayout.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import { useProjectApi } from '@/composables/useProjectApi'
+import { useConfirm } from '@/composables/useConfirm'
+import { useToast } from '@/composables/useToast'
+import { formatHttpError } from '@/utils/error'
 import type { ProjectResp } from '@/client/types.gen'
 
 definePage({
   meta: { title: '项目列表', description: '选择或创建一个项目' },
 })
 
+/** 项目名称长度上限（与后端 ProjectCreate.name 的 string_too_long 约束一致） */
+const PROJECT_NAME_MAX = 100
+
 const router = useRouter()
 const api = useProjectApi()
-const { projects, isLoading, error, createProject, isCreating } = api
+const {
+  projects,
+  isLoading,
+  error,
+  createProject,
+  isCreating,
+  deleteProjectById,
+  isDeletingProject,
+} = api
+const { confirmDanger } = useConfirm()
+const { notifyError, notifySuccess } = useToast()
 
 // 创建项目对话框
 const showCreateDialog = ref(false)
 const newProjectName = ref('')
 const newProjectDescription = ref('')
+// 创建失败的错误文案（保留弹窗并内联展示后端返回的可读 message）
+const createError = ref('')
+
+// 前端长度预检：超长直接拦截，避免提交后才收到 422
+const nameTooLong = computed(() => newProjectName.value.length > PROJECT_NAME_MAX)
 
 function enterProject(project: ProjectResp) {
   router.push(`/project/${project.id}/schedule`)
@@ -27,18 +48,44 @@ function openCreateDialog() {
   showCreateDialog.value = true
   newProjectName.value = ''
   newProjectDescription.value = ''
+  createError.value = ''
 }
 
 async function handleCreate() {
-  if (!newProjectName.value.trim()) return
-  const result = await createProject({
-    name: newProjectName.value.trim(),
-    description: newProjectDescription.value.trim() || null,
-  })
-  showCreateDialog.value = false
-  // 创建后直接进入新项目
-  if (result?.id) {
-    router.push(`/project/${result.id}/schedule`)
+  const name = newProjectName.value.trim()
+  if (!name || nameTooLong.value) return
+  createError.value = ''
+  try {
+    const result = await createProject({
+      name,
+      description: newProjectDescription.value.trim() || null,
+    })
+    showCreateDialog.value = false
+    // 创建后直接进入新项目
+    if (result?.id) {
+      router.push(`/project/${result.id}/schedule`)
+    }
+  } catch (e) {
+    // 422（如名称超长）/409 等失败：弹窗保持打开，内联 + toast 展示后端错误文案
+    createError.value = formatHttpError(e, '创建项目失败，请重试')
+    notifyError({ title: '创建项目失败', description: createError.value })
+    console.error('Failed to create project:', e)
+  }
+}
+
+// 删除项目（破坏性操作：二次确认 → 失败 toast + 控制台日志；成功后列表缓存自动失效刷新）
+async function handleDeleteProject(project: ProjectResp) {
+  const ok = await confirmDanger(
+    `确定要删除项目「${project.name}」吗？该项目下的工序、资源、用量、优化记录等全部数据将被一并删除，且不可恢复。`,
+    '删除项目',
+  )
+  if (!ok.confirmed) return
+  try {
+    await deleteProjectById(project.id)
+    notifySuccess({ title: '项目已删除', description: `「${project.name}」已删除` })
+  } catch (e) {
+    notifyError({ title: '删除项目失败', description: formatHttpError(e) })
+    console.error('Failed to delete project:', e)
   }
 }
 </script>
@@ -98,6 +145,16 @@ async function handleCreate() {
                 <div class="flex-1 min-w-0">
                   <h3 class="font-semibold text-base-content truncate">{{ project.name }}</h3>
                 </div>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs btn-square text-error hover:bg-error/10"
+                  title="删除项目"
+                  aria-label="删除项目"
+                  :disabled="isDeletingProject"
+                  @click.stop="handleDeleteProject(project)"
+                >
+                  <span class="material-symbols-outlined icon-sm">delete</span>
+                </button>
               </div>
               <p v-if="project.description" class="text-sm text-neutral-content/80 line-clamp-2">
                 {{ project.description }}
@@ -117,15 +174,30 @@ async function handleCreate() {
       @close="showCreateDialog = false"
     >
       <div class="space-y-4">
+        <!-- 创建失败：内联展示后端错误文案（弹窗保持打开） -->
+        <div v-if="createError" class="alert alert-error" role="alert">
+          <span class="material-symbols-outlined" aria-hidden="true">error</span>
+          <span>创建失败：{{ createError }}</span>
+        </div>
         <fieldset class="fieldset">
           <legend class="fieldset-legend">项目名称 <span class="text-error">*</span></legend>
           <input
             v-model="newProjectName"
             type="text"
             class="input w-full"
+            :class="{ 'input-error': nameTooLong }"
             placeholder="例如：某某高速公路项目"
             :disabled="isCreating"
           />
+          <div class="mt-1 flex items-center justify-between text-xs">
+            <span v-if="nameTooLong" class="text-error">
+              项目名称不能超过 {{ PROJECT_NAME_MAX }} 个字符
+            </span>
+            <span v-else class="text-fg-subtle">最多 {{ PROJECT_NAME_MAX }} 个字符</span>
+            <span class="font-num" :class="nameTooLong ? 'text-error' : 'text-fg-subtle'">
+              {{ newProjectName.length }} / {{ PROJECT_NAME_MAX }}
+            </span>
+          </div>
         </fieldset>
         <fieldset class="fieldset">
           <legend class="fieldset-legend">项目描述</legend>
@@ -144,7 +216,7 @@ async function handleCreate() {
         </button>
         <button
           class="btn btn-primary"
-          :disabled="!newProjectName.trim() || isCreating"
+          :disabled="!newProjectName.trim() || nameTooLong || isCreating"
           @click="handleCreate"
         >
           <span v-if="isCreating" class="loading loading-spinner loading-xs"></span>

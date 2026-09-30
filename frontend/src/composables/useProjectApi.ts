@@ -119,6 +119,11 @@ export function useProjectApi() {
     return await deleteProjectRaw({ path: { id } })
   }
 
+  /** 按指定 id 删除项目（项目列表页用，无需处于项目上下文） */
+  async function deleteProjectById(id: number) {
+    return await deleteProjectRaw({ path: { id } })
+  }
+
   return {
     // 列表 + 创建
     projects,
@@ -140,6 +145,7 @@ export function useProjectApi() {
     isUpdatingProject,
     updateError,
     deleteProject,
+    deleteProjectById,
     isDeletingProject,
 
     // 当前项目上下文（只读）
