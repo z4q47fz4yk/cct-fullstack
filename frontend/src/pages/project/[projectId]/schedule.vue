@@ -73,7 +73,7 @@ const {
   refreshTasks,
   refreshStats,
   useAvailablePredecessors,
-} = useScheduleApi({ searchQuery })
+} = useScheduleApi()
 
 const { currentProjectId } = useProjectContext()
 
@@ -143,9 +143,16 @@ function formatGanttTooltip(item: GanttChartItem<TaskGanttMeta>): string {
 
 // ──── 分页 ────────────────────────────────────────────────
 
+// 任务名称搜索：一次拉全量后本地过滤（trim、大小写不敏感），与资源管理搜索口径一致
+const filteredTasks = computed(() => {
+  const kw = searchQuery.value.trim().toLowerCase()
+  if (!kw) return tasks.value
+  return tasks.value.filter((t: TaskWithTagsResp) => (t.name ?? '').toLowerCase().includes(kw))
+})
+
 const paginatedTasks = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return tasks.value.slice(start, start + pageSize.value)
+  return filteredTasks.value.slice(start, start + pageSize.value)
 })
 
 // ──── 模态框状态 ──────────────────────────────────────────
@@ -360,7 +367,7 @@ const closeManagePredecessorModal = () => {
         <div class="px-4 py-2.5 border-b border-base-content/10 flex flex-wrap items-center gap-3">
           <h2 id="schedule-list-title" class="section-title !mb-0">
             任务列表
-            <span class="badge badge-sm">{{ tasks.length }} 个任务</span>
+            <span class="badge badge-sm">{{ filteredTasks.length }} 个任务</span>
           </h2>
           <div class="ml-auto">
             <label class="input flex items-center gap-2 w-64">
@@ -368,7 +375,7 @@ const closeManagePredecessorModal = () => {
                 >search</span
               >
               <input
-                v-model.lazy="searchQuery"
+                v-model="searchQuery"
                 type="text"
                 class="grow"
                 placeholder="搜索任务名称..."
@@ -396,6 +403,7 @@ const closeManagePredecessorModal = () => {
           <TaskTable
             :tasks="paginatedTasks"
             :deleting-id="deletingTaskId"
+            :search-keyword="searchQuery.trim()"
             @edit="handleEditTask"
             @delete="handleDeleteTask"
             @add-predecessor="handleAddPredecessor"
@@ -405,7 +413,7 @@ const closeManagePredecessorModal = () => {
             <PaginationBar
               v-model:current="currentPage"
               v-model:page-size="pageSize"
-              :total="tasks.length"
+              :total="filteredTasks.length"
             />
           </div>
         </template>

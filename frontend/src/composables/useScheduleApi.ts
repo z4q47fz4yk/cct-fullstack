@@ -17,16 +17,11 @@ import {
   getAvailablePredecessorsQueryKey,
 } from '@/client/@pinia/colada.gen'
 
-export interface UseScheduleApiOptions {
-  searchQuery?: Ref<string>
-}
-
 /**
  * 进度管理 API 封装
  * 分离 API 调用逻辑与 UI 逻辑
  */
-export function useScheduleApi(options: UseScheduleApiOptions = {}) {
-  const { searchQuery } = options
+export function useScheduleApi() {
   const queryCache = useQueryCache()
   const { currentProjectId } = useProjectContext()
 
@@ -68,7 +63,8 @@ export function useScheduleApi(options: UseScheduleApiOptions = {}) {
     await Promise.all(invalidations)
   }
 
-  // 查询任务列表（include_tags 附带直接挂载的标签，供表格标签列展示）
+  // 查询任务列表（include_tags 附带直接挂载的标签，供表格标签列展示）；
+  // 一次拉全量后由页面本地筛选（任务名称搜索不走服务端参数，保证实时、大小写不敏感）
   const {
     state: tasksState,
     asyncStatus: tasksAsyncStatus,
@@ -78,7 +74,6 @@ export function useScheduleApi(options: UseScheduleApiOptions = {}) {
     listTasksQuery({
       path: { project_id: currentProjectId.value! },
       query: {
-        name: searchQuery?.value?.trim() || null,
         include_tags: true,
         per_page: FETCH_ALL_PAGE_SIZE,
       },

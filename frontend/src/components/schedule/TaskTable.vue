@@ -4,9 +4,15 @@ import { getSliceColor } from '@/utils/themeColors'
 import TableEmptyState from '@/components/common/TableEmptyState.vue'
 import TagInput from '@/components/tag/TagInput.vue'
 
-const { tasks, deletingId } = defineProps<{
+const {
+  tasks,
+  deletingId,
+  searchKeyword = '',
+} = defineProps<{
   tasks: TaskWithTagsResp[]
   deletingId?: number | null
+  /** 当前任务名称搜索词（非空时用于区分「暂无任务」与「搜索无匹配」空态） */
+  searchKeyword?: string
 }>()
 
 const emit = defineEmits<{
@@ -180,13 +186,17 @@ function truncateDescription(desc: string, maxLength: number = 50): string {
           </tr>
         </template>
 
-        <!-- 空状态 -->
+        <!-- 空状态：区分「项目没有任务」与「搜索无匹配」两种场景 -->
         <TableEmptyState
           v-else
           :colspan="tableHeaders.length"
-          title="暂无任务"
-          description="点击添加按钮创建第一个任务"
-          icon="task_alt"
+          :title="searchKeyword ? '未找到匹配的任务' : '暂无任务'"
+          :description="
+            searchKeyword
+              ? `没有名称包含「${searchKeyword}」的任务，请调整搜索关键词`
+              : '点击添加按钮创建第一个任务'
+          "
+          :icon="searchKeyword ? 'search_off' : 'task_alt'"
         />
       </tbody>
     </table>
