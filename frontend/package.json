@@ -13,7 +13,7 @@
     "format": "vp fmt --write src/",
     "generate-api": "openapi-ts",
     "prepare": "vp config",
-    "docs:dev": "vitepress dev docs --port ${DOCS_PORT:-5174}",
+    "docs:dev": "vitepress dev docs --port 5174",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs"
   },

@@ -25,7 +25,7 @@ import type {
 
 definePage({
   meta: {
-    title: '任务管理',
+    title: '工序管理',
     description: '管理项目工序和进度',
     icon: 'view_timeline',
     showInNav: true,

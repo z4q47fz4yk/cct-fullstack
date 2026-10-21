@@ -62,7 +62,7 @@ const submitting = ref(false)
 // ─── 手动行操作 ──────────────────────────────────────────
 
 function handleAddRow(row: Omit<PendingUsageRow, '_key' | 'error'>) {
-  pendingRows.value.push({ _key: crypto.randomUUID(), ...row })
+  pendingRows.value.push({ _key: Math.random().toString(36).slice(2), ...row })
   if (!manualTaskIds.value.includes(row.task_id)) manualTaskIds.value.push(row.task_id)
 }
 function handleUpdateRow(key: string, row: Omit<PendingUsageRow, '_key' | 'error'>) {

@@ -4,7 +4,7 @@ definePage({
     title: '项目概览',
     icon: 'dashboard',
     showInNav: true,
-    navOrder: 5,
+    navOrder: 0,
   },
   redirect: {
     name: '/project/[projectId]/settings/',

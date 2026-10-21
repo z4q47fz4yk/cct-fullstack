@@ -3,3 +3,5 @@
 
 # pnpm 安装时在仓库根生成的依赖缓存（vp install）
 .pnpm-store/
+.idea
+.vscode

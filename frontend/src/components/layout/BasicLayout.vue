@@ -37,7 +37,7 @@ const docsUrl = docsHref('/guide/intro')
           <a
             class="btn-ghost-outline flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm"
             :href="docsUrl"
-            target="_self"
+            target="_blank"
             title="查看使用文档"
           >
             <span class="material-symbols-outlined icon-md">menu_book</span>

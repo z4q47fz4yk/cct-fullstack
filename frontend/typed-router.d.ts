@@ -84,6 +84,7 @@ declare module 'vue-router/auto-routes' {
       | '/project/[projectId]/settings/info'
       | '/project/[projectId]/settings/resources'
       | '/project/[projectId]/settings/tags'
+      | '/project/[projectId]/statistics'
     >,
     '/project/[projectId]/': RouteRecordInfo<
       '/project/[projectId]/',
@@ -291,6 +292,13 @@ declare module 'vue-router/auto-routes' {
       { projectId: ParamValue<false> },
       | never
     >,
+    '/project/[projectId]/statistics': RouteRecordInfo<
+      '/project/[projectId]/statistics',
+      '/project/:projectId/statistics',
+      { projectId: ParamValue<true> },
+      { projectId: ParamValue<false> },
+      | never
+    >,
   }
 
   /**
@@ -358,6 +366,7 @@ declare module 'vue-router/auto-routes' {
         | '/project/[projectId]/settings/info'
         | '/project/[projectId]/settings/resources'
         | '/project/[projectId]/settings/tags'
+        | '/project/[projectId]/statistics'
       views:
         | 'default'
       pathParamNames:
@@ -595,6 +604,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/project/[projectId]/settings/tags.vue': {
       routes:
         | '/project/[projectId]/settings/tags'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/project/[projectId]/statistics.vue': {
+      routes:
+        | '/project/[projectId]/statistics'
       views:
         | never
       pathParamNames:

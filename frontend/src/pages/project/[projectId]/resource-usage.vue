@@ -8,7 +8,7 @@
  */
 definePage({
   meta: {
-    title: '资源使用量',
+    title: '活动数据管理',
     description: '录入与查看资源使用量（手动/日报统一入口）',
     icon: 'inventory_2',
     showInNav: true,

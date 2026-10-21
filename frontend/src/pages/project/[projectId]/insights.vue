@@ -1,7 +1,7 @@
 <script setup lang="ts">
 definePage({
   meta: {
-    title: '分析洞察',
+    title: '多目标优化分析',
     description: 'NSGA-II 多目标优化',
     icon: 'insights',
     showInNav: true,

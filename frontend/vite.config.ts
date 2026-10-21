@@ -17,6 +17,9 @@ export default defineConfig(({ mode }) => {
   const frontendPort = Number(env.FRONTEND_PORT ?? 5173)
   const docsPort = Number(env.DOCS_PORT ?? 5174)
   const backendPort = Number(env.BACKEND_PORT ?? 8000)
+  // dev server 绑定地址：缺省仅本机（vite 默认 localhost）；置 VITE_DEV_HOST=true
+  // 才监听所有网卡，供局域网/手机调试（终端会多打一行 Network:）。
+  const devHost = env.VITE_DEV_HOST === 'true'
 
   return {
     staged: {
@@ -104,6 +107,7 @@ export default defineConfig(({ mode }) => {
       // 端口由 worktree 的根 .env 决定；strictPort 冲突即报错，避免配对静默漂移
       port: frontendPort,
       strictPort: true,
+      host: devHost,
       proxy: {
         // 同源 /api：浏览器只访问前端端口，不需要 CORS；反代到本 worktree 后端（BACKEND_PORT）。
         // 后端路由本身不带 /api 前缀（OpenAPI 契约不变），此处剥离后转发——
