@@ -117,13 +117,6 @@ async function handleDelete(chart: ChartResp) {
 </script>
 
 <template>
-  <Teleport defer to="#header-actions">
-    <button class="btn btn-primary gap-1 px-5" :disabled="isLoading" @click="openCreate">
-      <span class="material-symbols-outlined icon-sm">add</span>
-      新建图表
-    </button>
-  </Teleport>
-
   <ErrorState
     v-if="error"
     title="加载失败"
@@ -132,6 +125,14 @@ async function handleDelete(chart: ChartResp) {
   />
 
   <div v-else class="space-y-4">
+    <!-- 操作工具条（设计稿 page-head toolbar：新建图表） -->
+    <div class="flex items-center justify-end">
+      <button class="btn btn-primary gap-1 px-5" :disabled="isLoading" @click="openCreate">
+        <span class="material-symbols-outlined icon-sm">add</span>
+        新建图表
+      </button>
+    </div>
+
     <!-- 说明 -->
     <section class="panel px-4 py-3 flex items-center gap-3">
       <span class="material-symbols-outlined text-violet-400 icon-md shrink-0">pie_chart</span>
@@ -143,8 +144,9 @@ async function handleDelete(chart: ChartResp) {
       </p>
     </section>
 
-    <!-- 卡片网格 -->
-    <div v-if="isLoading" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <!-- 卡片网格（设计稿 grid3） -->
+    <div v-if="isLoading" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <LoadingState variant="skeleton" class="h-64" />
       <LoadingState variant="skeleton" class="h-64" />
       <LoadingState variant="skeleton" class="h-64" />
     </div>
@@ -159,7 +161,7 @@ async function handleDelete(chart: ChartResp) {
       <p class="text-xs text-fg-subtle mt-1">点击右上角「新建图表」创建第一个饼图配置</p>
     </div>
 
-    <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
       <ChartCard
         v-for="chart in charts"
         :key="chart.id"
@@ -167,6 +169,17 @@ async function handleDelete(chart: ChartResp) {
         @edit="openEdit"
         @delete="handleDelete"
       />
+      <!-- 虚线新建卡（设计稿） -->
+      <div
+        class="panel border-dashed flex flex-col items-center justify-center gap-2 text-fg-muted min-h-56 cursor-pointer hover:text-primary hover:border-primary/50 transition-colors"
+        role="button"
+        tabindex="0"
+        @click="openCreate"
+        @keydown.enter="openCreate"
+      >
+        <span class="material-symbols-outlined icon-xl text-fg-subtle">add</span>
+        <span class="text-sm">新建图表</span>
+      </div>
     </div>
 
     <!-- 编辑器抽屉 -->

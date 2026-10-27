@@ -67,15 +67,24 @@
   }
 }
 
-/* 区块标题：纯文本小节标题（原玻璃渐变竖条已废弃） */
+/* 区块标题：小节标题 + 主色竖条（设计稿 card-title::before） */
 .section-title {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.75rem;
   color: var(--color-base-content);
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   font-weight: 600;
+}
+
+.section-title::before {
+  content: '';
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--color-primary);
+  flex-shrink: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

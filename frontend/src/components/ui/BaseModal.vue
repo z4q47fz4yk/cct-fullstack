@@ -102,7 +102,18 @@ watch(
     @close="onNativeClose"
   >
     <div class="modal-box" v-bind="$attrs">
-      <h3 v-if="title" class="font-bold text-lg text-base-content mb-4">{{ title }}</h3>
+      <!-- 头部：标题 + 关闭（设计稿 modal-head） -->
+      <div v-if="title" class="flex items-center justify-between mb-4">
+        <h3 class="font-semibold text-base text-base-content">{{ title }}</h3>
+        <button
+          type="button"
+          class="btn-icon -mr-1"
+          aria-label="关闭"
+          @click="closeModal"
+        >
+          <span class="material-symbols-outlined icon-sm">close</span>
+        </button>
+      </div>
       <slot v-if="open" />
       <div v-if="open && $slots.actions" class="modal-action">
         <slot name="actions" />

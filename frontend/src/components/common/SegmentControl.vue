@@ -83,8 +83,8 @@ function onKeydown(e: KeyboardEvent) {
     :role="role"
     :aria-label="ariaLabel"
     :aria-orientation="role === 'tablist' ? 'horizontal' : undefined"
-    class="segment-control inline-flex items-center gap-1 rounded-full border border-base-content/10 bg-base-content/5 p-[3px] shadow-inner transition-colors duration-200"
-    :class="[size === 'md' ? 'h-10' : 'h-8', fullWidth ? 'flex w-full' : '']"
+    class="segment-control inline-flex items-center gap-[2px] rounded-lg bg-base-content/5 p-[3px] transition-colors duration-200"
+    :class="[size === 'md' ? 'h-10' : 'h-9', fullWidth ? 'flex w-full' : '']"
     @keydown="onKeydown"
   >
     <button
@@ -96,12 +96,12 @@ function onKeydown(e: KeyboardEvent) {
       :aria-selected="role !== 'radiogroup' ? isActive(opt.value) : undefined"
       :aria-checked="role === 'radiogroup' ? isActive(opt.value) : undefined"
       :disabled="opt.disabled"
-      class="segment-btn inline-flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-sm font-medium transition-all duration-200 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-40"
+      class="segment-btn inline-flex flex-1 items-center justify-center gap-1.5 rounded-[7px] px-3 text-[13px] font-medium transition-all duration-150 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-40"
       :class="[
-        size === 'md' ? 'h-[34px]' : 'h-[26px]',
+        size === 'md' ? 'h-[34px]' : 'h-[30px]',
         isActive(opt.value)
-          ? 'bg-base-200/80 text-primary shadow-[inset_0_1px_0_rgb(255_255_255_/_0.08),0_0_12px_oklch(0.8_0.15_200_/_0.18)]'
-          : 'text-base-content/70 hover:bg-base-content/5 hover:text-base-content',
+          ? 'bg-panel text-primary shadow-[0_1px_3px_rgb(16_24_40_/_0.1)]'
+          : 'text-fg-muted hover:text-base-content',
       ]"
       @click="select(opt)"
     >

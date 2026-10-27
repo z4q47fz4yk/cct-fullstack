@@ -3,14 +3,15 @@ import { computed, reactive, ref, watch } from 'vue'
 import SegmentControl, { type SegmentOption } from '@/components/common/SegmentControl.vue'
 import TagPieChartCard from '@/components/chart/TagPieChartCard.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
+import StatCard from '@/components/common/StatCard.vue'
 import { useChartApi, type ChartPieMetric } from '@/composables/useChartApi'
 import { useProjectContext } from '@/composables/useProjectContext'
 import { fmtNumber } from '@/utils/format'
 
 definePage({
   meta: {
-    title: '碳排放分布',
-    description: '按「设置 → 碳排放图表」定义的标签切片聚合，可切换碳排放 / 成本',
+    title: '碳排放计算',
+    description: '按标签切片统计碳排与成本占比',
     icon: 'donut_small',
     showInNav: true,
     parentName: '/project/[projectId]/insights',
@@ -73,6 +74,18 @@ const totalValue = computed(() => Object.values(summaries).reduce((sum, v) => su
     </div>
 
     <template v-else>
+      <!-- 合计统计卡（设计稿 stat-row） -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <StatCard
+          :label="metric === 'emission' ? '碳排放合计' : '成本合计'"
+          :value="metric === 'emission' ? fmtNumber(totalValue / 1000, 2) : fmtNumber(totalValue / 10000, 2)"
+          :unit="metric === 'emission' ? 'tCO₂e' : '万元'"
+          :icon="metric === 'emission' ? 'eco' : 'payments'"
+          :color="metric === 'emission' ? 'success' : 'warning'"
+        />
+        <StatCard label="统计图表" :value="charts.length" unit="个" icon="pie_chart" color="primary" />
+      </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <TagPieChartCard
           v-for="c in charts"
@@ -81,27 +94,6 @@ const totalValue = computed(() => Object.values(summaries).reduce((sum, v) => su
           :metric="metric"
           @summary="onSummary"
         />
-      </div>
-
-      <div class="panel px-4 py-3 flex items-center gap-3">
-        <span class="material-symbols-outlined text-primary icon-md shrink-0">pie_chart</span>
-        <div class="flex-1 min-w-0">
-          <p class="text-[11px] text-fg-subtle">
-            {{ metric === 'emission' ? '碳排放合计' : '成本合计' }}
-          </p>
-          <p class="font-mono text-sm font-semibold text-base-content">
-            {{
-              metric === 'emission'
-                ? `${fmtNumber(totalValue / 1000, 2)} tCO₂e`
-                : `${fmtNumber(totalValue / 10000, 2)} 万元`
-            }}
-          </p>
-        </div>
-        <span
-          class="text-[11px] font-mono px-2 py-1 rounded-full bg-primary/12 text-primary shrink-0"
-        >
-          {{ charts.length }} 个图表
-        </span>
       </div>
     </template>
   </div>

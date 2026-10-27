@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useInsightsStore } from '@/stores/insights'
 import GanttChart, { type GanttChartItem } from '@/components/common/GanttChart.vue'
 import ChartEmptyState from '@/components/common/ChartEmptyState.vue'
+import StatCard from '@/components/common/StatCard.vue'
 import ParetoChart from '@/components/optimization/ParetoChart.vue'
 import CompareParetoChart from '@/components/optimization/CompareParetoChart.vue'
 import CompareRunsPanel from '@/components/optimization/CompareRunsPanel.vue'
@@ -399,6 +400,22 @@ function formatCompareGanttTooltip(item: GanttChartItem<CompareGanttMeta>): stri
 
 const mergedScored = computed(() => scoreSolutions(mergedSolutions.value, store.weights))
 
+/** 当前解集（对比模式取合并解，否则取当前运行解）——设计稿「最优工期/成本/碳排」统计行 */
+const activeSolutions = computed(() =>
+  compareActive.value ? mergedSolutions.value : store.solutions,
+)
+const bestStats = computed(() => {
+  const sols = activeSolutions.value
+  if (sols.length === 0) return null
+  const minBy = (fn: (s: (typeof sols)[number]) => number) =>
+    Math.round(sols.reduce((m, s) => Math.min(m, fn(s)), Infinity) * 100) / 100
+  return {
+    duration: minBy((s) => s.duration),
+    cost: minBy((s) => s.cost),
+    emission: minBy((s) => s.emission) / 1000,
+  }
+})
+
 const sourceNames = computed<Record<number, string>>(() => {
   const map: Record<number, string> = {}
   for (const sol of mergedSolutions.value) map[sol.id] = runLabel(sol.runId)
@@ -416,7 +433,8 @@ const tableSelectedId = computed<number | null>({
 </script>
 
 <template>
-  <Teleport defer to="#header-actions">
+  <!-- 操作工具条（设计稿 page-head toolbar：编制计划 / 重新开始 / 运行状态） -->
+  <div class="flex items-center justify-end gap-2 mb-4 flex-wrap min-h-9">
     <button
       v-if="store.isCompleted && store.selectedSolutionId"
       class="btn btn-primary"
@@ -435,7 +453,7 @@ const tableSelectedId = computed<number | null>({
     </button>
 
     <RunStatusBar v-else-if="store.currentRunId" :run-id="store.currentRunId" />
-  </Teleport>
+  </div>
 
   <div class="space-y-4">
     <!-- 中央 CTA（运行未完成时显示；完成后让位给图表） -->
@@ -620,6 +638,31 @@ const tableSelectedId = computed<number | null>({
 
     <!-- 完成后：单一 panel + 发丝线分割（运行对比 / 图表 / 解集表格） -->
     <template v-else>
+      <!-- 最优解概览（设计稿 3 统计卡） -->
+      <div v-if="bestStats" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+        <StatCard
+          label="最优工期"
+          :value="fmtNumber(bestStats.duration, 1)"
+          unit="天"
+          icon="schedule"
+          color="primary"
+        />
+        <StatCard
+          label="最优成本"
+          :value="fmtNumber(bestStats.cost, 1)"
+          unit="元"
+          icon="payments"
+          color="warning"
+        />
+        <StatCard
+          label="最少碳排"
+          :value="fmtNumber(bestStats.emission, 2)"
+          unit="tCO₂e"
+          icon="eco"
+          color="success"
+        />
+      </div>
+
       <div class="panel panel-grid grid-cols-12 overflow-hidden">
         <!-- ① 运行对比选择器 -->
         <section

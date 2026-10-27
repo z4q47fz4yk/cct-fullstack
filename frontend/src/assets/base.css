@@ -22,8 +22,8 @@
  * 引用运行时主题变量。值在下方 :root / [data-theme] 块定义。 */
 @theme inline {
   --font-sans:
-    'Inter', 'HarmonyOS Sans SC', 'Noto Sans SC', 'PingFang SC', system-ui, -apple-system,
-    sans-serif;
+    'Inter', 'PingFang SC', 'HarmonyOS Sans SC', 'Noto Sans SC', 'Microsoft YaHei', system-ui,
+    -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
 
   --color-base-100: var(--color-base-100);
@@ -80,6 +80,14 @@
   --color-panel-border-hover: var(--color-panel-border-hover);
   --color-panel-shadow: var(--color-panel-shadow);
 
+  /* 侧边栏：设计稿为藏青深色（不随明暗主题切换） */
+  --color-sidebar: var(--color-sidebar);
+  --color-sidebar-deep: var(--color-sidebar-deep);
+  --color-sidebar-border: var(--color-sidebar-border);
+  --color-sidebar-text: var(--color-sidebar-text);
+  --color-sidebar-text-dim: var(--color-sidebar-text-dim);
+  --color-sidebar-active: var(--color-sidebar-active);
+
   --radius-selector: var(--radius-selector);
   --radius-field: var(--radius-field);
   --radius-box: var(--radius-box);
@@ -94,6 +102,16 @@
 
   --ease-soft: var(--ease-soft);
   --ease-snap: var(--ease-snap);
+}
+
+/* ── 侧边栏藏青配色（设计稿：深浅主题下均为深色导航） ── */
+:root {
+  --color-sidebar: #0d1635;
+  --color-sidebar-deep: #0c1430;
+  --color-sidebar-border: rgb(255 255 255 / 0.06);
+  --color-sidebar-text: #aeb9d6;
+  --color-sidebar-text-dim: #8b99bd;
+  --color-sidebar-active: #22d3ee;
 }
 
 /* ── 深色主题：starglass（工程深色面板） ── */
@@ -136,8 +154,8 @@
   --color-accel-content: oklch(0.2 0.04 55);
 
   --radius-selector: 0.375rem;
-  --radius-field: 0.375rem;
-  --radius-box: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.625rem;
   --border: 1px;
   --depth: 0;
   --noise: 0;
@@ -178,17 +196,19 @@
   --ease-snap: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* ── 亮色主题：starglass-light（工程浅色面板） ── */
+/* ── 亮色主题：starglass-light（设计稿 · Element 风格工程浅色面板） ── */
 [data-theme='starglass-light'] {
   color-scheme: light;
 
-  --color-base-100: oklch(0.975 0.004 260);
-  --color-base-200: oklch(0.955 0.005 260);
-  --color-base-300: oklch(0.925 0.006 260);
-  --color-base-content: oklch(0.24 0.015 260);
+  /* 页面底 #f2f3f5 / 浅灰底 #fafbfd / 分隔 #ebeef5 */
+  --color-base-100: oklch(0.951 0.003 260);
+  --color-base-200: oklch(0.983 0.002 260);
+  --color-base-300: oklch(0.928 0.004 260);
+  --color-base-content: oklch(0.32 0.015 260);
 
-  --color-primary: oklch(0.45 0.14 250);
-  --color-primary-content: oklch(0.97 0.01 250);
+  /* 主色 #409eff */
+  --color-primary: oklch(0.68 0.14 250);
+  --color-primary-content: oklch(0.99 0.005 250);
 
   --color-secondary: oklch(0.47 0.15 290);
   --color-secondary-content: oklch(0.97 0.01 290);
@@ -202,28 +222,30 @@
   --color-neutral: oklch(0.85 0.005 260);
   --color-neutral-content: oklch(0.45 0.01 260);
 
-  --color-info: oklch(0.5 0.12 230);
-  --color-info-content: oklch(0.97 0.01 230);
-  --color-success: oklch(0.48 0.14 155);
-  --color-success-content: oklch(0.97 0.01 155);
-  --color-warning: oklch(0.62 0.13 75);
-  --color-warning-content: oklch(0.22 0.04 75);
-  --color-error: oklch(0.52 0.18 20);
-  --color-error-content: oklch(0.97 0.01 20);
+  /* Element 语义色：success #67c23a / warning #e6a23c / error #f56c6c */
+  --color-info: oklch(0.62 0.11 250);
+  --color-info-content: oklch(0.99 0.005 250);
+  --color-success: oklch(0.72 0.17 145);
+  --color-success-content: oklch(0.99 0.005 250);
+  --color-warning: oklch(0.72 0.12 65);
+  --color-warning-content: oklch(0.2 0.04 75);
+  --color-error: oklch(0.68 0.14 20);
+  --color-error-content: oklch(0.99 0.005 250);
 
-  --color-accel: oklch(0.58 0.16 55);
-  --color-accel-content: oklch(0.97 0.01 55);
+  --color-accel: oklch(0.65 0.16 55);
+  --color-accel-content: oklch(0.99 0.005 250);
 
   --radius-selector: 0.375rem;
-  --radius-field: 0.375rem;
-  --radius-box: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.625rem;
   --border: 1px;
   --depth: 0;
   --noise: 0;
 
+  /* #303133 / #606266 / #909399 */
   --color-fg: var(--color-base-content);
-  --color-fg-muted: oklch(0.5 0.01 260);
-  --color-fg-subtle: oklch(0.63 0.01 260);
+  --color-fg-muted: oklch(0.51 0.005 260);
+  --color-fg-subtle: oklch(0.66 0.005 260);
 
   --color-cyan: #0891b2;
   --color-indigo: #4f46e5;
@@ -240,15 +262,19 @@
 
   --color-surface-deep: #eef0f3;
 
+  /* 白色卡片 + 发丝线 #dcdfe6（≈14% 中性灰） */
   --color-panel: oklch(1 0 0);
-  --color-panel-hover: oklch(0.965 0.005 260);
-  --color-panel-border: oklch(0 0 0 / 0.1);
-  --color-panel-border-hover: oklch(0 0 0 / 0.2);
-  --color-panel-shadow: oklch(0 0 0 / 0.12);
+  --color-panel-hover: oklch(0.982 0.002 260);
+  --color-panel-border: oklch(0 0 0 / 0.14);
+  --color-panel-border-hover: oklch(0 0 0 / 0.24);
+  --color-panel-shadow: oklch(0.25 0.02 260 / 0.06);
 
-  --shadow-glass-1: 0 1px 2px var(--color-panel-shadow);
-  --shadow-glass-2: 0 4px 12px var(--color-panel-shadow);
-  --shadow-glass-3: 0 16px 40px var(--color-panel-shadow);
+  /* 设计稿柔和阴影 */
+  --shadow-glass-1:
+    0 1px 2px rgb(16 24 40 / 0.05),
+    0 1px 3px rgb(16 24 40 / 0.06);
+  --shadow-glass-2: 0 4px 12px rgb(16 24 40 / 0.08);
+  --shadow-glass-3: 0 16px 40px rgb(16 24 40 / 0.12);
 
   --ease-soft: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-snap: cubic-bezier(0.34, 1.56, 0.64, 1);

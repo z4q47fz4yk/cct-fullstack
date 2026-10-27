@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AllocateTable from '@/components/daily-report/AllocateTable.vue'
+import ReportSteps from '@/components/daily-report/ReportSteps.vue'
 import { useDailyReportStoreV2 } from '@/stores/report'
 import AllocationByTask from '@/components/daily-report/AllocationByTask.vue'
 import { useProjectContext } from '@/composables/useProjectContext'
@@ -82,6 +83,7 @@ async function goToConfirm() {
 
     <!-- 数据已就绪:正常内容 -->
     <div v-else class="space-y-4">
+      <ReportSteps :current="3" />
       <AllocationByTask v-model:selected-task-id="selectedTaskId" :disable-action="false" />
 
       <AllocateTable

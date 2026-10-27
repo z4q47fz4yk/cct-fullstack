@@ -34,17 +34,29 @@ definePage({
     title: '录入',
     description: '手动/日报统一录入入口',
     icon: 'edit_note',
-    showInNav: true,
+    showInNav: false,
     parentName: '/project/[projectId]/resource-usage',
     navOrder: 2,
   },
 })
 
+/**
+ * 固定口径（计划/实际数据录入两个菜单入口共用本页）：
+ * - null（直接访问本路由）→ 保持原行为：按日期自动推断 + 可强制切换
+ * - 'PLANNED' / 'ACTUAL' → 入口页固定口径，隐藏强制切换
+ */
+const { pinnedType = null } = defineProps<{
+  pinnedType?: 'PLANNED' | 'ACTUAL' | null
+}>()
+
 const { currentProjectId } = useProjectContext()
 
 // 共享日期 + 用量类型推断（手动与日报共用）
-const { usageDate, effectiveUsageType, inferenceReason, isForced, forceToggle, forceLabel } =
+const { usageDate, effectiveUsageType: inferredType, inferenceReason, isForced, forceToggle, forceLabel } =
   useUsageDateType()
+
+// 生效口径：入口固定时优先生效，否则用推断（含强制切换）结果
+const effectiveUsageType = computed(() => pinnedType ?? inferredType.value)
 
 // 手动待提交行
 const pendingRows = ref<PendingUsageRow[]>([])
@@ -135,6 +147,62 @@ function setProgressValue(taskId: number, raw: string) {
 // 工序名展示（供进度块）
 const { tasks: scheduleTasks } = useScheduleApi()
 const taskById = computed(() => new Map((scheduleTasks.value ?? []).map((t) => [t.id, t])))
+
+// ─── 左侧工序侧栏（设计稿：工序列表 + 当日记录计数，点击筛选进度区） ──
+const selectedTaskId = ref<number | null>(null)
+
+/** 每个工序当日已有记录数（含待提交行），用于侧栏计数徽标 */
+const taskDayCounts = computed<Record<number, number>>(() => {
+  const counts: Record<number, number> = {}
+  for (const r of existingRecords.value) {
+    counts[r.taskId] = (counts[r.taskId] ?? 0) + 1
+  }
+  for (const r of pendingRows.value) {
+    counts[r.task_id] = (counts[r.task_id] ?? 0) + 1
+  }
+  for (const u of reportStore.resourceUsages) {
+    counts[u.taskId] = (counts[u.taskId] ?? 0) + 1
+  }
+  return counts
+})
+
+const totalDayCount = computed(() => Object.values(taskDayCounts.value).reduce((s, n) => s + n, 0))
+
+// 侧栏选中工序时，进度区仅显示该工序（不影响提交数据）
+const filteredInvolvedTaskIds = computed<number[]>(() => {
+  const ids = involvedTaskIds.value
+  return selectedTaskId.value === null ? ids : ids.filter((id) => id === selectedTaskId.value)
+})
+
+// ─── 碳排放计算结果（设计稿底部 3 统计卡，复用碳排聚合接口） ──────
+import { useQuery } from '@pinia/colada'
+import { getResourceUsageCarbonStatsQuery } from '@/client/@pinia/colada.gen'
+import { useProjectApi } from '@/composables/useProjectApi'
+import StatCard from '@/components/common/StatCard.vue'
+
+const { project } = useProjectApi()
+
+function useEmissionTotal(usageType: 'PLANNED' | 'ACTUAL') {
+  const q = useQuery(() => ({
+    ...getResourceUsageCarbonStatsQuery({
+      path: { project_id: currentProjectId.value! },
+      query: { usageType, granularity: 'month' },
+    }),
+    enabled: currentProjectId.value !== null,
+  }))
+  return computed(() => {
+    const items = q.state.value?.data?.items ?? []
+    return items.reduce((sum, it) => sum + (it.emission ?? 0), 0) / 1000
+  })
+}
+const plannedEmissionT = useEmissionTotal('PLANNED')
+const actualEmissionT = useEmissionTotal('ACTUAL')
+const emissionLimitT = computed(() => project.value?.construction_carbon_emission_limit ?? null)
+
+/** 统计卡数值格式化（千分位 + 1 位小数） */
+function fmtNum(v: number): string {
+  return v.toLocaleString('zh-CN', { maximumFractionDigits: 1 })
+}
 
 // ─── 统一提交：完成一天的录入 ──────────────────────────────
 const { notifySuccess, notifyError } = useToast()
@@ -276,8 +344,44 @@ const infoTone = computed(() => (isForced.value ? 'warning' : 'info'))
 </script>
 
 <template>
+  <!-- 设计稿布局：左侧工序侧栏 + 右侧录入区 -->
+  <div class="grid grid-cols-1 lg:grid-cols-[230px_1fr] gap-4 items-start">
+    <!-- 左：施工工序（process-item 列表 + 当日计数） -->
+    <aside class="panel p-0 lg:sticky lg:top-4">
+      <div class="px-4 py-3 border-b border-base-content/10">
+        <h3 class="section-title m-0">施工工序</h3>
+      </div>
+      <div class="p-2 flex flex-col gap-0.5">
+        <button
+          type="button"
+          class="process-item"
+          :class="{ active: selectedTaskId === null }"
+          @click="selectedTaskId = null"
+        >
+          <span>项目（全部）</span>
+          <span class="pc">{{ totalDayCount }}</span>
+        </button>
+        <button
+          v-for="t in scheduleTasks"
+          :key="t.id"
+          type="button"
+          class="process-item sub"
+          :class="{ active: selectedTaskId === t.id }"
+          @click="selectedTaskId = selectedTaskId === t.id ? null : t.id"
+        >
+          <span class="truncate">{{ t.name }}</span>
+          <span class="pc">{{ taskDayCounts[t.id] ?? 0 }}</span>
+        </button>
+        <p v-if="scheduleTasks.length === 0" class="text-xs text-fg-subtle px-3 py-2">
+          暂无工序，请先到「施工工序管理」添加
+        </p>
+      </div>
+    </aside>
+
+    <!-- 右：录入内容 -->
+    <div class="min-w-0">
   <!-- 顶部工具栏：日期 + 口径 + 从日报导入 -->
-  <div class="p-4 panel mb-4">
+  <div class="panel mb-4">
     <div class="px-5 py-4 border-b border-base-content/10 flex flex-wrap items-center gap-4">
       <div class="flex items-center gap-2">
         <label class="text-sm text-base-content/70 whitespace-nowrap">使用日期：</label>
@@ -319,8 +423,13 @@ const infoTone = computed(() => (isForced.value ? 'warning' : 'info'))
       >
         info
       </span>
-      <span class="text-sm text-base-content/80">{{ inferenceReason }}</span>
-      <label class="flex items-center gap-1 text-sm text-base-content/70 cursor-pointer">
+      <span class="text-sm text-base-content/80">
+        <template v-if="pinnedType">
+          本入口固定按「{{ pinnedType === 'ACTUAL' ? '实际' : '计划' }}」口径录入
+        </template>
+        <template v-else>{{ inferenceReason }}</template>
+      </span>
+      <label v-if="!pinnedType" class="flex items-center gap-1 text-sm text-base-content/70 cursor-pointer">
         <input
           type="checkbox"
           class="checkbox checkbox-sm"
@@ -358,12 +467,16 @@ const infoTone = computed(() => (isForced.value ? 'warning' : 'info'))
     <p class="text-xs text-fg-subtle mb-3">
       为涉及工序录入当日完成百分比（0-100），进度到 100% 即判定该工序完成；留空则不更新
     </p>
-    <div v-if="involvedTaskIds.length === 0" class="text-sm text-fg-muted py-2">
-      暂无涉及工序（先补充手动用量或导入日报）
+    <div v-if="filteredInvolvedTaskIds.length === 0" class="text-sm text-fg-muted py-2">
+      {{
+        selectedTaskId !== null
+          ? '该工序今日暂无涉及记录'
+          : '暂无涉及工序（先补充手动用量或导入日报）'
+      }}
     </div>
     <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-2">
       <div
-        v-for="tid in involvedTaskIds"
+        v-for="tid in filteredInvolvedTaskIds"
         :key="tid"
         class="flex items-center gap-3 rounded-lg border border-base-content/10 px-3 py-2"
       >
@@ -386,6 +499,34 @@ const infoTone = computed(() => (isForced.value ? 'warning' : 'info'))
           <span class="text-xs text-fg-subtle">%</span>
         </label>
       </div>
+    </div>
+  </div>
+
+  <!-- 碳排放计算结果（设计稿底部统计卡） -->
+  <div class="panel p-4 mt-4">
+    <h3 class="section-title">碳排放计算结果</h3>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <StatCard
+        label="碳排放指标"
+        :value="emissionLimitT === null ? '—' : fmtNum(emissionLimitT)"
+        unit="tCO₂e"
+        icon="target"
+        color="primary"
+      />
+      <StatCard
+        label="计划碳排"
+        :value="fmtNum(plannedEmissionT)"
+        unit="tCO₂e"
+        icon="edit_calendar"
+        color="warning"
+      />
+      <StatCard
+        label="进度碳排"
+        :value="fmtNum(actualEmissionT)"
+        unit="tCO₂e"
+        icon="trending_up"
+        color="success"
+      />
     </div>
   </div>
 
@@ -415,4 +556,51 @@ const infoTone = computed(() => (isForced.value ? 'warning' : 'info'))
       </span>
     </button>
   </div>
+    </div>
+  </div>
 </template>
+
+<style scoped>
+/* 工序侧栏条目（设计稿 process-item） */
+.process-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--color-fg-muted);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.12s,
+    color 0.12s;
+}
+.process-item:hover {
+  background: var(--color-base-200);
+  color: var(--color-base-content);
+}
+.process-item.active {
+  background: color-mix(in oklch, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+.process-item.sub {
+  padding-left: 24px;
+}
+.process-item .pc {
+  font-size: 11.5px;
+  color: var(--color-fg-subtle);
+  background: var(--color-base-200);
+  border-radius: 10px;
+  padding: 0 8px;
+  line-height: 18px;
+  flex-shrink: 0;
+}
+.process-item.active .pc {
+  background: var(--color-primary);
+  color: var(--color-primary-content);
+}
+</style>

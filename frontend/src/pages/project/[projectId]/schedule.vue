@@ -25,8 +25,8 @@ import type {
 
 definePage({
   meta: {
-    title: '工序管理',
-    description: '管理项目工序和进度',
+    title: '施工工序管理',
+    description: '任务编排、前置依赖与关键路径管理',
     icon: 'view_timeline',
     showInNav: true,
     navOrder: 2,
@@ -295,20 +295,19 @@ const closeManagePredecessorModal = () => {
 </script>
 
 <template>
-  <Teleport defer to="#header-actions">
-    <div class="flex items-center gap-2">
-      <SegmentControl
-        v-model="currentView"
-        :options="viewOptions"
-        aria-label="任务视图"
-        size="md"
-      />
-      <button class="btn btn-primary gap-1" :disabled="isLoadingTasks" @click="showAddModal = true">
-        <span class="material-symbols-outlined icon-sm">add</span>
-        添加任务
-      </button>
-    </div>
-  </Teleport>
+  <!-- 操作工具条（设计稿 page-head toolbar：视图切换 / 添加任务） -->
+  <div class="flex items-center justify-end gap-2 mb-4 flex-wrap">
+    <SegmentControl
+      v-model="currentView"
+      :options="viewOptions"
+      aria-label="任务视图"
+      size="md"
+    />
+    <button class="btn btn-primary gap-1" :disabled="isLoadingTasks" @click="showAddModal = true">
+      <span class="material-symbols-outlined icon-sm">add</span>
+      添加任务
+    </button>
+  </div>
 
   <ErrorState
     v-if="tasksError"
@@ -334,7 +333,24 @@ const closeManagePredecessorModal = () => {
       class="p-4 panel overflow-hidden"
       aria-labelledby="schedule-gantt-title"
     >
-      <h2 id="schedule-gantt-title" class="section-title">甘特图</h2>
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <h2 id="schedule-gantt-title" class="section-title m-0">施工进度甘特图</h2>
+        <!-- 图例（设计稿：关键路径 / 已完成 / 进行中 / 未开始） -->
+        <div class="flex items-center gap-4 text-xs text-fg-muted">
+          <span class="inline-flex items-center gap-1.5">
+            <i class="w-2 h-2 rounded-full bg-error inline-block" />关键路径
+          </span>
+          <span class="inline-flex items-center gap-1.5">
+            <i class="w-2 h-2 rounded-full bg-success inline-block" />已完成
+          </span>
+          <span class="inline-flex items-center gap-1.5">
+            <i class="w-2 h-2 rounded-full bg-info inline-block" />进行中
+          </span>
+          <span class="inline-flex items-center gap-1.5">
+            <i class="w-2 h-2 rounded-full bg-fg-subtle inline-block" />未开始
+          </span>
+        </div>
+      </div>
       <div v-if="tasks.length === 0" class="py-8 flex flex-col items-center gap-3">
         <div class="w-16 h-16 rounded-full bg-base-300 flex items-center justify-center">
           <span class="material-symbols-outlined icon-2xl text-base-content/30">view_timeline</span>

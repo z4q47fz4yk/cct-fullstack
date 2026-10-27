@@ -11,6 +11,8 @@ import { useProjectContext } from '@/composables/useProjectContext'
 import { listResourcesQuery } from '@/client/@pinia/colada.gen'
 import { vProjectUpdate } from '@/client'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import SegmentControl from '@/components/common/SegmentControl.vue'
+import ResourcesView from './resources.vue'
 import { useConfirm } from '@/composables/useConfirm'
 import { useToast } from '@/composables/useToast'
 import { FETCH_ALL_PAGE_SIZE } from '@/constants/pagination'
@@ -319,6 +321,9 @@ function handleCancel() {
   }
 }
 
+// ─── 页内 Tab：项目概况 / 基础数据（设计稿 view-info） ──────────
+const activeTab = ref<'overview' | 'basedata'>('overview')
+
 // 解析后端校验错误为可读字符串
 const updateErrorMessage = computed(() =>
   updateError.value ? formatHttpError(updateError.value, '请稍后重试') : '',
@@ -334,37 +339,6 @@ onBeforeRouteLeave(async () => {
 </script>
 
 <template>
-  <Teleport defer to="#header-actions">
-    <div
-      v-if="project && !isLoadingProject && !projectError && isDirty"
-      class="flex items-center gap-2"
-    >
-      <button
-        type="button"
-        class="btn btn-ghost px-4"
-        aria-label="取消项目信息修改"
-        :disabled="isUpdatingProject"
-        @click="handleCancel"
-      >
-        取消
-      </button>
-      <button
-        type="button"
-        class="btn btn-primary px-5"
-        aria-label="保存项目信息"
-        :disabled="isUpdatingProject || !isValid || !isDirty"
-        @click="submit"
-      >
-        <span
-          v-if="isUpdatingProject"
-          class="loading loading-spinner loading-xs"
-          aria-hidden="true"
-        />
-        <span>{{ isUpdatingProject ? '保存中' : '保存' }}</span>
-      </button>
-    </div>
-  </Teleport>
-
   <!-- 加载骨架 -->
   <div v-if="isLoadingProject" class="flex justify-center py-8">
     <div role="status" aria-label="正在加载项目信息">
@@ -386,18 +360,58 @@ onBeforeRouteLeave(async () => {
 
   <template v-else-if="project">
     <div class="space-y-4">
+      <!-- 操作工具条（设计稿 page-head toolbar：取消 / 保存） -->
+      <div v-if="isDirty" class="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          class="btn btn-ghost px-4"
+          aria-label="取消项目信息修改"
+          :disabled="isUpdatingProject"
+          @click="handleCancel"
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary px-5"
+          aria-label="保存项目信息"
+          :disabled="isUpdatingProject || !isValid || !isDirty"
+          @click="submit"
+        >
+          <span
+            v-if="isUpdatingProject"
+            class="loading loading-spinner loading-xs"
+            aria-hidden="true"
+          />
+          <span>{{ isUpdatingProject ? '保存中' : '保存' }}</span>
+        </button>
+      </div>
+
+      <!-- 页内 Tab（设计稿：项目概况 / 基础数据） -->
+      <SegmentControl
+        v-model="activeTab"
+        :options="[
+          { value: 'overview', label: '项目概况', icon: 'info' },
+          { value: 'basedata', label: '基础数据', icon: 'database' },
+        ]"
+        aria-label="项目信息页签"
+      />
+
+      <!-- 项目概况：纵向堆叠分组卡片（设计稿 view-info，每组 4 列表单网格） -->
       <form
+        v-show="activeTab === 'overview'"
         id="project-info-form"
-        class="panel panel-grid grid-cols-1 xl:grid-cols-2 overflow-hidden"
+        class="flex flex-col gap-4"
         aria-label="项目信息表单"
         @submit.prevent="submit"
       >
         <!-- 基本信息 -->
-        <section class="p-4 xl:row-span-2" aria-labelledby="basic-info-title">
-          <h2 id="basic-info-title" class="section-title">基本信息</h2>
-
-          <div class="space-y-4">
-            <div class="fieldset">
+        <section class="panel p-0" aria-labelledby="basic-info-title">
+          <div class="card-head">
+            <h2 id="basic-info-title" class="section-title m-0">基本信息</h2>
+          </div>
+          <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div class="fieldset md:col-span-2">
               <label class="fieldset-label" for="project-name">
                 项目名称 <span class="text-error" aria-hidden="true">*</span>
               </label>
@@ -412,24 +426,25 @@ onBeforeRouteLeave(async () => {
                 type="text"
                 aria-required="true"
               />
-              <span v-if="errors.name" class="mt-1 text-xs text-error">{{ errors.name }}</span>
+              <span v-if="errors.name" class="text-xs text-error">{{ errors.name }}</span>
             </div>
 
             <div class="fieldset">
-              <label class="fieldset-label" for="project-description">项目描述</label>
-              <textarea
-                id="project-description"
-                v-model="description"
-                v-bind="descriptionAttrs"
+              <label class="fieldset-label" for="project-status">项目阶段</label>
+              <select
+                id="project-status"
+                v-model="status"
+                v-bind="statusAttrs"
                 :disabled="isUpdatingProject"
-                class="textarea w-full"
-                :class="{ 'textarea-error': errors.description }"
-                placeholder="可选，简要描述项目内容"
-                rows="4"
-              />
-              <span v-if="errors.description" class="mt-1 text-xs text-error">
-                {{ errors.description }}
-              </span>
+                class="select w-full"
+                :class="{ 'select-error': errors.status }"
+              >
+                <option value="PLANNING">计划中</option>
+                <option value="CONSTRUCTION">施工中</option>
+                <option value="COMPLETED">已完成</option>
+              </select>
+              <span class="text-xs text-fg-muted">标记为「已完成」将解锁评价阶段</span>
+              <span v-if="errors.status" class="text-xs text-error">{{ errors.status }}</span>
             </div>
 
             <div class="fieldset">
@@ -476,347 +491,34 @@ onBeforeRouteLeave(async () => {
                   已完成
                 </button>
               </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- 项目规模 -->
-        <section class="p-4" aria-labelledby="project-scale-title">
-          <h2 id="project-scale-title" class="section-title">项目规模</h2>
-          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div class="fieldset">
-              <label class="fieldset-label" for="land-area">占地面积（m²）</label>
-              <label
-                class="input flex w-full items-center gap-2"
-                :class="{ 'input-error': errors.land_area }"
-              >
-                <span class="material-symbols-outlined icon-sm text-primary/70" aria-hidden="true">
-                  grid_view
-                </span>
-                <input
-                  id="land-area"
-                  :value="landArea ?? ''"
-                  v-bind="landAreaAttrs"
-                  :disabled="isUpdatingProject"
-                  class="w-full bg-transparent outline-none"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0"
-                  @input="
-                    (e) => (landArea = parseNullableNumber((e.target as HTMLInputElement).value))
-                  "
-                />
-                <span class="shrink-0 text-sm text-fg-muted">m²</span>
-              </label>
-              <span v-if="errors.land_area" class="mt-1 text-xs text-error">
-                {{ errors.land_area }}
-              </span>
+              <span class="text-xs text-fg-muted">停用后项目不再参与统计与优化</span>
             </div>
 
-            <div class="fieldset">
-              <label class="fieldset-label" for="building-area">建筑面积（m²）</label>
-              <label
-                class="input flex w-full items-center gap-2"
-                :class="{ 'input-error': errors.building_area }"
-              >
-                <span class="material-symbols-outlined icon-sm text-primary/70" aria-hidden="true">
-                  apartment
-                </span>
-                <input
-                  id="building-area"
-                  :value="buildingArea ?? ''"
-                  v-bind="buildingAreaAttrs"
-                  :disabled="isUpdatingProject"
-                  class="w-full bg-transparent outline-none"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0"
-                  @input="
-                    (e) =>
-                      (buildingArea = parseNullableNumber((e.target as HTMLInputElement).value))
-                  "
-                />
-                <span class="shrink-0 text-sm text-fg-muted">m²</span>
-              </label>
-              <span v-if="errors.building_area" class="mt-1 text-xs text-error">
-                {{ errors.building_area }}
-              </span>
-            </div>
-          </div>
-        </section>
-
-        <!-- 临时用房 -->
-        <section class="p-4" aria-labelledby="housing-title">
-          <h2 id="housing-title" class="section-title">临时用房</h2>
-
-          <div class="space-y-4">
-            <div class="fieldset">
-              <label class="fieldset-label" for="housing-resource">
-                临时用房资源（用于碳排放与资金计算）
-              </label>
-              <SearchableSelect
-                id="housing-resource"
-                v-model:selected-value="housingResourceId"
-                v-model:search="searchKeyword"
-                v-bind="housingResourceIdAttrs"
-                :options="housingResourceOptions"
-                placeholder="选择临时用房资源"
+            <div class="fieldset md:col-span-2 xl:col-span-4">
+              <label class="fieldset-label" for="project-description">项目描述</label>
+              <textarea
+                id="project-description"
+                v-model="description"
+                v-bind="descriptionAttrs"
                 :disabled="isUpdatingProject"
+                class="textarea w-full"
+                :class="{ 'textarea-error': errors.description }"
+                placeholder="可选，简要描述项目内容"
+                rows="3"
               />
-              <span v-if="errors.housing_resource_id" class="mt-1 text-xs text-error">
-                {{ errors.housing_resource_id }}
+              <span v-if="errors.description" class="text-xs text-error">
+                {{ errors.description }}
               </span>
-            </div>
-
-            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div class="fieldset">
-                <label class="fieldset-label" for="housing-safety-factor">安全系数</label>
-                <label
-                  class="input flex w-full items-center gap-2"
-                  :class="{ 'input-error': errors.housing_safety_factor }"
-                >
-                  <input
-                    id="housing-safety-factor"
-                    :value="housingSafetyFactor ?? ''"
-                    v-bind="housingSafetyFactorAttrs"
-                    :disabled="isUpdatingProject"
-                    class="w-full bg-transparent outline-none"
-                    type="number"
-                    min="1"
-                    step="0.05"
-                    placeholder="1.2"
-                    @input="
-                      (e) =>
-                        (housingSafetyFactor = parseNullableNumber(
-                          (e.target as HTMLInputElement).value,
-                        ))
-                    "
-                  />
-                </label>
-                <span class="mt-1 text-xs text-fg-muted">建议值不低于 1.0</span>
-                <span v-if="errors.housing_safety_factor" class="mt-1 text-xs text-error">
-                  {{ errors.housing_safety_factor }}
-                </span>
-              </div>
-
-              <div class="fieldset">
-                <label class="fieldset-label" for="persons-per-room">每间人数</label>
-                <label
-                  class="input flex w-full items-center gap-2"
-                  :class="{ 'input-error': errors.persons_per_room }"
-                >
-                  <input
-                    id="persons-per-room"
-                    :value="personsPerRoom ?? ''"
-                    v-bind="personsPerRoomAttrs"
-                    :disabled="isUpdatingProject"
-                    class="w-full bg-transparent outline-none"
-                    type="number"
-                    min="1"
-                    step="1"
-                    placeholder="4"
-                    @input="
-                      (e) =>
-                        (personsPerRoom = parseNullableNumber((e.target as HTMLInputElement).value))
-                    "
-                  />
-                  <span class="shrink-0 text-sm text-fg-muted">人</span>
-                </label>
-                <span class="mt-1 text-xs text-fg-muted">请输入正整数</span>
-                <span v-if="errors.persons_per_room" class="mt-1 text-xs text-error">
-                  {{ errors.persons_per_room }}
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- 生命周期与水电 -->
-        <section class="p-4" aria-labelledby="lifecycle-title">
-          <h2 id="lifecycle-title" class="section-title">生命周期与水电</h2>
-
-          <div class="space-y-4">
-            <div class="fieldset">
-              <label class="fieldset-label" for="project-status">项目状态</label>
-              <select
-                id="project-status"
-                v-model="status"
-                v-bind="statusAttrs"
-                :disabled="isUpdatingProject"
-                class="select select-bordered w-full max-w-xs"
-              >
-                <option value="PLANNING">计划中</option>
-                <option value="CONSTRUCTION">施工中</option>
-                <option value="COMPLETED">已完成</option>
-              </select>
-              <span class="mt-1 text-xs text-fg-muted">
-                标记为「已完成」将解锁评价阶段；与 is_active 自动同步
-              </span>
-            </div>
-
-            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div class="fieldset">
-                <label class="fieldset-label" for="water-resource">水资源（水电桶）</label>
-                <SearchableSelect
-                  id="water-resource"
-                  v-model:selected-value="waterResourceId"
-                  v-model:search="utilitySearchKeyword"
-                  v-bind="waterResourceIdAttrs"
-                  :options="utilityResourceOptions"
-                  placeholder="选择水资源"
-                  :disabled="isUpdatingProject"
-                />
-                <span v-if="errors.water_resource_id" class="mt-1 text-xs text-error">
-                  {{ errors.water_resource_id }}
-                </span>
-              </div>
-
-              <div class="fieldset">
-                <label class="fieldset-label" for="electricity-resource">电力资源（水电桶）</label>
-                <SearchableSelect
-                  id="electricity-resource"
-                  v-model:selected-value="electricityResourceId"
-                  v-model:search="utilitySearchKeyword"
-                  v-bind="electricityResourceIdAttrs"
-                  :options="utilityResourceOptions"
-                  placeholder="选择电力资源"
-                  :disabled="isUpdatingProject"
-                />
-                <span v-if="errors.electricity_resource_id" class="mt-1 text-xs text-error">
-                  {{ errors.electricity_resource_id }}
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- 项目地点 -->
-        <section class="p-4" aria-labelledby="location-title">
-          <h2 id="location-title" class="section-title">项目地点</h2>
-
-          <div class="space-y-4">
-            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div class="fieldset">
-                <label class="fieldset-label" for="province"> 省份 </label>
-                <select
-                  id="province"
-                  v-model="selectedProvince"
-                  v-bind="provinceAttrs"
-                  :disabled="isUpdatingProject"
-                  class="select select-bordered w-full"
-                  :class="{ 'select-error': errors.province }"
-                >
-                  <option :value="null">请选择省份</option>
-                  <option v-for="p in provinceOptions" :key="p" :value="p">
-                    {{ p }}
-                  </option>
-                </select>
-                <span v-if="errors.province" class="mt-1 text-xs text-error">
-                  {{ errors.province }}
-                </span>
-              </div>
-
-              <div class="fieldset">
-                <label class="fieldset-label" for="city"> 城市 </label>
-                <select
-                  id="city"
-                  v-model="city"
-                  v-bind="cityAttrs"
-                  :disabled="isUpdatingProject || !selectedProvince"
-                  class="select select-bordered w-full"
-                  :class="{ 'select-error': errors.city }"
-                >
-                  <option :value="null">请选择城市</option>
-                  <option v-for="c in cityOptions" :key="c" :value="c">
-                    {{ c }}
-                  </option>
-                </select>
-                <span v-if="errors.city" class="mt-1 text-xs text-error">
-                  {{ errors.city }}
-                </span>
-              </div>
-            </div>
-
-            <div class="fieldset">
-              <label class="fieldset-label" for="address">详细地址</label>
-              <input
-                id="address"
-                v-model="address"
-                v-bind="addressAttrs"
-                :disabled="isUpdatingProject"
-                class="input w-full"
-                :class="{ 'input-error': errors.address }"
-                placeholder="请输入具体地址"
-                type="text"
-              />
-              <span v-if="errors.address" class="mt-1 text-xs text-error">
-                {{ errors.address }}
-              </span>
-            </div>
-
-            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div class="fieldset">
-                <label class="fieldset-label" for="latitude">纬度（WGS84）</label>
-                <input
-                  id="latitude"
-                  :value="latitude ?? ''"
-                  v-bind="latitudeAttrs"
-                  :disabled="isUpdatingProject"
-                  class="input w-full"
-                  :class="{ 'input-error': errors.latitude }"
-                  placeholder="如 39.9075"
-                  type="number"
-                  step="any"
-                  min="-90"
-                  max="90"
-                  @input="
-                    (e) => (latitude = parseNullableNumber((e.target as HTMLInputElement).value))
-                  "
-                />
-                <span class="mt-1 text-xs text-fg-muted">
-                  用于 Open-Meteo 天气自动同步；填写前先在地图上确认施工现场坐标
-                </span>
-                <span v-if="errors.latitude" class="mt-1 text-xs text-error">
-                  {{ errors.latitude }}
-                </span>
-              </div>
-
-              <div class="fieldset">
-                <label class="fieldset-label" for="longitude">经度（WGS84）</label>
-                <input
-                  id="longitude"
-                  :value="longitude ?? ''"
-                  v-bind="longitudeAttrs"
-                  :disabled="isUpdatingProject"
-                  class="input w-full"
-                  :class="{ 'input-error': errors.longitude }"
-                  placeholder="如 116.39723"
-                  type="number"
-                  step="any"
-                  min="-180"
-                  max="180"
-                  @input="
-                    (e) => (longitude = parseNullableNumber((e.target as HTMLInputElement).value))
-                  "
-                />
-                <span class="mt-1 text-xs text-fg-muted">
-                  用于 Open-Meteo 天气自动同步；需与纬度成对填写
-                </span>
-                <span v-if="errors.longitude" class="mt-1 text-xs text-error">
-                  {{ errors.longitude }}
-                </span>
-              </div>
             </div>
           </div>
         </section>
 
         <!-- 建筑概况 -->
-        <section class="p-4" aria-labelledby="building-overview-title">
-          <h2 id="building-overview-title" class="section-title">建筑概况</h2>
-
-          <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <section class="panel p-0" aria-labelledby="building-overview-title">
+          <div class="card-head">
+            <h2 id="building-overview-title" class="section-title m-0">建筑概况</h2>
+          </div>
+          <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div class="fieldset">
               <label class="fieldset-label" for="underground-building-area"
                 >地下建筑面积（m²）</label
@@ -847,7 +549,7 @@ onBeforeRouteLeave(async () => {
                 />
                 <span class="shrink-0 text-sm text-fg-muted">m²</span>
               </label>
-              <span v-if="errors.underground_building_area" class="mt-1 text-xs text-error">
+              <span v-if="errors.underground_building_area" class="text-xs text-error">
                 {{ errors.underground_building_area }}
               </span>
             </div>
@@ -882,7 +584,7 @@ onBeforeRouteLeave(async () => {
                 />
                 <span class="shrink-0 text-sm text-fg-muted">m²</span>
               </label>
-              <span v-if="errors.aboveground_building_area" class="mt-1 text-xs text-error">
+              <span v-if="errors.aboveground_building_area" class="text-xs text-error">
                 {{ errors.aboveground_building_area }}
               </span>
             </div>
@@ -902,18 +604,180 @@ onBeforeRouteLeave(async () => {
                 </span>
                 <span class="shrink-0 text-sm text-fg-muted">m²</span>
               </div>
-              <span class="mt-1 text-xs text-fg-muted">地下 + 地上，自动计算</span>
+              <span class="text-xs text-fg-muted">地下 + 地上，自动计算</span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="land-area">占地面积（m²）</label>
+              <label
+                class="input flex w-full items-center gap-2"
+                :class="{ 'input-error': errors.land_area }"
+              >
+                <span class="material-symbols-outlined icon-sm text-primary/70" aria-hidden="true">
+                  grid_view
+                </span>
+                <input
+                  id="land-area"
+                  :value="landArea ?? ''"
+                  v-bind="landAreaAttrs"
+                  :disabled="isUpdatingProject"
+                  class="w-full bg-transparent outline-none"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0"
+                  @input="
+                    (e) => (landArea = parseNullableNumber((e.target as HTMLInputElement).value))
+                  "
+                />
+                <span class="shrink-0 text-sm text-fg-muted">m²</span>
+              </label>
+              <span v-if="errors.land_area" class="text-xs text-error">
+                {{ errors.land_area }}
+              </span>
+            </div>
+
+            <div class="fieldset md:col-span-2">
+              <label class="fieldset-label" for="building-area">建筑面积（m²）</label>
+              <label
+                class="input flex w-full items-center gap-2"
+                :class="{ 'input-error': errors.building_area }"
+              >
+                <span class="material-symbols-outlined icon-sm text-primary/70" aria-hidden="true">
+                  apartment
+                </span>
+                <input
+                  id="building-area"
+                  :value="buildingArea ?? ''"
+                  v-bind="buildingAreaAttrs"
+                  :disabled="isUpdatingProject"
+                  class="w-full bg-transparent outline-none"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0"
+                  @input="
+                    (e) =>
+                      (buildingArea = parseNullableNumber((e.target as HTMLInputElement).value))
+                  "
+                />
+                <span class="shrink-0 text-sm text-fg-muted">m²</span>
+              </label>
+              <span v-if="errors.building_area" class="text-xs text-error">
+                {{ errors.building_area }}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 工期 -->
+        <section class="panel p-0" aria-labelledby="timeline-title">
+          <div class="card-head">
+            <h2 id="timeline-title" class="section-title m-0">工期</h2>
+          </div>
+          <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div class="fieldset">
+              <label class="fieldset-label" for="planned-start-date">拟开工日期</label>
+              <input
+                id="planned-start-date"
+                :value="plannedStartDate ?? ''"
+                v-bind="plannedStartDateAttrs"
+                :disabled="isUpdatingProject"
+                class="input w-full"
+                :class="{ 'input-error': errors.planned_start_date }"
+                type="date"
+                @input="
+                  (e) =>
+                    setFieldValue(
+                      'planned_start_date',
+                      (e.target as HTMLInputElement).value || null,
+                    )
+                "
+              />
+              <span v-if="errors.planned_start_date" class="text-xs text-error">
+                {{ errors.planned_start_date }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="planned-completion-date">拟竣工日期</label>
+              <input
+                id="planned-completion-date"
+                :value="plannedCompletionDate ?? ''"
+                v-bind="plannedCompletionDateAttrs"
+                :disabled="isUpdatingProject"
+                class="input w-full"
+                :class="{ 'input-error': errors.planned_completion_date }"
+                type="date"
+                @input="
+                  (e) =>
+                    setFieldValue(
+                      'planned_completion_date',
+                      (e.target as HTMLInputElement).value || null,
+                    )
+                "
+              />
+              <span v-if="errors.planned_completion_date" class="text-xs text-error">
+                {{ errors.planned_completion_date }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="actual-start-date">实际开工日期</label>
+              <input
+                id="actual-start-date"
+                :value="actualStartDate ?? ''"
+                v-bind="actualStartDateAttrs"
+                :disabled="isUpdatingProject"
+                class="input w-full"
+                :class="{ 'input-error': errors.actual_start_date }"
+                type="date"
+                @input="
+                  (e) =>
+                    setFieldValue(
+                      'actual_start_date',
+                      (e.target as HTMLInputElement).value || null,
+                    )
+                "
+              />
+              <span v-if="errors.actual_start_date" class="text-xs text-error">
+                {{ errors.actual_start_date }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="actual-completion-date">实际竣工日期</label>
+              <input
+                id="actual-completion-date"
+                :value="actualCompletionDate ?? ''"
+                v-bind="actualCompletionDateAttrs"
+                :disabled="isUpdatingProject"
+                class="input w-full"
+                :class="{ 'input-error': errors.actual_completion_date }"
+                type="date"
+                @input="
+                  (e) =>
+                    setFieldValue(
+                      'actual_completion_date',
+                      (e.target as HTMLInputElement).value || null,
+                    )
+                "
+              />
+              <span v-if="errors.actual_completion_date" class="text-xs text-error">
+                {{ errors.actual_completion_date }}
+              </span>
             </div>
           </div>
         </section>
 
         <!-- 结构概况 -->
-        <section class="p-4 xl:col-span-2" aria-labelledby="structure-title">
-          <h2 id="structure-title" class="section-title">结构概况</h2>
-
-          <div class="space-y-4">
+        <section class="panel p-0" aria-labelledby="structure-title">
+          <div class="card-head">
+            <h2 id="structure-title" class="section-title m-0">结构概况</h2>
+          </div>
+          <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <!-- 结构形式标签 -->
-            <div class="fieldset">
+            <div class="fieldset md:col-span-2 xl:col-span-4">
               <label class="fieldset-label">各楼宇结构形式</label>
               <div class="flex flex-wrap gap-2">
                 <label
@@ -935,355 +799,496 @@ onBeforeRouteLeave(async () => {
                   <span class="text-sm">{{ option }}</span>
                 </label>
               </div>
-              <span v-if="errors.structure_types" class="mt-1 text-xs text-error">
+              <span v-if="errors.structure_types" class="text-xs text-error">
                 {{ errors.structure_types }}
               </span>
             </div>
 
-            <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <div class="fieldset">
-                <label class="fieldset-label" for="prefabrication-rate">装配率（%）</label>
-                <label
-                  class="input flex w-full items-center gap-2"
-                  :class="{ 'input-error': errors.prefabrication_rate }"
-                >
-                  <input
-                    id="prefabrication-rate"
-                    :value="prefabricationRate ?? ''"
-                    v-bind="prefabricationRateAttrs"
-                    :disabled="isUpdatingProject"
-                    class="w-full bg-transparent outline-none"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="1"
-                    placeholder="30"
-                    @input="
-                      (e) =>
-                        (prefabricationRate = parseNullableNumber(
-                          (e.target as HTMLInputElement).value,
-                        ))
-                    "
-                  />
-                  <span class="shrink-0 text-sm text-fg-muted">%</span>
-                </label>
-                <span v-if="errors.prefabrication_rate" class="mt-1 text-xs text-error">
-                  {{ errors.prefabrication_rate }}
-                </span>
-              </div>
+            <div class="fieldset">
+              <label class="fieldset-label" for="structural-safety-level">结构安全等级</label>
+              <select
+                id="structural-safety-level"
+                v-model="structuralSafetyLevel"
+                v-bind="structuralSafetyLevelAttrs"
+                :disabled="isUpdatingProject"
+                class="select w-full"
+                :class="{ 'select-error': errors.structural_safety_level }"
+              >
+                <option :value="null">请选择</option>
+                <option v-for="opt in SAFETY_LEVEL_OPTIONS" :key="opt" :value="opt">
+                  {{ opt }}
+                </option>
+              </select>
+              <span v-if="errors.structural_safety_level" class="text-xs text-error">
+                {{ errors.structural_safety_level }}
+              </span>
+            </div>
 
-              <div class="fieldset">
-                <label class="fieldset-label" for="design-service-life">设计使用年限（年）</label>
-                <label
-                  class="input flex w-full items-center gap-2"
-                  :class="{ 'input-error': errors.design_service_life }"
-                >
-                  <input
-                    id="design-service-life"
-                    :value="designServiceLife ?? ''"
-                    v-bind="designServiceLifeAttrs"
-                    :disabled="isUpdatingProject"
-                    class="w-full bg-transparent outline-none"
-                    type="number"
-                    min="0"
-                    step="1"
-                    placeholder="50"
-                    @input="
-                      (e) =>
-                        (designServiceLife = parseNullableNumber(
-                          (e.target as HTMLInputElement).value,
-                        ))
-                    "
-                  />
-                  <span class="shrink-0 text-sm text-fg-muted">年</span>
-                </label>
-                <span v-if="errors.design_service_life" class="mt-1 text-xs text-error">
-                  {{ errors.design_service_life }}
-                </span>
-              </div>
+            <div class="fieldset">
+              <label class="fieldset-label" for="foundation-design-level">基础设计等级</label>
+              <select
+                id="foundation-design-level"
+                v-model="foundationDesignLevel"
+                v-bind="foundationDesignLevelAttrs"
+                :disabled="isUpdatingProject"
+                class="select w-full"
+                :class="{ 'select-error': errors.foundation_design_level }"
+              >
+                <option :value="null">请选择</option>
+                <option v-for="opt in FOUNDATION_LEVEL_OPTIONS" :key="opt" :value="opt">
+                  {{ opt }}
+                </option>
+              </select>
+              <span v-if="errors.foundation_design_level" class="text-xs text-error">
+                {{ errors.foundation_design_level }}
+              </span>
+            </div>
 
-              <div class="fieldset">
-                <label class="fieldset-label" for="structural-safety-level">结构安全等级</label>
-                <select
-                  id="structural-safety-level"
-                  v-model="structuralSafetyLevel"
-                  v-bind="structuralSafetyLevelAttrs"
+            <div class="fieldset">
+              <label class="fieldset-label" for="pile-foundation-design-level">
+                桩基设计等级（选填）
+              </label>
+              <select
+                id="pile-foundation-design-level"
+                v-model="pileFoundationDesignLevel"
+                v-bind="pileFoundationDesignLevelAttrs"
+                :disabled="isUpdatingProject"
+                class="select w-full"
+                :class="{ 'select-error': errors.pile_foundation_design_level }"
+              >
+                <option :value="null">请选择</option>
+                <option v-for="opt in PILE_FOUNDATION_LEVEL_OPTIONS" :key="opt" :value="opt">
+                  {{ opt }}
+                </option>
+              </select>
+              <span v-if="errors.pile_foundation_design_level" class="text-xs text-error">
+                {{ errors.pile_foundation_design_level }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="fire-resistance-level">建筑耐火等级</label>
+              <select
+                id="fire-resistance-level"
+                v-model="fireResistanceLevel"
+                v-bind="fireResistanceLevelAttrs"
+                :disabled="isUpdatingProject"
+                class="select w-full"
+                :class="{ 'select-error': errors.fire_resistance_level }"
+              >
+                <option :value="null">请选择</option>
+                <option v-for="opt in FIRE_RESISTANCE_LEVEL_OPTIONS" :key="opt" :value="opt">
+                  {{ opt }}
+                </option>
+              </select>
+              <span v-if="errors.fire_resistance_level" class="text-xs text-error">
+                {{ errors.fire_resistance_level }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="seismic-fortification-intensity">
+                抗震设防烈度
+              </label>
+              <select
+                id="seismic-fortification-intensity"
+                v-model="seismicFortificationIntensity"
+                v-bind="seismicFortificationIntensityAttrs"
+                :disabled="isUpdatingProject"
+                class="select w-full"
+                :class="{ 'select-error': errors.seismic_fortification_intensity }"
+              >
+                <option :value="null">请选择</option>
+                <option v-for="opt in SEISMIC_INTENSITY_OPTIONS" :key="opt" :value="opt">
+                  {{ opt }}
+                </option>
+              </select>
+              <span v-if="errors.seismic_fortification_intensity" class="text-xs text-error">
+                {{ errors.seismic_fortification_intensity }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="underground-waterproof-level">
+                地下工程防水等级
+              </label>
+              <select
+                id="underground-waterproof-level"
+                v-model="undergroundWaterproofLevel"
+                v-bind="undergroundWaterproofLevelAttrs"
+                :disabled="isUpdatingProject"
+                class="select w-full"
+                :class="{ 'select-error': errors.underground_waterproof_level }"
+              >
+                <option :value="null">请选择</option>
+                <option v-for="opt in WATERPROOF_LEVEL_OPTIONS" :key="opt" :value="opt">
+                  {{ opt }}
+                </option>
+              </select>
+              <span v-if="errors.underground_waterproof_level" class="text-xs text-error">
+                {{ errors.underground_waterproof_level }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="prefabrication-rate">装配率（%）</label>
+              <label
+                class="input flex w-full items-center gap-2"
+                :class="{ 'input-error': errors.prefabrication_rate }"
+              >
+                <input
+                  id="prefabrication-rate"
+                  :value="prefabricationRate ?? ''"
+                  v-bind="prefabricationRateAttrs"
                   :disabled="isUpdatingProject"
-                  class="select select-bordered w-full"
-                  :class="{ 'select-error': errors.structural_safety_level }"
-                >
-                  <option :value="null">请选择</option>
-                  <option v-for="opt in SAFETY_LEVEL_OPTIONS" :key="opt" :value="opt">
-                    {{ opt }}
-                  </option>
-                </select>
-                <span v-if="errors.structural_safety_level" class="mt-1 text-xs text-error">
-                  {{ errors.structural_safety_level }}
-                </span>
-              </div>
+                  class="w-full bg-transparent outline-none"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  placeholder="30"
+                  @input="
+                    (e) =>
+                      (prefabricationRate = parseNullableNumber(
+                        (e.target as HTMLInputElement).value,
+                      ))
+                  "
+                />
+                <span class="shrink-0 text-sm text-fg-muted">%</span>
+              </label>
+              <span v-if="errors.prefabrication_rate" class="text-xs text-error">
+                {{ errors.prefabrication_rate }}
+              </span>
+            </div>
 
-              <div class="fieldset">
-                <label class="fieldset-label" for="foundation-design-level">基础设计等级</label>
-                <select
-                  id="foundation-design-level"
-                  v-model="foundationDesignLevel"
-                  v-bind="foundationDesignLevelAttrs"
+            <div class="fieldset">
+              <label class="fieldset-label" for="design-service-life">设计使用年限（年）</label>
+              <label
+                class="input flex w-full items-center gap-2"
+                :class="{ 'input-error': errors.design_service_life }"
+              >
+                <input
+                  id="design-service-life"
+                  :value="designServiceLife ?? ''"
+                  v-bind="designServiceLifeAttrs"
                   :disabled="isUpdatingProject"
-                  class="select select-bordered w-full"
-                  :class="{ 'select-error': errors.foundation_design_level }"
-                >
-                  <option :value="null">请选择</option>
-                  <option v-for="opt in FOUNDATION_LEVEL_OPTIONS" :key="opt" :value="opt">
-                    {{ opt }}
-                  </option>
-                </select>
-                <span v-if="errors.foundation_design_level" class="mt-1 text-xs text-error">
-                  {{ errors.foundation_design_level }}
-                </span>
-              </div>
-
-              <div class="fieldset">
-                <label class="fieldset-label" for="pile-foundation-design-level">
-                  桩基设计等级（选填）
-                </label>
-                <select
-                  id="pile-foundation-design-level"
-                  v-model="pileFoundationDesignLevel"
-                  v-bind="pileFoundationDesignLevelAttrs"
-                  :disabled="isUpdatingProject"
-                  class="select select-bordered w-full"
-                  :class="{ 'select-error': errors.pile_foundation_design_level }"
-                >
-                  <option :value="null">请选择</option>
-                  <option v-for="opt in PILE_FOUNDATION_LEVEL_OPTIONS" :key="opt" :value="opt">
-                    {{ opt }}
-                  </option>
-                </select>
-                <span v-if="errors.pile_foundation_design_level" class="mt-1 text-xs text-error">
-                  {{ errors.pile_foundation_design_level }}
-                </span>
-              </div>
-
-              <div class="fieldset">
-                <label class="fieldset-label" for="fire-resistance-level">建筑耐火等级</label>
-                <select
-                  id="fire-resistance-level"
-                  v-model="fireResistanceLevel"
-                  v-bind="fireResistanceLevelAttrs"
-                  :disabled="isUpdatingProject"
-                  class="select select-bordered w-full"
-                  :class="{ 'select-error': errors.fire_resistance_level }"
-                >
-                  <option :value="null">请选择</option>
-                  <option v-for="opt in FIRE_RESISTANCE_LEVEL_OPTIONS" :key="opt" :value="opt">
-                    {{ opt }}
-                  </option>
-                </select>
-                <span v-if="errors.fire_resistance_level" class="mt-1 text-xs text-error">
-                  {{ errors.fire_resistance_level }}
-                </span>
-              </div>
-
-              <div class="fieldset">
-                <label class="fieldset-label" for="seismic-fortification-intensity">
-                  抗震设防烈度
-                </label>
-                <select
-                  id="seismic-fortification-intensity"
-                  v-model="seismicFortificationIntensity"
-                  v-bind="seismicFortificationIntensityAttrs"
-                  :disabled="isUpdatingProject"
-                  class="select select-bordered w-full"
-                  :class="{ 'select-error': errors.seismic_fortification_intensity }"
-                >
-                  <option :value="null">请选择</option>
-                  <option v-for="opt in SEISMIC_INTENSITY_OPTIONS" :key="opt" :value="opt">
-                    {{ opt }}
-                  </option>
-                </select>
-                <span v-if="errors.seismic_fortification_intensity" class="mt-1 text-xs text-error">
-                  {{ errors.seismic_fortification_intensity }}
-                </span>
-              </div>
-
-              <div class="fieldset">
-                <label class="fieldset-label" for="underground-waterproof-level">
-                  地下工程防水等级
-                </label>
-                <select
-                  id="underground-waterproof-level"
-                  v-model="undergroundWaterproofLevel"
-                  v-bind="undergroundWaterproofLevelAttrs"
-                  :disabled="isUpdatingProject"
-                  class="select select-bordered w-full"
-                  :class="{ 'select-error': errors.underground_waterproof_level }"
-                >
-                  <option :value="null">请选择</option>
-                  <option v-for="opt in WATERPROOF_LEVEL_OPTIONS" :key="opt" :value="opt">
-                    {{ opt }}
-                  </option>
-                </select>
-                <span v-if="errors.underground_waterproof_level" class="mt-1 text-xs text-error">
-                  {{ errors.underground_waterproof_level }}
-                </span>
-              </div>
+                  class="w-full bg-transparent outline-none"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="50"
+                  @input="
+                    (e) =>
+                      (designServiceLife = parseNullableNumber(
+                        (e.target as HTMLInputElement).value,
+                      ))
+                  "
+                />
+                <span class="shrink-0 text-sm text-fg-muted">年</span>
+              </label>
+              <span v-if="errors.design_service_life" class="text-xs text-error">
+                {{ errors.design_service_life }}
+              </span>
             </div>
           </div>
         </section>
 
-        <!-- 工期 -->
-        <section class="p-4" aria-labelledby="timeline-title">
-          <h2 id="timeline-title" class="section-title">工期</h2>
-
-          <div class="space-y-4">
-            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div class="fieldset">
-                <label class="fieldset-label" for="planned-start-date">拟开工日期</label>
-                <input
-                  id="planned-start-date"
-                  :value="plannedStartDate ?? ''"
-                  v-bind="plannedStartDateAttrs"
-                  :disabled="isUpdatingProject"
-                  class="input w-full"
-                  :class="{ 'input-error': errors.planned_start_date }"
-                  type="date"
-                  @input="
-                    (e) =>
-                      setFieldValue(
-                        'planned_start_date',
-                        (e.target as HTMLInputElement).value || null,
-                      )
-                  "
-                />
-                <span v-if="errors.planned_start_date" class="mt-1 text-xs text-error">
-                  {{ errors.planned_start_date }}
-                </span>
-              </div>
-
-              <div class="fieldset">
-                <label class="fieldset-label" for="planned-completion-date">拟竣工日期</label>
-                <input
-                  id="planned-completion-date"
-                  :value="plannedCompletionDate ?? ''"
-                  v-bind="plannedCompletionDateAttrs"
-                  :disabled="isUpdatingProject"
-                  class="input w-full"
-                  :class="{ 'input-error': errors.planned_completion_date }"
-                  type="date"
-                  @input="
-                    (e) =>
-                      setFieldValue(
-                        'planned_completion_date',
-                        (e.target as HTMLInputElement).value || null,
-                      )
-                  "
-                />
-                <span v-if="errors.planned_completion_date" class="mt-1 text-xs text-error">
-                  {{ errors.planned_completion_date }}
-                </span>
-              </div>
+        <!-- 临时用房 -->
+        <section class="panel p-0" aria-labelledby="housing-title">
+          <div class="card-head">
+            <h2 id="housing-title" class="section-title m-0">临时用房</h2>
+          </div>
+          <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div class="fieldset md:col-span-2">
+              <label class="fieldset-label" for="housing-resource">
+                临时用房资源（用于碳排放与资金计算）
+              </label>
+              <SearchableSelect
+                id="housing-resource"
+                v-model:selected-value="housingResourceId"
+                v-model:search="searchKeyword"
+                v-bind="housingResourceIdAttrs"
+                :options="housingResourceOptions"
+                placeholder="选择临时用房资源"
+                :disabled="isUpdatingProject"
+              />
+              <span v-if="errors.housing_resource_id" class="text-xs text-error">
+                {{ errors.housing_resource_id }}
+              </span>
             </div>
 
-            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div class="fieldset">
-                <label class="fieldset-label" for="actual-start-date">实际开工日期</label>
+            <div class="fieldset">
+              <label class="fieldset-label" for="housing-safety-factor">安全系数</label>
+              <label
+                class="input flex w-full items-center gap-2"
+                :class="{ 'input-error': errors.housing_safety_factor }"
+              >
                 <input
-                  id="actual-start-date"
-                  :value="actualStartDate ?? ''"
-                  v-bind="actualStartDateAttrs"
+                  id="housing-safety-factor"
+                  :value="housingSafetyFactor ?? ''"
+                  v-bind="housingSafetyFactorAttrs"
                   :disabled="isUpdatingProject"
-                  class="input w-full"
-                  :class="{ 'input-error': errors.actual_start_date }"
-                  type="date"
+                  class="w-full bg-transparent outline-none"
+                  type="number"
+                  min="1"
+                  step="0.05"
+                  placeholder="1.2"
                   @input="
                     (e) =>
-                      setFieldValue(
-                        'actual_start_date',
-                        (e.target as HTMLInputElement).value || null,
-                      )
+                      (housingSafetyFactor = parseNullableNumber(
+                        (e.target as HTMLInputElement).value,
+                      ))
                   "
                 />
-                <span v-if="errors.actual_start_date" class="mt-1 text-xs text-error">
-                  {{ errors.actual_start_date }}
-                </span>
-              </div>
+              </label>
+              <span class="text-xs text-fg-muted">建议值不低于 1.0</span>
+              <span v-if="errors.housing_safety_factor" class="text-xs text-error">
+                {{ errors.housing_safety_factor }}
+              </span>
+            </div>
 
-              <div class="fieldset">
-                <label class="fieldset-label" for="actual-completion-date">实际竣工日期</label>
+            <div class="fieldset">
+              <label class="fieldset-label" for="persons-per-room">每间人数</label>
+              <label
+                class="input flex w-full items-center gap-2"
+                :class="{ 'input-error': errors.persons_per_room }"
+              >
                 <input
-                  id="actual-completion-date"
-                  :value="actualCompletionDate ?? ''"
-                  v-bind="actualCompletionDateAttrs"
+                  id="persons-per-room"
+                  :value="personsPerRoom ?? ''"
+                  v-bind="personsPerRoomAttrs"
                   :disabled="isUpdatingProject"
-                  class="input w-full"
-                  :class="{ 'input-error': errors.actual_completion_date }"
-                  type="date"
+                  class="w-full bg-transparent outline-none"
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="4"
                   @input="
                     (e) =>
-                      setFieldValue(
-                        'actual_completion_date',
-                        (e.target as HTMLInputElement).value || null,
-                      )
+                      (personsPerRoom = parseNullableNumber((e.target as HTMLInputElement).value))
                   "
                 />
-                <span v-if="errors.actual_completion_date" class="mt-1 text-xs text-error">
-                  {{ errors.actual_completion_date }}
-                </span>
-              </div>
+                <span class="shrink-0 text-sm text-fg-muted">人</span>
+              </label>
+              <span class="text-xs text-fg-muted">请输入正整数</span>
+              <span v-if="errors.persons_per_room" class="text-xs text-error">
+                {{ errors.persons_per_room }}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 水电资源 -->
+        <section class="panel p-0" aria-labelledby="utility-title">
+          <div class="card-head">
+            <h2 id="utility-title" class="section-title m-0">水电资源</h2>
+          </div>
+          <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div class="fieldset">
+              <label class="fieldset-label" for="water-resource">水资源（水电桶）</label>
+              <SearchableSelect
+                id="water-resource"
+                v-model:selected-value="waterResourceId"
+                v-model:search="utilitySearchKeyword"
+                v-bind="waterResourceIdAttrs"
+                :options="utilityResourceOptions"
+                placeholder="选择水资源"
+                :disabled="isUpdatingProject"
+              />
+              <span v-if="errors.water_resource_id" class="text-xs text-error">
+                {{ errors.water_resource_id }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="electricity-resource">电力资源（水电桶）</label>
+              <SearchableSelect
+                id="electricity-resource"
+                v-model:selected-value="electricityResourceId"
+                v-model:search="utilitySearchKeyword"
+                v-bind="electricityResourceIdAttrs"
+                :options="utilityResourceOptions"
+                placeholder="选择电力资源"
+                :disabled="isUpdatingProject"
+              />
+              <span v-if="errors.electricity_resource_id" class="text-xs text-error">
+                {{ errors.electricity_resource_id }}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 项目地点 -->
+        <section class="panel p-0" aria-labelledby="location-title">
+          <div class="card-head">
+            <h2 id="location-title" class="section-title m-0">项目地点</h2>
+          </div>
+          <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div class="fieldset">
+              <label class="fieldset-label" for="province"> 省份 </label>
+              <select
+                id="province"
+                v-model="selectedProvince"
+                v-bind="provinceAttrs"
+                :disabled="isUpdatingProject"
+                class="select w-full"
+                :class="{ 'select-error': errors.province }"
+              >
+                <option :value="null">请选择省份</option>
+                <option v-for="p in provinceOptions" :key="p" :value="p">
+                  {{ p }}
+                </option>
+              </select>
+              <span v-if="errors.province" class="text-xs text-error">
+                {{ errors.province }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="city"> 城市 </label>
+              <select
+                id="city"
+                v-model="city"
+                v-bind="cityAttrs"
+                :disabled="isUpdatingProject || !selectedProvince"
+                class="select w-full"
+                :class="{ 'select-error': errors.city }"
+              >
+                <option :value="null">请选择城市</option>
+                <option v-for="c in cityOptions" :key="c" :value="c">
+                  {{ c }}
+                </option>
+              </select>
+              <span v-if="errors.city" class="text-xs text-error">
+                {{ errors.city }}
+              </span>
+            </div>
+
+            <div class="fieldset md:col-span-2">
+              <label class="fieldset-label" for="address">详细地址</label>
+              <input
+                id="address"
+                v-model="address"
+                v-bind="addressAttrs"
+                :disabled="isUpdatingProject"
+                class="input w-full"
+                :class="{ 'input-error': errors.address }"
+                placeholder="请输入具体地址"
+                type="text"
+              />
+              <span v-if="errors.address" class="text-xs text-error">
+                {{ errors.address }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="latitude">纬度（WGS84）</label>
+              <input
+                id="latitude"
+                :value="latitude ?? ''"
+                v-bind="latitudeAttrs"
+                :disabled="isUpdatingProject"
+                class="input w-full"
+                :class="{ 'input-error': errors.latitude }"
+                placeholder="如 39.9075"
+                type="number"
+                step="any"
+                min="-90"
+                max="90"
+                @input="
+                  (e) => (latitude = parseNullableNumber((e.target as HTMLInputElement).value))
+                "
+              />
+              <span class="text-xs text-fg-muted">
+                用于 Open-Meteo 天气自动同步；填写前先在地图上确认施工现场坐标
+              </span>
+              <span v-if="errors.latitude" class="text-xs text-error">
+                {{ errors.latitude }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="longitude">经度（WGS84）</label>
+              <input
+                id="longitude"
+                :value="longitude ?? ''"
+                v-bind="longitudeAttrs"
+                :disabled="isUpdatingProject"
+                class="input w-full"
+                :class="{ 'input-error': errors.longitude }"
+                placeholder="如 116.39723"
+                type="number"
+                step="any"
+                min="-180"
+                max="180"
+                @input="
+                  (e) => (longitude = parseNullableNumber((e.target as HTMLInputElement).value))
+                "
+              />
+              <span class="text-xs text-fg-muted"> 用于 Open-Meteo 天气自动同步；需与纬度成对填写 </span>
+              <span v-if="errors.longitude" class="text-xs text-error">
+                {{ errors.longitude }}
+              </span>
             </div>
           </div>
         </section>
 
         <!-- 碳排放指标 -->
-        <section class="p-4" aria-labelledby="carbon-title">
-          <h2 id="carbon-title" class="section-title">碳排放指标</h2>
-
-          <div class="fieldset">
-            <label class="fieldset-label" for="carbon-emission-limit">
-              施工阶段总碳排放量限额（tCO₂e）
-            </label>
-            <label
-              class="input flex w-full items-center gap-2"
-              :class="{ 'input-error': errors.construction_carbon_emission_limit }"
-            >
-              <span class="material-symbols-outlined icon-sm text-primary/70" aria-hidden="true">
-                co2
+        <section class="panel p-0" aria-labelledby="carbon-title">
+          <div class="card-head">
+            <h2 id="carbon-title" class="section-title m-0">碳排放指标</h2>
+          </div>
+          <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div class="fieldset">
+              <label class="fieldset-label" for="carbon-emission-limit">
+                施工阶段总碳排放量限额（tCO₂e）
+              </label>
+              <label
+                class="input flex w-full items-center gap-2"
+                :class="{ 'input-error': errors.construction_carbon_emission_limit }"
+              >
+                <span class="material-symbols-outlined icon-sm text-primary/70" aria-hidden="true">
+                  co2
+                </span>
+                <input
+                  id="carbon-emission-limit"
+                  :value="constructionCarbonEmissionLimit ?? ''"
+                  v-bind="constructionCarbonEmissionLimitAttrs"
+                  :disabled="isUpdatingProject"
+                  class="w-full bg-transparent outline-none"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0"
+                  @input="
+                    (e) =>
+                      (constructionCarbonEmissionLimit = parseNullableNumber(
+                        (e.target as HTMLInputElement).value,
+                      ))
+                  "
+                />
+                <span class="shrink-0 text-sm text-fg-muted">tCO₂e</span>
+              </label>
+              <span v-if="errors.construction_carbon_emission_limit" class="text-xs text-error">
+                {{ errors.construction_carbon_emission_limit }}
               </span>
-              <input
-                id="carbon-emission-limit"
-                :value="constructionCarbonEmissionLimit ?? ''"
-                v-bind="constructionCarbonEmissionLimitAttrs"
-                :disabled="isUpdatingProject"
-                class="w-full bg-transparent outline-none"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0"
-                @input="
-                  (e) =>
-                    (constructionCarbonEmissionLimit = parseNullableNumber(
-                      (e.target as HTMLInputElement).value,
-                    ))
-                "
-              />
-              <span class="shrink-0 text-sm text-fg-muted">tCO₂e</span>
-            </label>
-            <span v-if="errors.construction_carbon_emission_limit" class="mt-1 text-xs text-error">
-              {{ errors.construction_carbon_emission_limit }}
-            </span>
+            </div>
           </div>
         </section>
 
         <!-- 保存错误保留在表单附近，方便定位问题 -->
-        <div v-if="updateError" class="alert alert-error xl:col-span-2" role="alert">
+        <div v-if="updateError" class="alert alert-error" role="alert">
           <span class="material-symbols-outlined" aria-hidden="true">error</span>
           <span>保存失败：{{ updateErrorMessage }}</span>
         </div>
       </form>
 
-      <p class="text-center text-xs text-fg-muted">
+      <p v-show="activeTab === 'overview'" class="text-center text-xs text-fg-muted">
         最后更新：{{ formatDateTime(project.updated_at) }}
       </p>
+
+      <!-- 基础数据：资源列表（复用资源管理页，逻辑零改动） -->
+      <ResourcesView v-if="activeTab === 'basedata'" />
     </div>
   </template>
 </template>

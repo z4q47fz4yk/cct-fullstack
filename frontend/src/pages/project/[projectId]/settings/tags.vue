@@ -184,13 +184,6 @@ const groupCount = (g: TagGroupResp): number => g.count
 </script>
 
 <template>
-  <Teleport defer to="#header-actions">
-    <button class="btn btn-primary gap-1 px-5" :disabled="isLoading" @click="openCreate()">
-      <span class="material-symbols-outlined icon-sm">add</span>
-      添加标签
-    </button>
-  </Teleport>
-
   <ErrorState
     v-if="error"
     title="加载失败"
@@ -199,6 +192,14 @@ const groupCount = (g: TagGroupResp): number => g.count
   />
 
   <div v-else class="space-y-4">
+    <!-- 操作工具条（设计稿 page-head toolbar：新建标签） -->
+    <div class="flex items-center justify-end">
+      <button class="btn btn-primary gap-1 px-5" :disabled="isLoading" @click="openCreate()">
+        <span class="material-symbols-outlined icon-sm">add</span>
+        添加标签
+      </button>
+    </div>
+
     <!-- 汇总说明 -->
     <section class="panel px-4 py-3 flex items-center gap-3">
       <span class="material-symbols-outlined text-primary icon-md shrink-0">label</span>
@@ -210,158 +211,153 @@ const groupCount = (g: TagGroupResp): number => g.count
     </section>
 
     <div class="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4 items-start">
-      <!-- 左：分组列表 -->
+      <!-- 左：分组列表（设计稿：幽灵按钮=选中，描边按钮=未选中） -->
       <section class="panel p-0" aria-labelledby="group-list-title">
-        <div class="m-4 flex flex-col gap-2">
+        <div class="card-head">
           <h2 id="group-list-title" class="section-title m-0">标签分组</h2>
-          <p class="text-[11px] text-fg-subtle -mt-1">选择分组后右侧仅显示该分组标签</p>
         </div>
-        <div class="px-2 pb-3 flex flex-col gap-1">
-          <div
-            class="flex items-center justify-between px-3 h-10 rounded-lg cursor-pointer transition-colors"
-            :class="selectedGroup === null ? 'bg-primary/12' : 'hover:bg-base-300/40'"
+        <div class="card-body flex flex-col gap-1.5">
+          <button
+            type="button"
+            class="btn w-full justify-between"
+            :class="selectedGroup === null ? 'btn-ghost' : 'btn-outline'"
             @click="selectedGroup = null"
           >
-            <span
-              class="text-sm"
-              :class="selectedGroup === null ? 'text-base-content font-medium' : 'text-fg-muted'"
-            >
-              全部标签
-            </span>
-            <span class="text-[10px] font-mono text-fg-muted">{{ tags.length }}</span>
-          </div>
-          <div
+            <span>全部标签</span>
+            <span class="text-xs font-num opacity-70">{{ tags.length }}</span>
+          </button>
+          <button
             v-for="g in groups"
             :key="g.group"
-            class="flex items-center justify-between px-3 h-10 rounded-lg cursor-pointer transition-colors"
-            :class="selectedGroup === g.group ? 'bg-primary/12' : 'hover:bg-base-300/40'"
+            type="button"
+            class="btn w-full justify-between"
+            :class="selectedGroup === g.group ? 'btn-ghost' : 'btn-outline'"
             @click="selectedGroup = g.group"
           >
-            <span
-              class="text-sm truncate"
-              :class="selectedGroup === g.group ? 'text-base-content font-medium' : 'text-fg-muted'"
-            >
-              {{ groupLabel(g.group) }}
-            </span>
-            <span class="text-[10px] font-mono text-fg-muted">{{ groupCount(g) }}</span>
-          </div>
+            <span class="truncate">{{ groupLabel(g.group) }}</span>
+            <span class="text-xs font-num opacity-70">{{ groupCount(g) }}</span>
+          </button>
         </div>
       </section>
 
-      <!-- 右：标签列表 + 详情 -->
+      <!-- 右：标签列表（表格）+ 详情 -->
       <div class="min-w-0 space-y-4">
         <section class="panel p-0" aria-labelledby="tag-list-title">
-          <div class="m-4 flex flex-col gap-2">
+          <div class="card-head">
+            <h2 id="tag-list-title" class="section-title m-0">
+              {{ selectedGroup === null ? '全部标签' : groupLabel(selectedGroup) }}
+              <span class="text-xs font-num text-fg-muted font-normal">{{ visibleTags.length }}</span>
+            </h2>
             <div class="flex items-center gap-2">
-              <h2 id="tag-list-title" class="section-title m-0">
-                {{ selectedGroup === null ? '全部标签' : groupLabel(selectedGroup) }}
-              </h2>
-              <span
-                class="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-base-300/60 text-fg-muted"
-              >
-                {{ visibleTags.length }}
-              </span>
               <button
                 v-if="selectedGroup !== null"
-                class="btn btn-ghost btn-xs ml-auto"
+                class="btn btn-ghost btn-sm"
                 @click="openCreate(selectedGroup === UNGROUPED_LABEL ? '' : selectedGroup)"
               >
                 <span class="material-symbols-outlined icon-sm">add</span>
                 添加到此分组
               </button>
+              <label class="input input-sm flex w-52 items-center gap-2">
+                <span class="material-symbols-outlined icon-sm text-fg-subtle">search</span>
+                <input
+                  v-model="searchQuery"
+                  type="text"
+                  class="w-full bg-transparent"
+                  placeholder="搜索标签"
+                />
+              </label>
             </div>
-            <label class="input flex items-center gap-2">
-              <span class="material-symbols-outlined icon-sm text-fg-subtle">search</span>
-              <input
-                v-model="searchQuery"
-                type="text"
-                class="w-full bg-transparent"
-                placeholder="搜索标签名称或分组…"
-              />
-            </label>
           </div>
 
-          <div class="px-2 pb-3 max-h-[380px] overflow-y-auto">
-            <div v-if="isLoading" class="flex justify-center py-10">
-              <span class="loading loading-spinner loading-md text-primary" />
-            </div>
-            <div v-else-if="visibleTags.length === 0" class="text-center py-10">
-              <span class="material-symbols-outlined icon-2xl text-fg-subtle">label_off</span>
-              <p class="text-sm text-fg-muted mt-2">
-                {{ searchQuery ? '未找到匹配的标签' : '暂无标签' }}
-              </p>
-              <p class="text-xs text-fg-subtle mt-1">点击右上角「添加标签」创建第一个标签</p>
-            </div>
-            <div v-else class="flex flex-col gap-0.5">
-              <div
-                v-for="tag in visibleTags"
-                :key="tag.id"
-                class="group flex items-center gap-2 rounded-lg px-3 h-10 cursor-pointer transition-colors"
-                :class="selectedId === tag.id ? 'bg-primary/12' : 'hover:bg-base-300/40'"
-                @click="selectedId = tag.id"
-              >
-                <span
-                  class="material-symbols-outlined icon-sm shrink-0"
-                  :class="selectedId === tag.id ? 'text-primary' : 'text-fg-subtle'"
-                >
-                  label
-                </span>
-                <div class="flex-1 min-w-0">
-                  <p
-                    class="text-sm truncate"
+          <div class="overflow-x-auto">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>标签名称</th>
+                  <th class="w-28">分组</th>
+                  <th>描述</th>
+                  <th class="w-24 text-center">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template v-if="!isLoading && visibleTags.length > 0">
+                  <tr
+                    v-for="tag in visibleTags"
+                    :key="tag.id"
+                    class="cursor-pointer"
                     :class="
-                      selectedId === tag.id ? 'text-base-content font-medium' : 'text-fg-muted'
+                      selectedId === tag.id ? 'bg-primary/10' : 'hover:bg-base-300/30'
                     "
+                    @click="selectedId = tag.id"
                   >
-                    {{ tag.name }}
-                  </p>
-                  <p v-if="tag.group" class="text-[10px] text-fg-subtle truncate">
-                    {{ tag.group }}
-                  </p>
-                </div>
-                <span
-                  v-if="tag.isDefault"
-                  class="shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-primary/12 text-primary"
-                  title="项目级默认标签，由系统在项目创建时生成，不允许编辑/删除"
-                >
-                  默认
-                </span>
-                <div
-                  v-if="!tag.isDefault"
-                  class="flex items-center gap-0.5 shrink-0"
-                  :class="selectedId === tag.id ? '' : 'hidden group-hover:flex'"
-                >
-                  <button
-                    class="btn btn-ghost btn-xs btn-square"
-                    title="编辑标签"
-                    @click.stop="openEdit(tag)"
-                  >
-                    <span class="material-symbols-outlined icon-sm text-fg-subtle">edit</span>
-                  </button>
-                  <button
-                    class="btn btn-ghost btn-xs btn-square hover:bg-error/10"
-                    title="删除标签"
-                    @click.stop="handleDelete(tag)"
-                  >
-                    <span class="material-symbols-outlined icon-sm text-error">delete</span>
-                  </button>
-                </div>
-              </div>
-            </div>
+                    <td>
+                      <span class="font-medium text-base-content">{{ tag.name }}</span>
+                      <span
+                        v-if="tag.isDefault"
+                        class="ml-2 text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-primary/12 text-primary"
+                        title="项目级默认标签，由系统在项目创建时生成，不允许编辑/删除"
+                      >
+                        默认
+                      </span>
+                    </td>
+                    <td class="text-fg-muted">{{ groupLabel(tag.group) }}</td>
+                    <td class="text-fg-muted max-w-56 truncate">{{ tag.description || '—' }}</td>
+                    <td>
+                      <div class="flex items-center justify-center gap-1">
+                        <button
+                          class="btn-icon"
+                          title="编辑标签"
+                          :disabled="tag.isDefault"
+                          @click.stop="openEdit(tag)"
+                        >
+                          <span class="material-symbols-outlined icon-sm">edit</span>
+                        </button>
+                        <button
+                          class="btn-icon hover:!text-error hover:!border-error"
+                          title="删除标签"
+                          :disabled="tag.isDefault"
+                          @click.stop="handleDelete(tag)"
+                        >
+                          <span class="material-symbols-outlined icon-sm">delete</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+                <tr v-else-if="isLoading">
+                  <td colspan="4" class="text-center py-10">
+                    <span class="loading loading-spinner loading-md text-primary" />
+                  </td>
+                </tr>
+                <tr v-else>
+                  <td colspan="4" class="text-center py-10">
+                    <span class="material-symbols-outlined icon-2xl text-fg-subtle">label_off</span>
+                    <p class="text-sm text-fg-muted mt-2">
+                      {{ searchQuery ? '未找到匹配的标签' : '暂无标签' }}
+                    </p>
+                    <p class="text-xs text-fg-subtle mt-1">点击右上角「添加标签」创建第一个标签</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </section>
 
         <!-- 标签详情 -->
-        <section class="panel p-4" aria-labelledby="tag-detail-title">
-          <div v-if="!selectedTag" class="py-8 text-center">
-            <div
-              class="w-14 h-14 rounded-full bg-base-300/60 flex items-center justify-center mx-auto mb-3"
-            >
-              <span class="material-symbols-outlined icon-2xl text-fg-subtle">label_off</span>
-            </div>
-            <p class="text-fg-muted text-sm">从左侧选择一个标签查看详情</p>
+        <section class="panel p-0" aria-labelledby="tag-detail-title">
+          <div class="card-head">
+            <h2 id="tag-detail-title" class="section-title m-0">标签详情</h2>
           </div>
-          <div v-else class="space-y-4">
+          <div class="card-body">
+            <div v-if="!selectedTag" class="py-8 text-center">
+              <div
+                class="w-14 h-14 rounded-full bg-base-300/60 flex items-center justify-center mx-auto mb-3"
+              >
+                <span class="material-symbols-outlined icon-2xl text-fg-subtle">label_off</span>
+              </div>
+              <p class="text-fg-muted text-sm">从上方列表选择一个标签查看详情</p>
+            </div>
+            <div v-else class="space-y-4">
             <div>
               <span
                 class="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-base-300/60 text-fg-muted"
@@ -371,9 +367,9 @@ const groupCount = (g: TagGroupResp): number => g.count
               <div class="flex items-start justify-between gap-4 mt-1">
                 <div>
                   <div class="flex items-center gap-2">
-                    <h2 id="tag-detail-title" class="text-lg font-semibold text-base-content">
+                    <h3 class="text-lg font-semibold text-base-content">
                       {{ selectedTag.name }}
-                    </h2>
+                    </h3>
                     <span
                       v-if="selectedTag.isDefault"
                       class="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-primary/12 text-primary"
@@ -488,6 +484,7 @@ const groupCount = (g: TagGroupResp): number => g.count
                 class="mt-2"
               />
             </div>
+          </div>
           </div>
         </section>
       </div>

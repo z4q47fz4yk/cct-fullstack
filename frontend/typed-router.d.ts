@@ -75,6 +75,8 @@ declare module 'vue-router/auto-routes' {
       | '/project/[projectId]/insights/progress'
       | '/project/[projectId]/resource-usage'
       | '/project/[projectId]/resource-usage/entry'
+      | '/project/[projectId]/resource-usage/entry-actual'
+      | '/project/[projectId]/resource-usage/entry-plan'
       | '/project/[projectId]/resource-usage/history'
       | '/project/[projectId]/schedule'
       | '/project/[projectId]/settings'
@@ -85,6 +87,7 @@ declare module 'vue-router/auto-routes' {
       | '/project/[projectId]/settings/resources'
       | '/project/[projectId]/settings/tags'
       | '/project/[projectId]/statistics'
+      | '/project/[projectId]/statistics/'
     >,
     '/project/[projectId]/': RouteRecordInfo<
       '/project/[projectId]/',
@@ -215,11 +218,27 @@ declare module 'vue-router/auto-routes' {
       { projectId: ParamValue<true> },
       { projectId: ParamValue<false> },
       | '/project/[projectId]/resource-usage/entry'
+      | '/project/[projectId]/resource-usage/entry-actual'
+      | '/project/[projectId]/resource-usage/entry-plan'
       | '/project/[projectId]/resource-usage/history'
     >,
     '/project/[projectId]/resource-usage/entry': RouteRecordInfo<
       '/project/[projectId]/resource-usage/entry',
       '/project/:projectId/resource-usage/entry',
+      { projectId: ParamValue<true> },
+      { projectId: ParamValue<false> },
+      | never
+    >,
+    '/project/[projectId]/resource-usage/entry-actual': RouteRecordInfo<
+      '/project/[projectId]/resource-usage/entry-actual',
+      '/project/:projectId/resource-usage/entry-actual',
+      { projectId: ParamValue<true> },
+      { projectId: ParamValue<false> },
+      | never
+    >,
+    '/project/[projectId]/resource-usage/entry-plan': RouteRecordInfo<
+      '/project/[projectId]/resource-usage/entry-plan',
+      '/project/:projectId/resource-usage/entry-plan',
       { projectId: ParamValue<true> },
       { projectId: ParamValue<false> },
       | never
@@ -297,6 +316,13 @@ declare module 'vue-router/auto-routes' {
       '/project/:projectId/statistics',
       { projectId: ParamValue<true> },
       { projectId: ParamValue<false> },
+      | '/project/[projectId]/statistics/'
+    >,
+    '/project/[projectId]/statistics/': RouteRecordInfo<
+      '/project/[projectId]/statistics/',
+      '/project/:projectId/statistics',
+      { projectId: ParamValue<true> },
+      { projectId: ParamValue<false> },
       | never
     >,
   }
@@ -357,6 +383,8 @@ declare module 'vue-router/auto-routes' {
         | '/project/[projectId]/insights/progress'
         | '/project/[projectId]/resource-usage'
         | '/project/[projectId]/resource-usage/entry'
+        | '/project/[projectId]/resource-usage/entry-actual'
+        | '/project/[projectId]/resource-usage/entry-plan'
         | '/project/[projectId]/resource-usage/history'
         | '/project/[projectId]/schedule'
         | '/project/[projectId]/settings'
@@ -367,6 +395,7 @@ declare module 'vue-router/auto-routes' {
         | '/project/[projectId]/settings/resources'
         | '/project/[projectId]/settings/tags'
         | '/project/[projectId]/statistics'
+        | '/project/[projectId]/statistics/'
       views:
         | 'default'
       pathParamNames:
@@ -517,6 +546,8 @@ declare module 'vue-router/auto-routes' {
       routes:
         | '/project/[projectId]/resource-usage'
         | '/project/[projectId]/resource-usage/entry'
+        | '/project/[projectId]/resource-usage/entry-actual'
+        | '/project/[projectId]/resource-usage/entry-plan'
         | '/project/[projectId]/resource-usage/history'
       views:
         | 'default'
@@ -526,6 +557,22 @@ declare module 'vue-router/auto-routes' {
     'src/pages/project/[projectId]/resource-usage/entry.vue': {
       routes:
         | '/project/[projectId]/resource-usage/entry'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/project/[projectId]/resource-usage/entry-actual.vue': {
+      routes:
+        | '/project/[projectId]/resource-usage/entry-actual'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/project/[projectId]/resource-usage/entry-plan.vue': {
+      routes:
+        | '/project/[projectId]/resource-usage/entry-plan'
       views:
         | never
       pathParamNames:
@@ -612,6 +659,15 @@ declare module 'vue-router/auto-routes' {
     'src/pages/project/[projectId]/statistics.vue': {
       routes:
         | '/project/[projectId]/statistics'
+        | '/project/[projectId]/statistics/'
+      views:
+        | 'default'
+      pathParamNames:
+        | never
+    }
+    'src/pages/project/[projectId]/statistics/index.vue': {
+      routes:
+        | '/project/[projectId]/statistics/'
       views:
         | never
       pathParamNames:

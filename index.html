@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CCT 施工多目标优化平台 · 设计稿风格原型</title>
+<style>
+/* ============ 设计令牌（来自 UI 设计稿风格） ============ */
+:root{
+  --bg:#f2f3f5;
+  --panel:#ffffff;
+  --border:#dcdfe6;
+  --border-soft:#ebeef5;
+  --text:#303133;
+  --text-sub:#606266;
+  --text-faint:#909399;
+  --primary:#409eff;
+  --primary-dark:#337ecc;
+  --primary-soft:#ecf5ff;
+  --success:#67c23a;--success-soft:#f0f9eb;
+  --warning:#e6a23c;--warning-soft:#fdf6ec;
+  --danger:#f56c6c;
+  --purple:#9333ea;--purple-soft:#f3e8ff;
+  --cyan:#0891b2;
+  --dark-bg:#0d1635;
+  --dark-panel:#141f4a;
+  --dark-panel2:#1b2a5e;
+  --dark-border:#263569;
+  --d-cyan:#22d3ee;--d-green:#34d399;--d-amber:#fbbf24;--d-blue:#60a5fa;--d-purple:#a78bfa;--d-pink:#f472b6;
+  --radius:10px;
+  --shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);
+  --shadow-lg:0 10px 30px rgba(16,24,40,.12);
+  --sidebar-w:232px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+a{text-decoration:none;color:inherit}
+button{font-family:inherit;cursor:pointer;border:none;background:none;font-size:14px}
+input,select,textarea{font-family:inherit;font-size:14px}
+svg{display:inline-block;vertical-align:-0.125em}
+
+/* ============ 布局 ============ */
+.app{display:flex;min-height:100vh}
+.sidebar{width:var(--sidebar-w);flex:0 0 var(--sidebar-w);background:linear-gradient(180deg,#0c1430,#0d1635);color:#c7d2ee;position:fixed;top:0;left:0;bottom:0;display:flex;flex-direction:column;overflow:hidden;z-index:40}
+.logo{display:flex;gap:10px;align-items:center;padding:16px 16px 14px;border-bottom:1px solid rgba(255,255,255,.06)}
+.logo .mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#22d3ee,#2563eb);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;flex:0 0 34px}
+.logo .t{color:#fff;font-weight:600;font-size:14px;line-height:1.25}
+.logo .s{font-size:11px;color:#6b7ca8;margin-top:2px}
+.nav{flex:1;padding:8px 10px 30px;overflow-y:auto}
+.nav-group{font-size:14px;color:#9db1db;font-weight:500;padding:14px 12px 7px;display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+.nav-group .ico{width:18px;height:18px;flex:0 0 18px;opacity:.9}
+.nav-group .arrow{margin-left:auto;font-size:9px;transition:.2s;opacity:.6}
+.nav-group.collapsed .arrow{transform:rotate(-90deg)}
+.nav a{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;color:#aeb9d6;margin-bottom:2px;transition:.15s;font-size:14px;font-weight:500;position:relative}
+.nav a.sub{padding-left:40px;font-size:13px;font-weight:400;color:#8b99bd}
+.nav a:hover{background:rgba(255,255,255,.05);color:#fff}
+.nav a.active{background:linear-gradient(90deg,rgba(34,211,238,.18),rgba(37,99,235,.18));color:#fff;font-weight:500}
+.nav a.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:2px;background:#22d3ee}
+.nav a .ico{width:18px;height:18px;flex:0 0 18px;opacity:.9}
+.nav a .badge{margin-left:auto;font-size:10.5px;background:rgba(34,211,238,.15);color:#22d3ee;border-radius:10px;padding:1px 7px}
+
+.main{flex:1;margin-left:var(--sidebar-w);display:flex;flex-direction:column;min-width:0}
+.topbar{height:58px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:16px;padding:0 22px;position:sticky;top:0;z-index:30}
+.topbar .crumbs{font-size:14px;color:var(--text-sub)}
+.topbar .crumbs b{color:var(--text);font-weight:600}
+.topbar .spacer{flex:1}
+.proj-select{display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:#fafbfd;font-size:13px;color:var(--text)}
+.proj-select .dot{width:8px;height:8px;border-radius:50%;background:var(--success)}
+.avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#2563eb,#22d3ee);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600}
+.content{padding:20px 22px 40px;flex:1}
+
+/* ============ 通用组件 ============ */
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px;gap:16px;flex-wrap:wrap}
+.page-title{font-size:20px;font-weight:700;color:var(--text)}
+.page-title .sub{font-size:14px;color:var(--text-sub);font-weight:400;margin-top:3px}
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 14px;border-radius:8px;font-size:13.5px;font-weight:500;transition:.15s;white-space:nowrap;min-width:88px}
+.btn svg{width:15px;height:15px}
+.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-dark)}
+.btn-outline{background:#fff;color:var(--text);border:1px solid var(--border)}.btn-outline:hover{border-color:#cbd5e1;background:#fafbfd}
+.btn-ghost{color:var(--primary);background:var(--primary-soft)}.btn-ghost:hover{background:#e2ecff}
+.btn-sm{padding:5px 10px;font-size:12.5px;border-radius:7px}
+.btn-icon{width:28px;height:28px;padding:0;justify-content:center;border-radius:7px;border:1px solid var(--border);background:#fff;color:var(--text-sub)}
+.btn-icon svg{width:15px;height:15px}
+.btn-icon:hover{color:var(--primary);border-color:var(--primary)}
+.field{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;background:#fff;padding:0 10px;height:38px}
+.field input,.field select{border:none;outline:none;background:transparent;height:100%;min-width:130px;color:var(--text)}
+.field input::placeholder{color:var(--text-faint)}
+.field .lbl{font-size:12.5px;color:var(--text-sub);white-space:nowrap}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+.card-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border-soft);gap:12px;flex-wrap:wrap}
+.card-title{font-size:16px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px}
+.card-title::before{content:"";width:4px;height:16px;border-radius:2px;background:var(--primary)}
+.card-body{padding:16px}
+
+/* 表格 */
+.table-wrap{overflow-x:auto}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.tbl th{text-align:left;padding:11px 14px;background:#fafbfd;color:var(--text-sub);font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap;font-size:12.5px}
+.tbl td{padding:12px 14px;border-bottom:1px solid var(--border-soft);color:var(--text);white-space:nowrap}
+.tbl tbody tr:hover{background:#f8faff}
+.tbl tbody tr:last-child td{border-bottom:none}
+.tbl .num{font-variant-numeric:tabular-nums;text-align:right}
+.tbl .mono{font-variant-numeric:tabular-nums;font-weight:600}
+
+/* 徽章 */
+.tag{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:500;white-space:nowrap}
+.tag-green{background:var(--success-soft);color:var(--success)}
+.tag-orange{background:var(--warning-soft);color:var(--warning)}
+.tag-blue{background:var(--primary-soft);color:var(--primary)}
+.tag-gray{background:#f1f3f8;color:var(--text-sub)}
+.tag-red{background:#fdeeee;color:var(--danger)}
+.tag-purple{background:var(--purple-soft);color:var(--purple)}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:0 0 6px}
+
+/* 分页 */
+.pager{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;font-size:13px;color:var(--text-sub)}
+.pager .pg{display:flex;gap:4px}
+.pager button{min-width:28px;height:28px;padding:0 8px;border:1px solid var(--border);border-radius:7px;background:#fff;color:var(--text-sub);font-size:13px}
+.pager button.on{background:var(--primary);border-color:var(--primary);color:#fff}
+
+/* 统计卡片 */
+.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:16px}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);display:flex;gap:14px;align-items:center}
+.stat .ic{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:0 0 42px}
+.stat .ic svg{width:21px;height:21px}
+.stat .k{font-size:13px;color:var(--text-sub)}
+.stat .v{font-size:22px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+.stat .v small{font-size:13px;font-weight:500;color:var(--text-sub)}
+.stat .trend{font-size:12px;margin-top:2px;display:flex;align-items:center;gap:4px}
+.stat .trend svg{width:13px;height:13px}
+.up{color:var(--success)}.down{color:var(--danger)}
+
+/* 网格 */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid2-31{display:grid;grid-template-columns:3fr 2fr;gap:14px}
+.grid2-23{display:grid;grid-template-columns:2fr 3fr;gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:1080px){.grid2,.grid2-31,.grid2-23,.grid3{grid-template-columns:1fr}}
+
+/* 弹窗 */
+.modal-mask{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:100;display:none;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto}
+.modal-mask.show{display:flex}
+.modal{background:#fff;border-radius:14px;width:640px;max-width:100%;box-shadow:var(--shadow-lg);animation:pop .18s ease}
+.modal.sm{width:480px}.modal.lg{width:760px}
+@keyframes pop{from{opacity:0;transform:translateY(-8px) scale(.99)}to{opacity:1;transform:none}}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border-soft)}
+.modal-title{font-size:16px;font-weight:600}
+.modal-close{width:30px;height:30px;border-radius:8px;color:var(--text-sub);font-size:18px;line-height:1}
+.modal-close:hover{background:#f1f3f8;color:var(--text)}
+.modal-body{padding:20px;max-height:62vh;overflow-y:auto}
+.modal-foot{display:flex;justify-content:flex-end;gap:10px;padding:14px 20px;border-top:1px solid var(--border-soft)}
+
+/* 表单 */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px}
+.form-grid .full{grid-column:1/-1}
+#view-info .form-grid{grid-template-columns:repeat(4,1fr);gap:16px 18px}
+#view-info .form-grid .full{grid-column:auto}
+.f-item label{display:block;font-size:13px;color:var(--text-sub);margin-bottom:6px}
+.f-item label .req{color:var(--danger);margin-left:2px}
+.f-item input,.f-item select,.f-item textarea{width:100%;height:38px;border:1px solid var(--border);border-radius:8px;padding:0 12px;outline:none;color:var(--text);background:#fff}
+.f-item textarea{height:auto;padding:9px 12px;resize:vertical;min-height:70px}
+.f-item input:focus,.f-item select:focus,.f-item textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.f-item .hint{font-size:12px;color:var(--text-faint);margin-top:5px}
+
+/* ============ 深色大屏 ============ */
+.view-dark{background:var(--dark-bg);color:#dbe4ff;margin:-20px -22px -40px;padding:22px;min-height:calc(100vh - 58px)}
+.dash-head{display:flex;align-items:center;justify-content:center;padding:6px 0 18px}
+.dash-title{font-size:26px;font-weight:700;letter-spacing:.06em;color:#fff;background:linear-gradient(180deg,#fff,#8fb3ff);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.dash-sub{font-size:13px;color:#6f84c2;text-align:center;letter-spacing:.18em;margin-top:2px}
+.dash-panel{background:linear-gradient(180deg,rgba(23,37,84,.85),rgba(15,26,60,.9));border:1px solid var(--dark-border);border-radius:12px;padding:14px 16px}
+.dash-panel .pt{font-size:14px;font-weight:600;color:#cfe0ff;display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.dash-panel .pt::before{content:"";width:4px;height:14px;border-radius:2px;background:var(--d-cyan)}
+.dash-panel .pt .more{margin-left:auto;font-size:12px;color:#5f75b5;font-weight:400}
+.dash-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px}
+.kpi{background:linear-gradient(160deg,rgba(34,211,238,.12),rgba(37,99,235,.06));border:1px solid var(--dark-border);border-radius:12px;padding:16px 18px;position:relative;overflow:hidden}
+.kpi::after{content:"";position:absolute;right:-20px;top:-20px;width:90px;height:90px;border-radius:50%;background:radial-gradient(circle,rgba(34,211,238,.18),transparent 70%)}
+.kpi .kk{font-size:13px;color:#8ba0d6}
+.kpi .kv{font-size:28px;font-weight:700;color:#fff;margin-top:6px;font-variant-numeric:tabular-nums}
+.kpi .kv small{font-size:14px;font-weight:500;color:#8ba0d6}
+.kpi .kt{font-size:12px;color:#5f75b5;margin-top:4px}
+.dash-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.dg3{grid-column:span 3}.dg4{grid-column:span 4}.dg5{grid-column:span 5}.dg6{grid-column:span 6}.dg7{grid-column:span 7}.dg8{grid-column:span 8}.dg9{grid-column:span 9}.dg12{grid-column:span 12}
+@media(max-width:1100px){.dg3,.dg4,.dg5,.dg6,.dg7,.dg8,.dg9,.dg12{grid-column:span 12}}
+.legend{display:flex;flex-direction:column;gap:9px}
+.legend .li{display:flex;align-items:center;gap:8px;font-size:13px}
+.legend .sw{width:10px;height:10px;border-radius:3px;flex:0 0 10px}
+.legend .nm{color:#b9c7ec}.legend .val{margin-left:auto;color:#fff;font-variant-numeric:tabular-nums;font-weight:600}
+.rank{display:flex;flex-direction:column;gap:2px}
+.rank .r{display:flex;align-items:center;gap:10px;padding:7px 4px;border-radius:6px;font-size:13px}
+.rank .no{width:20px;height:20px;border-radius:6px;background:rgba(255,255,255,.08);color:#8ba0d6;display:flex;align-items:center;justify-content:center;font-size:12px;flex:0 0 20px}
+.rank .no.hot{background:linear-gradient(135deg,#22d3ee,#2563eb);color:#fff}
+.rank .nm{color:#c9d5f2}
+.rank .bar{flex:1;height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden}
+.rank .bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#22d3ee,#2563eb)}
+.rank .val{color:#fff;font-variant-numeric:tabular-nums;width:76px;text-align:right}
+
+/* 浅色页内图表 */
+.bars{display:flex;align-items:flex-end;gap:10px;height:200px;padding-top:10px}
+.bars .b{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end}
+.bars .b i{width:60%;max-width:34px;border-radius:6px 6px 0 0;background:linear-gradient(180deg,#60a5fa,#2563eb)}
+.bars .b i.g2{background:linear-gradient(180deg,#34d399,#16a34a)}
+.bars .b i.g3{background:linear-gradient(180deg,#fbbf24,#d97706)}
+.bars .b span{font-size:11.5px;color:var(--text-sub)}
+.bar-legend{display:flex;gap:16px;font-size:12px;color:var(--text-sub);margin-bottom:10px;flex-wrap:wrap}
+.bar-legend .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}
+
+/* 步骤条 */
+.steps{display:flex;align-items:center;margin-bottom:18px}
+.step{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-faint)}
+.step .n{width:26px;height:26px;border-radius:50%;background:#eef0f6;color:var(--text-sub);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;flex:0 0 26px}
+.step .n svg{width:14px;height:14px}
+.step.on .n{background:var(--primary);color:#fff}
+.step.on{color:var(--text);font-weight:500}
+.step.done .n{background:var(--success);color:#fff}
+.step-line{flex:1;height:2px;background:var(--border);margin:0 12px;min-width:20px}
+
+/* 上传区 */
+.upload{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;border:2px dashed var(--border);border-radius:12px;padding:40px 20px;background:#fafbfd;color:var(--text-sub);text-align:center}
+.upload .big{width:36px;height:36px;color:var(--text-faint)}
+.upload b{color:var(--text)}
+
+/* 甘特图（简化） */
+.gantt-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border-soft);font-size:13px}
+.gantt-row .name{width:150px;flex:0 0 150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gantt-row .track{flex:1;height:18px;background:#f1f3f8;border-radius:4px;position:relative}
+.gantt-row .track i{position:absolute;top:2px;bottom:2px;border-radius:3px;background:linear-gradient(90deg,#60a5fa,#2563eb)}
+.gantt-row .track i.done{background:linear-gradient(90deg,#34d399,#16a34a)}
+.gantt-row .track i.crit{background:linear-gradient(90deg,#f87171,#dc2626)}
+.gantt-scale{display:flex;justify-content:space-between;font-size:11px;color:var(--text-faint);margin-left:160px;margin-bottom:6px}
+
+/* 散点图 */
+.scatter{position:relative;height:260px;border-left:1px solid var(--border);border-bottom:1px solid var(--border);margin:10px 20px 30px 40px}
+.scatter .pt-dot{position:absolute;width:10px;height:10px;border-radius:50%;background:var(--primary);transform:translate(-50%,50%);cursor:pointer}
+.scatter .pt-dot.opt{background:var(--d-cyan);box-shadow:0 0 0 4px rgba(34,211,238,.2)}
+.scatter .ax-x{position:absolute;bottom:-24px;left:50%;transform:translateX(-50%);font-size:12px;color:var(--text-sub)}
+.scatter .ax-y{position:absolute;left:-36px;top:50%;transform:translateY(-50%) rotate(-90deg);font-size:12px;color:var(--text-sub)}
+
+.empty{padding:40px;text-align:center;color:var(--text-faint)}
+.muted{color:var(--text-sub)}
+.mt{margin-top:14px}.mb{margin-bottom:14px}
+.flex{display:flex;gap:10px;align-items:center}
+.right{margin-left:auto}
+.hide{display:none!important}
+.w-full{width:100%}
+.tc{text-align:center}
+.metric{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--text-sub)}
+.metric svg{width:13px;height:13px;color:var(--text-faint)}
+.alert{display:flex;gap:12px;padding:12px;border-radius:8px;font-size:13px}
+.alert svg{width:18px;height:18px;flex:0 0 18px;margin-top:1px}
+.alert .t{font-weight:600}
+.alert .d{color:var(--text-sub);font-size:12.5px;margin-top:2px}
+
+/* ============ 交互：折叠 / 下拉 / Toast / 标签页 / 选中 ============ */
+.sidebar{transition:width .22s ease}
+.main{transition:margin-left .22s ease}
+.app.collapsed{--sidebar-w:64px}
+.app.collapsed .logo{justify-content:center;padding-left:0;padding-right:0}
+.app.collapsed .logo .t,.app.collapsed .logo .s{display:none}
+.app.collapsed .grp{display:none!important}
+.app.collapsed .nav a,.app.collapsed .nav-group{justify-content:center;padding:10px 0;font-size:0;gap:0}
+.app.collapsed .nav a .ico,.app.collapsed .nav-group .ico{opacity:1}
+.app.collapsed .nav-group .arrow{display:none}
+.collapse-btn{width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--text-sub);display:flex;align-items:center;justify-content:center;flex:0 0 34px}
+.collapse-btn svg{width:17px;height:17px}
+.collapse-btn:hover{color:var(--primary);border-color:var(--primary)}
+.dropdown{position:relative}
+.proj-select{cursor:pointer}
+.dropdown-menu{position:absolute;top:calc(100% + 6px);right:0;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-lg);min-width:260px;padding:6px;display:none;z-index:60}
+.dropdown.open .dropdown-menu{display:block;animation:pop .15s ease}
+.dropdown-menu .mi{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:7px;font-size:13px;color:var(--text);cursor:pointer;width:100%;text-align:left}
+.dropdown-menu .mi:hover{background:#f5f7fb}
+.dropdown-menu .mi.on{background:var(--primary-soft);color:var(--primary);font-weight:500}
+.dropdown-menu .mi svg{width:16px;height:16px;color:var(--text-sub);flex:0 0 16px}
+.dropdown-menu .sep{height:1px;background:var(--border-soft);margin:6px 4px}
+#toast-wrap{position:fixed;top:70px;right:22px;z-index:200;display:flex;flex-direction:column;gap:10px}
+.toast{display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-lg);padding:11px 16px;font-size:13.5px;color:var(--text);animation:toastIn .22s ease;max-width:320px}
+.toast svg{width:18px;height:18px;flex:0 0 18px}
+.toast-success svg{color:var(--success)}
+.toast-info svg{color:var(--primary)}
+.toast-warning svg{color:var(--warning)}
+.toast.out{opacity:0;transform:translateX(12px);transition:.28s}
+@keyframes toastIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+.tabbar{display:inline-flex;background:#f1f3f8;border-radius:8px;padding:3px;gap:2px}
+.tabbar .tab-btn{padding:0 14px;height:36px;border-radius:6px;font-size:13px;color:var(--text-sub);transition:.15s}
+.tabbar .tab-btn.active{background:#fff;color:var(--primary);font-weight:600;box-shadow:var(--shadow)}
+.tbl tbody tr{cursor:pointer;transition:background .12s}
+.tbl tbody tr.selected{background:var(--primary-soft)!important}
+.tbl tbody tr.selected td{color:var(--primary)}
+.pt-dot[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:130%;left:50%;transform:translateX(-50%);background:#111827;color:#fff;font-size:12px;padding:4px 9px;border-radius:6px;white-space:nowrap;z-index:5}
+.dash-back{position:absolute;top:16px;left:16px;z-index:5;display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:8px;background:rgba(12,34,64,.92);border:1px solid #1f5287;color:#cfe9ff;font-size:13.5px;cursor:pointer;backdrop-filter:blur(6px)}
+.dash-back svg{width:15px;height:15px}
+.dash-back:hover{border-color:#2ee6ff;color:#e8f6ff}
+.sidebar-foot{flex:0 0 auto;padding:10px 12px;border-top:1px solid rgba(255,255,255,.06)}
+.sc-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:9px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#aeb9d6;font-size:13px;cursor:pointer}
+.sc-btn:hover{background:rgba(255,255,255,.08);color:#fff}
+.sc-btn svg{width:15px;height:15px;transform:rotate(90deg);transition:transform .2s}
+.app.collapsed .sc-btn{font-size:0;padding:9px 0;gap:0}
+.app.collapsed .sc-btn svg{transform:rotate(-90deg)}
+.process-item{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:9px 12px;border-radius:7px;font-size:13px;color:var(--text-sub);cursor:pointer;transition:.12s;text-align:left}
+.process-item:hover{background:#f5f7fb;color:var(--text)}
+.process-item.active{background:var(--primary-soft);color:var(--primary);font-weight:600}
+.process-item.sub{padding-left:26px}
+.process-item .pc{font-size:11.5px;color:var(--text-faint);background:#f1f3f8;border-radius:10px;padding:0 8px;line-height:18px}
+.process-item.active .pc{background:var(--primary);color:#fff}
+</style>
+</head>
+<body>
+
+<!-- ============ 扁平化图标库（SVG Sprite） ============ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-6h5v6"/></symbol>
+<symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/></symbol>
+<symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></symbol>
+<symbol id="i-tag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l9.2 9.2a2 2 0 0 0 2.8 0l6.8-6.8a2 2 0 0 0 0-2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/></symbol>
+<symbol id="i-pie" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.2 15.9A10 10 0 1 1 8.1 2.8"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></symbol>
+<symbol id="i-health" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9.5-4-2-7-5-7-9.5V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+<symbol id="i-gantt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="10" height="3.4" rx="1.7"/><rect x="3" y="10.5" width="16" height="3.4" rx="1.7"/><rect x="3" y="16" width="7" height="3.4" rx="1.7"/></symbol>
+<symbol id="i-history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13a9 9 0 1 0 2.1-6.4L3 8"/><path d="M12 7v5l4 2"/></symbol>
+<symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></symbol>
+<symbol id="i-donut" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 4a8 8 0 0 1 8 8"/></symbol>
+<symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+<symbol id="i-trend" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></symbol>
+<symbol id="i-trend-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l6 6 4-4 8 8"/><path d="M21 10v7h-7"/></symbol>
+<symbol id="i-plan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 9h18"/><path d="M9 15l1.5 1.5L14 13"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 5-5"/></symbol>
+<symbol id="i-leaf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 4 13c0-5 4-9 16-9 0 7-3 13-9 13z"/><path d="M5 20c4-6 7-9 12-12"/></symbol>
+<symbol id="i-monitor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+<symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 20h16"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
+<symbol id="i-search-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M8.5 11l2 2 3.5-3.5"/></symbol>
+<symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3h6v4H9z"/><path d="M9 12h6M9 16h4"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+<symbol id="i-coin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 8.5c-.6-1-1.6-1.5-3-1.5-1.7 0-3 1-3 2.5s1.3 2 3 2.5 3 1 3 2.5-1.3 2-3 2c-1.4 0-2.4-.5-3-1.5"/><path d="M12 5.5v13"/></symbol>
+<symbol id="i-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
+<symbol id="i-sparkle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.8L18 9l-4.2 1.2L12 15l-1.8-4.8L6 9l4.2-1.2z"/><path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8z"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></symbol>
+<symbol id="i-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H6a4 4 0 0 1 0-8 6 6 0 0 1 11.5 2 4 4 0 0 1 0 6z"/></symbol>
+<symbol id="i-wrench" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4.5 4.5 0 0 0-6 6L3 18l3 3 5.7-5.7a4.5 4.5 0 0 0 6-6L14 12l-3-3z"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+<symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></symbol>
+</defs></svg>
+
+<div class="app">
+  <!-- ============ 侧边导航 ============ -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="mark">C</div>
+      <div><div class="t">CCT 施工多目标优化</div><div class="s">工期 · 成本 · 碳排放</div></div>
+    </div>
+    <nav class="nav">
+      <a data-view="projects"><svg class="ico"><use href="#i-home"/></svg>项目列表</a>
+
+      <div class="nav-group" data-group="ov"><svg class="ico"><use href="#i-grid"/></svg>项目信息管理 <span class="arrow">▾</span></div>
+      <div class="grp" data-grp="ov">
+        <a class="sub" data-view="info">项目信息</a>
+        <a class="sub" data-view="tags">碳排放标签</a>
+        <a class="sub" data-view="charts">碳排放图表</a>
+        <a class="sub" data-view="diagnostics">数据体检</a>
+      </div>
+
+      <a data-view="schedule"><svg class="ico"><use href="#i-gantt"/></svg>施工工序管理</a>
+
+      <div class="nav-group" data-group="ru"><svg class="ico"><use href="#i-box"/></svg>活动数据管理 <span class="arrow">▾</span></div>
+      <div class="grp" data-grp="ru">
+        <a class="sub" data-view="entry-plan">计划数据录入</a>
+        <a class="sub" data-view="entry-actual">实际数据录入</a>
+      </div>
+
+      <div class="nav-group" data-group="ins"><svg class="ico"><use href="#i-target"/></svg>多目标优化分析 <span class="arrow">▾</span></div>
+      <div class="grp" data-grp="ins">
+        <a class="sub" data-view="optimization">优化结果</a>
+        <a class="sub" data-view="planning">计划编制</a>
+        <a class="sub" data-view="progress">施工进度</a>
+        <a class="sub" data-view="distribution">碳排放计算</a>
+        <a class="sub" data-view="compliance">计划践行度</a>
+        <a class="sub" data-view="measures">低碳措施</a>
+      </div>
+
+      <a data-view="statistics"><svg class="ico"><use href="#i-monitor"/></svg>碳排数据看板</a>
+    </nav>
+    <div class="sidebar-foot">
+      <button class="sc-btn" id="collapseBtn"><svg><use href="#i-chevron"/></svg>收起菜单</button>
+    </div>
+  </aside>
+
+  <!-- ============ 主区 ============ -->
+  <div class="main">
+    <div class="topbar">
+      <div class="crumbs">CCT 施工多目标优化平台 / <b id="crumb">项目信息</b></div>
+      <div class="spacer"></div>
+      <div class="dropdown" id="projDrop">
+        <button class="proj-select" id="projTrigger"><span class="dot"></span>绍兴市龙山书院项目 <svg style="width:14px;height:14px;color:var(--text-faint)"><use href="#i-chevron"/></svg></button>
+        <div class="dropdown-menu">
+          <div class="mi on"><svg><use href="#i-home"/></svg>绍兴市龙山书院项目<span class="tag tag-green" style="margin-left:auto"><span class="dot"></span>施工中</span></div>
+          <div class="mi"><svg><use href="#i-home"/></svg>某某高速公路项目<span class="tag tag-blue" style="margin-left:auto"><span class="dot"></span>计划中</span></div>
+          <div class="sep"></div>
+          <div class="mi" data-modal="modal-project"><svg><use href="#i-plus"/></svg>创建新项目</div>
+        </div>
+      </div>
+      <div class="avatar">管</div>
+    </div>
+    <div class="content" id="content">
+
+      <!-- ============ 项目列表 ============ -->
+      <section class="view" id="view-projects">
+        <div class="page-head"><div><div class="page-title">项目列表</div><div class="sub">选择或创建一个施工项目开始优化</div></div>
+          <div class="toolbar">
+            <div class="tabbar" data-tabgroup="projview">
+              <button class="tab-btn active" data-tab="card">卡片</button>
+              <button class="tab-btn" data-tab="list">列表</button>
+            </div>
+            <button class="btn btn-primary" data-modal="modal-project"><svg><use href="#i-plus"/></svg>创建项目</button>
+          </div>
+        </div>
+
+        <div data-tabpanel="card">
+          <div class="grid3">
+            <div class="card" style="padding:18px;cursor:pointer" data-goto="info">
+              <div class="flex" style="justify-content:space-between"><div style="font-size:16px;font-weight:600">绍兴市龙山书院项目</div><span class="tag tag-green"><span class="dot"></span>施工中</span></div>
+              <div class="muted" style="margin:10px 0 14px;font-size:13px">学校改扩建工程，含主楼、培训中心、体育馆等 8 个单体，低碳施工试点。</div>
+              <div class="flex" style="flex-wrap:wrap">
+                <span class="metric"><svg><use href="#i-box"/></svg>86,400㎡</span>
+                <span class="metric"><svg><use href="#i-clock"/></svg>540天</span>
+                <span class="metric"><svg><use href="#i-leaf"/></svg>12,846 tCO₂</span>
+                <span class="metric"><svg><use href="#i-plan"/></svg>2026-03-18</span>
+              </div>
+            </div>
+            <div class="card" style="padding:18px;opacity:.7">
+              <div class="flex" style="justify-content:space-between"><div style="font-size:16px;font-weight:600">某某高速公路项目</div><span class="tag tag-blue"><span class="dot"></span>计划中</span></div>
+              <div class="muted" style="margin:10px 0 14px;font-size:13px">某高速公路改扩建，路基桥隧多工序优化。</div>
+              <div class="flex">
+                <span class="metric"><svg><use href="#i-box"/></svg>152,000㎡</span>
+                <span class="metric"><svg><use href="#i-clock"/></svg>720天</span>
+              </div>
+            </div>
+            <div class="card" style="padding:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-sub);border-style:dashed;min-height:170px;cursor:pointer" data-modal="modal-project">
+              <svg style="width:30px;height:30px;color:var(--text-faint)"><use href="#i-plus"/></svg><div>创建新项目</div>
+            </div>
+          </div>
+        </div>
+
+        <div data-tabpanel="list" class="hide">
+          <div class="card">
+            <div class="table-wrap"><table class="tbl">
+              <thead><tr><th>项目名称</th><th>项目编号</th><th class="num">建筑面积(㎡)</th><th class="num">工期(天)</th><th class="num">累计碳排放(tCO₂)</th><th>状态</th><th>创建时间</th><th style="width:110px">操作</th></tr></thead>
+              <tbody>
+                <tr><td class="mono" style="cursor:pointer;color:var(--primary)" data-goto="info">绍兴市龙山书院项目</td><td>XM-2026-018</td><td class="num">86,400</td><td class="num">540</td><td class="num">12,846</td><td><span class="tag tag-green"><span class="dot"></span>施工中</span></td><td>2026-03-18</td><td><button class="btn btn-sm btn-primary" data-goto="info">进入</button></td></tr>
+                <tr><td class="mono" style="cursor:pointer;color:var(--primary)" data-goto="info">某某高速公路项目</td><td>XM-2026-019</td><td class="num">152,000</td><td class="num">720</td><td class="num muted">—</td><td><span class="tag tag-blue"><span class="dot"></span>计划中</span></td><td>2026-08-01</td><td><button class="btn btn-sm btn-outline" data-goto="info">进入</button></td></tr>
+              </tbody>
+            </table></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 项目信息 ============ -->
+      <section class="view hide" id="view-info">
+        <div class="page-head"><div><div class="page-title">项目信息</div><div class="sub">项目基本参数与建设概况</div></div>
+          <div class="toolbar"><button class="btn btn-outline">取消</button><button class="btn btn-primary" data-toast="项目信息已保存"><svg><use href="#i-check"/></svg>保存</button></div>
+        </div>
+
+        <div class="tabbar mb" data-tabgroup="info">
+          <button class="tab-btn active" data-tab="overview">项目概况</button>
+          <button class="tab-btn" data-tab="basedata">基础数据</button>
+        </div>
+
+        <div data-tabpanel="overview">
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div class="card"><div class="card-head"><div class="card-title">基本信息</div></div>
+              <div class="card-body"><div class="form-grid">
+                <div class="f-item"><label>项目名称 <span class="req">*</span></label><input value="绍兴市龙山书院项目" placeholder="例如：某某高速公路项目"></div>
+                <div class="f-item"><label>项目状态</label><select><option>计划中</option><option selected>施工中</option><option>已完成</option></select></div>
+                <div class="f-item"><label>项目描述</label><input value="绍兴市龙山书院改扩建项目，含主楼、4#培训中心、体育馆等 8 个单体" placeholder="可选，简要描述项目内容"></div>
+              </div></div>
+            </div>
+
+            <div class="card"><div class="card-head"><div class="card-title">建筑概况</div></div>
+              <div class="card-body"><div class="form-grid">
+                <div class="f-item"><label>占地面积（m²）</label><input type="number" value="48200" placeholder="0"></div>
+                <div class="f-item"><label>地下建筑面积（m²）</label><input type="number" value="14300" placeholder="0"></div>
+                <div class="f-item"><label>地上建筑面积（m²）</label><input type="number" value="72100" placeholder="0"></div>
+                <div class="f-item"><label>项目总建筑面积（m²）</label><div class="flex" style="height:38px;border:1px solid var(--border);border-radius:8px;padding:0 12px;background:#fafbfd;align-items:center;color:var(--text)"><span class="mono">86,400</span><span class="muted" style="font-size:12px;margin-left:6px">地下 + 地上，自动计算</span></div></div>
+                <div class="f-item"><label>建设地点</label><select><option selected>浙江省 / 绍兴市 / 越城区</option></select></div>
+                <div class="f-item"><label>详细地址</label><input value="人民中路 188 号" placeholder="请输入具体地址"></div>
+                <div class="f-item"><label>建筑类型</label><select><option selected>教育建筑</option><option>办公建筑</option><option>居住建筑</option><option>商业建筑</option><option>公共建筑</option></select></div>
+              </div></div>
+            </div>
+
+            <div class="card"><div class="card-head"><div class="card-title">工期</div></div>
+              <div class="card-body"><div class="form-grid">
+                <div class="f-item"><label>拟开工日期</label><input type="date" value="2026-03-18"></div>
+                <div class="f-item"><label>拟竣工日期</label><input type="date" value="2027-09-08"></div>
+                <div class="f-item"><label>实际开工日期</label><input type="date" value="2026-03-18"></div>
+                <div class="f-item"><label>实际竣工日期</label><input type="date"></div>
+              </div></div>
+            </div>
+
+            <div class="card"><div class="card-head"><div class="card-title">结构概况</div></div>
+              <div class="card-body"><div class="form-grid">
+                <div class="f-item full"><label>各楼宇结构形式</label><select><option selected>框架结构</option><option>框剪结构</option><option>剪力墙结构</option><option>钢结构</option><option>砖混结构</option></select></div>
+                <div class="f-item"><label>装配率（%）</label><input type="number" value="30" placeholder="30"></div>
+                <div class="f-item"><label>设计使用年限（年）</label><input type="number" value="50" placeholder="50"></div>
+                <div class="f-item"><label>结构安全等级</label><select><option>请选择</option><option>一级</option><option selected>二级</option><option>三级</option></select></div>
+                <div class="f-item"><label>基础设计等级</label><select><option>请选择</option><option>甲级</option><option selected>乙级</option><option>丙级</option></select></div>
+                <div class="f-item"><label>桩基设计等级（选填）</label><select><option>请选择</option><option>甲级</option><option selected>乙级</option><option>丙级</option></select></div>
+                <div class="f-item"><label>建筑耐火等级</label><select><option>请选择</option><option selected>一级</option><option>二级</option><option>三级</option><option>四级</option></select></div>
+                <div class="f-item"><label>抗震设防烈度</label><select><option>请选择</option><option>6 度</option><option selected>7 度</option><option>8 度</option><option>9 度</option></select></div>
+                <div class="f-item"><label>地下工程防水等级</label><select><option>请选择</option><option>一级</option><option selected>二级</option><option>三级</option><option>四级</option></select></div>
+              </div></div>
+            </div>
+
+            <div class="card"><div class="card-head"><div class="card-title">临时用房</div></div>
+              <div class="card-body"><div class="form-grid">
+                <div class="f-item full"><label>临时用房资源（用于碳排放与资金计算）</label><select><option>选择临时用房资源</option><option>活动板房（彩钢板）</option><option>集装箱式用房</option></select></div>
+                <div class="f-item"><label>安全系数</label><input type="number" value="1.2" placeholder="建议值不低于 1.0"></div>
+                <div class="f-item"><label>每间人数</label><input type="number" value="4" placeholder="请输入正整数"></div>
+              </div></div>
+            </div>
+
+            <div class="card"><div class="card-head"><div class="card-title">碳排放指标</div></div>
+              <div class="card-body"><div class="form-grid">
+                <div class="f-item"><label>施工阶段碳排放总量指标（tCO₂e）</label><input type="number" value="15000" placeholder="0"></div>
+                <div class="f-item"><label>建材生产阶段碳排放量指标（tCO₂e）</label><input type="number" value="8500" placeholder="0"></div>
+                <div class="f-item"><label>建材运输阶段碳排放量指标（tCO₂e）</label><input type="number" value="1500" placeholder="0"></div>
+                <div class="f-item"><label>建筑建造阶段碳排放量指标（tCO₂e）</label><input type="number" value="5000" placeholder="0"></div>
+              </div></div>
+            </div>
+
+            <div class="card"><div class="card-head"><div class="card-title">成本指标</div></div>
+              <div class="card-body"><div class="form-grid">
+                <div class="f-item"><label>施工阶段总成本指标（万元）</label><input type="number" value="18460" placeholder="0"></div>
+              </div></div>
+            </div>
+          </div>
+        </div>
+
+        <div data-tabpanel="basedata" class="hide">
+          <div class="card">
+            <div class="card-head"><div class="card-title">资源列表</div>
+              <div class="toolbar"><button class="btn btn-outline" data-modal="modal-resource-import"><svg><use href="#i-upload"/></svg>从公共资源导入</button><button class="btn btn-primary" data-modal="modal-resource"><svg><use href="#i-plus"/></svg>添加资源</button></div>
+            </div>
+            <div class="table-wrap"><table class="tbl">
+              <thead><tr><th>资源名称</th><th>分类</th><th>单位</th><th class="num">单价(元)</th><th class="num">碳排放因子</th><th>周转复用</th><th>标签</th><th style="width:100px">操作</th></tr></thead>
+              <tbody>
+                <tr><td class="mono">预拌混凝土 C30</td><td>材料</td><td>m³</td><td class="num">480</td><td class="num">0.2950</td><td><span class="tag tag-gray">否</span></td><td><span class="tag tag-blue">混凝土</span></td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+                <tr><td class="mono">螺纹钢筋 HRB400</td><td>材料</td><td>t</td><td class="num">4,200</td><td class="num">2.3400</td><td><span class="tag tag-gray">否</span></td><td><span class="tag tag-blue">钢材</span></td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+                <tr><td class="mono">塔式起重机</td><td>机械</td><td>台班</td><td class="num">1,800</td><td class="num">0.0110</td><td><span class="tag tag-gray">否</span></td><td><span class="tag tag-purple">机械</span></td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+                <tr><td class="mono">木工（普工）</td><td>人工</td><td>工日</td><td class="num">320</td><td class="num">0.0000</td><td><span class="tag tag-gray">否</span></td><td><span class="tag tag-gray">人工</span></td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+                <tr><td class="mono">建筑模板</td><td>材料</td><td>m³</td><td class="num">1,150</td><td class="num">0.1890</td><td><span class="tag tag-green">可复用</span></td><td><span class="tag tag-blue">木材</span></td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+                <tr><td class="mono">光伏发电板</td><td>其他</td><td>kWh</td><td class="num">0</td><td class="num mono" style="color:var(--success)">-0.5819</td><td><span class="tag tag-gray">否</span></td><td><span class="tag tag-green">碳汇</span></td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+              </tbody>
+            </table></div>
+            <div class="pager"><span>共 42 条 · 第 1/7 页</span><div class="pg"><button class="on">1</button><button>2</button><button>3</button><button>›</button></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 碳排放标签 ============ -->
+      <section class="view hide" id="view-tags">
+        <div class="page-head"><div><div class="page-title">碳排放标签</div><div class="sub">资源 / 任务 / 用量打标，用于碳排分布切片统计</div></div>
+          <div class="toolbar"><button class="btn btn-primary" data-modal="modal-tag"><svg><use href="#i-plus"/></svg>新建标签</button></div>
+        </div>
+        <div class="grid2">
+          <div class="card"><div class="card-head"><div class="card-title">标签分组</div></div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:6px">
+              <button class="btn btn-ghost w-full" style="justify-content:flex-start">材料</button>
+              <button class="btn btn-outline w-full" style="justify-content:flex-start">机械</button>
+              <button class="btn btn-outline w-full" style="justify-content:flex-start">人工</button>
+              <button class="btn btn-outline w-full" style="justify-content:flex-start">运输</button>
+              <button class="btn btn-outline w-full" style="justify-content:flex-start">未分组</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div class="card-title">标签列表</div><div class="field"><span class="lbl"><svg style="width:14px;height:14px;color:var(--text-faint)"><use href="#i-search"/></svg></span><input placeholder="搜索标签"></div></div>
+            <div class="table-wrap"><table class="tbl">
+              <thead><tr><th>标签名称</th><th>分组</th><th>关联资源</th><th style="width:90px">操作</th></tr></thead>
+              <tbody>
+                <tr><td class="mono">混凝土</td><td>材料</td><td>6</td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+                <tr><td class="mono">钢材</td><td>材料</td><td>4</td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+                <tr><td class="mono">机械</td><td>机械</td><td>12</td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+                <tr><td class="mono">碳汇</td><td>材料</td><td>2</td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+              </tbody>
+            </table></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 碳排放图表 ============ -->
+      <section class="view hide" id="view-charts">
+        <div class="page-head"><div><div class="page-title">碳排放图表</div><div class="sub">按标签切片配置饼图，展示碳排/成本分布</div></div>
+          <div class="toolbar"><button class="btn btn-primary" data-modal="modal-chart"><svg><use href="#i-plus"/></svg>新建图表</button></div>
+        </div>
+        <div class="grid3">
+          <div class="card"><div class="card-head"><div class="card-title">碳排放构成</div><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></div>
+            <div class="card-body tc">
+              <svg viewBox="0 0 120 120" width="130" height="130">
+                <circle cx="60" cy="60" r="45" fill="none" stroke="#eef0f6" stroke-width="16"/>
+                <circle cx="60" cy="60" r="45" fill="none" stroke="#2563eb" stroke-width="16" stroke-dasharray="120 283" transform="rotate(-90 60 60)"/>
+                <circle cx="60" cy="60" r="45" fill="none" stroke="#22d3ee" stroke-width="16" stroke-dasharray="90 283" stroke-dashoffset="-120" transform="rotate(-90 60 60)"/>
+                <circle cx="60" cy="60" r="45" fill="none" stroke="#fbbf24" stroke-width="16" stroke-dasharray="50 283" stroke-dashoffset="-210" transform="rotate(-90 60 60)"/>
+                <circle cx="60" cy="60" r="45" fill="none" stroke="#34d399" stroke-width="16" stroke-dasharray="23 283" stroke-dashoffset="-260" transform="rotate(-90 60 60)"/>
+              </svg>
+              <div class="mt" style="font-size:12px;color:var(--text-sub);display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
+                <span><i class="sw" style="background:#2563eb"></i>材料 42%</span><span><i class="sw" style="background:#22d3ee"></i>机械 32%</span><span><i class="sw" style="background:#fbbf24"></i>运输 18%</span><span><i class="sw" style="background:#34d399"></i>其他 8%</span>
+              </div>
+            </div>
+          </div>
+          <div class="card"><div class="card-head"><div class="card-title">成本构成</div><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></div>
+            <div class="card-body tc">
+              <svg viewBox="0 0 120 120" width="130" height="130">
+                <circle cx="60" cy="60" r="45" fill="none" stroke="#eef0f6" stroke-width="16"/>
+                <circle cx="60" cy="60" r="45" fill="none" stroke="#9333ea" stroke-width="16" stroke-dasharray="150 283" transform="rotate(-90 60 60)"/>
+                <circle cx="60" cy="60" r="45" fill="none" stroke="#2563eb" stroke-width="16" stroke-dasharray="80 283" stroke-dashoffset="-150" transform="rotate(-90 60 60)"/>
+                <circle cx="60" cy="60" r="45" fill="none" stroke="#34d399" stroke-width="16" stroke-dasharray="53 283" stroke-dashoffset="-230" transform="rotate(-90 60 60)"/>
+              </svg>
+              <div class="mt" style="font-size:12px;color:var(--text-sub);display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
+                <span><i class="sw" style="background:#9333ea"></i>材料 53%</span><span><i class="sw" style="background:#2563eb"></i>人工 28%</span><span><i class="sw" style="background:#34d399"></i>机械 19%</span>
+              </div>
+            </div>
+          </div>
+          <div class="card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-sub);border-style:dashed;min-height:220px;cursor:pointer" data-modal="modal-chart">
+            <svg style="width:28px;height:28px;color:var(--text-faint)"><use href="#i-plus"/></svg><div>新建图表</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 数据体检 ============ -->
+      <section class="view hide" id="view-diagnostics">
+        <div class="page-head"><div><div class="page-title">数据体检</div><div class="sub">检查资源碳排放因子、单价与计划基线一致性</div></div>
+          <div class="toolbar"><span class="muted" style="font-size:12.5px">上次检查：10-20 09:12</span><button class="btn btn-primary" data-toast="数据体检已完成"><svg><use href="#i-refresh"/></svg>重新检查</button></div>
+        </div>
+        <div class="stat-row">
+          <div class="stat"><div class="ic" style="background:var(--success-soft);color:var(--success)"><svg><use href="#i-check"/></svg></div><div><div class="k">检查资源总数</div><div class="v">42</div></div></div>
+          <div class="stat"><div class="ic" style="background:var(--warning-soft);color:var(--warning)"><svg><use href="#i-warning"/></svg></div><div><div class="k">零碳因子资源</div><div class="v">3</div></div></div>
+          <div class="stat"><div class="ic" style="background:var(--warning-soft);color:var(--warning)"><svg><use href="#i-warning"/></svg></div><div><div class="k">零单价资源</div><div class="v">1</div></div></div>
+          <div class="stat"><div class="ic" style="background:var(--danger);color:#fff"><svg><use href="#i-clock"/></svg></div><div><div class="k">计划基线</div><div class="v" style="font-size:15px">已过期</div></div></div>
+        </div>
+        <div class="card"><div class="card-head"><div class="card-title">提示项</div></div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+            <div class="alert" style="background:var(--warning-soft)"><svg style="color:var(--warning)"><use href="#i-warning"/></svg><div><div class="t">3 个资源存在使用记录但碳排放因子为 0</div><div class="d">木工（普工）、钢筋工、抹灰工 —— 其用量不会计入任何碳排结果，请到资源管理补填。</div></div><button class="btn btn-ghost btn-sm right">去补填</button></div>
+            <div class="alert" style="background:var(--warning-soft)"><svg style="color:var(--warning)"><use href="#i-warning"/></svg><div><div class="t">计划基线已过期</div><div class="d">任务/依赖/计划用量等已变更，建议到计划编制页重新预估并保存基线。</div></div><button class="btn btn-ghost btn-sm right">前往</button></div>
+            <div class="alert" style="background:var(--success-soft)"><svg style="color:var(--success)"><use href="#i-check"/></svg><div><div class="t">切片标签无重叠</div><div class="d">未发现同一图表内切片标签重叠导致重复计入。</div></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 工序管理 ============ -->
+      <section class="view hide" id="view-schedule">
+        <div class="page-head"><div><div class="page-title">施工工序管理</div><div class="sub">任务编排、前置依赖与关键路径管理</div></div>
+          <div class="toolbar"><div class="tabbar" data-tabgroup="schedule"><button class="tab-btn active" data-tab="gantt">甘特图</button><button class="tab-btn" data-tab="list">列表</button></div><button class="btn btn-primary" data-modal="modal-task"><svg><use href="#i-plus"/></svg>添加任务</button></div>
+        </div>
+        <div class="card" data-tabpanel="gantt">
+          <div class="card-head"><div class="card-title">施工进度甘特图</div><span class="muted" style="font-size:12.5px;display:flex;align-items:center;gap:12px"><span class="flex" style="gap:5px"><i style="width:8px;height:8px;border-radius:50%;background:#dc2626"></i>关键路径</span><span class="flex" style="gap:5px"><i style="width:8px;height:8px;border-radius:50%;background:#16a34a"></i>已完成</span></span></div>
+          <div class="card-body">
+            <div class="gantt-scale"><span>3月</span><span>4月</span><span>5月</span><span>6月</span><span>7月</span><span>8月</span><span>9月</span><span>10月</span></div>
+            <div class="gantt-row"><span class="name">土方开挖</span><div class="track"><i class="done" style="left:0%;width:18%"></i></div></div>
+            <div class="gantt-row"><span class="name">基础工程</span><div class="track"><i class="done" style="left:16%;width:22%"></i></div></div>
+            <div class="gantt-row"><span class="name">主体结构</span><div class="track"><i class="crit" style="left:34%;width:38%"></i></div></div>
+            <div class="gantt-row"><span class="name">砌体工程</span><div class="track"><i style="left:60%;width:18%"></i></div></div>
+            <div class="gantt-row"><span class="name">装饰装修</span><div class="track"><i style="left:72%;width:22%"></i></div></div>
+            <div class="gantt-row"><span class="name">机电安装</span><div class="track"><i style="left:66%;width:26%"></i></div></div>
+            <div class="gantt-row"><span class="name">竣工验收</span><div class="track"><i style="left:94%;width:6%"></i></div></div>
+          </div>
+        </div>
+        <div class="card mt hide" data-tabpanel="list"><div class="card-head"><div class="card-title">任务列表</div></div>
+          <div class="table-wrap"><table class="tbl">
+            <thead><tr><th>任务名称</th><th>前置依赖</th><th class="num">工期(天)</th><th>开始</th><th>结束</th><th class="num">完成度</th><th>关键路径</th><th style="width:100px">操作</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">土方开挖</td><td>—</td><td class="num">30</td><td>03-18</td><td>04-16</td><td class="num">100%</td><td><span class="tag tag-gray">否</span></td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+              <tr><td class="mono">基础工程</td><td>土方开挖</td><td class="num">45</td><td>04-17</td><td>05-31</td><td class="num">100%</td><td><span class="tag tag-red">关键</span></td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+              <tr><td class="mono">主体结构</td><td>基础工程</td><td class="num">120</td><td>06-01</td><td>09-28</td><td class="num">68%</td><td><span class="tag tag-red">关键</span></td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+              <tr><td class="mono">砌体工程</td><td>主体结构</td><td class="num">60</td><td>09-20</td><td>11-18</td><td class="num">12%</td><td><span class="tag tag-gray">否</span></td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <!-- ============ 活动数据·计划数据录入 ============ -->
+      <section class="view hide" id="view-entry-plan">
+        <div class="page-head"><div><div class="page-title">计划数据录入</div><div class="sub">按施工工序录入计划资源使用量</div></div></div>
+
+        <div style="display:grid;grid-template-columns:230px 1fr;gap:14px;align-items:stretch;min-height:calc(100vh - 190px)">
+          <div class="card">
+            <div class="card-head"><div class="card-title">施工工序</div></div>
+            <div class="card-body" style="padding:8px;display:flex;flex-direction:column;gap:2px">
+              <button class="process-item active"><span>项目（全部）</span><span class="pc">128</span></button>
+              <button class="process-item sub"><span>土方开挖</span><span class="pc">12</span></button>
+              <button class="process-item sub"><span>基础工程</span><span class="pc">24</span></button>
+              <button class="process-item sub"><span>主体结构</span><span class="pc">46</span></button>
+              <button class="process-item sub"><span>砌体工程</span><span class="pc">18</span></button>
+              <button class="process-item sub"><span>装饰装修</span><span class="pc">8</span></button>
+              <button class="process-item sub"><span>机电安装</span><span class="pc">15</span></button>
+              <button class="process-item sub"><span>室外工程</span><span class="pc">5</span></button>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div class="card" style="flex:1;display:flex;flex-direction:column">
+              <div class="card-head" style="flex-wrap:wrap;justify-content:flex-start">
+                <div class="card-title">计划活动数据列表</div>
+                <div class="flex" style="gap:10px;margin-left:16px">
+                  <button class="btn btn-outline" data-toast="请选择日报文件导入"><svg><use href="#i-upload"/></svg>导入</button>
+                  <button class="btn btn-primary" data-modal="modal-entry-row"><svg><use href="#i-plus"/></svg>新增</button>
+                  <button class="btn btn-outline" data-toast="已删除所选数据" style="color:var(--danger);border-color:var(--danger)"><svg><use href="#i-trash"/></svg>批量删除</button>
+                </div>
+                <div class="flex" style="gap:10px;margin-left:auto">
+                  <div class="tabbar" data-tabgroup="stage-plan">
+                    <button class="tab-btn active">全部</button>
+                    <button class="tab-btn">建材生产</button>
+                    <button class="tab-btn">建材运输</button>
+                    <button class="tab-btn">施工建造</button>
+                  </div>
+                  <div class="field"><span class="lbl">日期</span><input type="date" value="2026-10-19"></div>
+                </div>
+              </div>
+              <div class="table-wrap" style="flex:1;overflow:auto"><table class="tbl">
+                <thead><tr><th style="width:40px"><input type="checkbox" style="accent-color:var(--primary)"></th><th>阶段</th><th>工序</th><th>资源名称</th><th class="num">用量</th><th>单位</th><th class="num">碳排放因子</th><th class="num">碳排放量(tCO₂)</th><th>使用日期</th><th style="width:90px">操作</th></tr></thead>
+                <tbody>
+                  <tr><td><input type="checkbox" style="accent-color:var(--primary)"></td><td><span class="tag tag-blue">建材生产</span></td><td>主体结构</td><td class="mono">预拌混凝土 C30</td><td class="num">86</td><td>m³</td><td class="num">0.2950</td><td class="num mono">25.37</td><td>2026-10-19</td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button><button class="btn-icon"><svg><use href="#i-x"/></svg></button></td></tr>
+                  <tr><td><input type="checkbox" style="accent-color:var(--primary)"></td><td><span class="tag tag-blue">建材生产</span></td><td>主体结构</td><td class="mono">螺纹钢筋 HRB400</td><td class="num">12.5</td><td>t</td><td class="num">2.3400</td><td class="num mono">29.25</td><td>2026-10-19</td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button><button class="btn-icon"><svg><use href="#i-x"/></svg></button></td></tr>
+                  <tr><td><input type="checkbox" style="accent-color:var(--primary)"></td><td><span class="tag tag-blue">建材生产</span></td><td>砌体工程</td><td class="mono">加气混凝土砌块</td><td class="num">320</td><td>m³</td><td class="num">0.2100</td><td class="num mono">67.20</td><td>2026-10-18</td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button><button class="btn-icon"><svg><use href="#i-x"/></svg></button></td></tr>
+                  <tr><td><input type="checkbox" style="accent-color:var(--primary)"></td><td><span class="tag tag-purple">施工建造</span></td><td>基础工程</td><td class="mono">水泥 P.O 42.5</td><td class="num">45</td><td>t</td><td class="num">0.8200</td><td class="num mono">36.90</td><td>2026-10-19</td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button><button class="btn-icon"><svg><use href="#i-x"/></svg></button></td></tr>
+                  <tr><td><input type="checkbox" style="accent-color:var(--primary)"></td><td><span class="tag tag-orange">建材运输</span></td><td>主体结构</td><td class="mono">混凝土罐车运输</td><td class="num">18</td><td>km</td><td class="num">0.0400</td><td class="num mono">0.72</td><td>2026-10-18</td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button><button class="btn-icon"><svg><use href="#i-x"/></svg></button></td></tr>
+                </tbody>
+              </table></div>
+              <div class="pager"><span>共 128 条 · 第 1/26 页</span><div class="pg"><button class="on">1</button><button>2</button><button>3</button><button>›</button></div></div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><div class="card-title">碳排放计算结果</div></div>
+              <div class="card-body">
+                <div class="grid3">
+                  <div class="stat" style="box-shadow:none;border:1px solid var(--border)">
+                    <div class="ic" style="background:var(--primary-soft);color:var(--primary)"><svg><use href="#i-target"/></svg></div>
+                    <div><div class="k">碳排放指标</div><div class="v">15,000<small> tCO₂e</small></div></div>
+                  </div>
+                  <div class="stat" style="box-shadow:none;border:1px solid var(--border)">
+                    <div class="ic" style="background:var(--warning-soft);color:var(--warning)"><svg><use href="#i-plan"/></svg></div>
+                    <div><div class="k">计划碳排</div><div class="v">11,742<small> tCO₂e</small></div></div>
+                  </div>
+                  <div class="stat" style="box-shadow:none;border:1px solid var(--border)">
+                    <div class="ic" style="background:var(--success-soft);color:var(--success)"><svg><use href="#i-trend"/></svg></div>
+                    <div><div class="k">进度碳排</div><div class="v">8,215<small> tCO₂e</small></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 活动数据·实际数据录入 ============ -->
+      <section class="view hide" id="view-entry-actual">
+        <div class="page-head"><div><div class="page-title">实际数据录入</div><div class="sub">按施工工序录入实际资源使用量</div></div></div>
+
+        <div style="display:grid;grid-template-columns:230px 1fr;gap:14px;align-items:stretch;min-height:calc(100vh - 190px)">
+          <div class="card">
+            <div class="card-head"><div class="card-title">施工工序</div></div>
+            <div class="card-body" style="padding:8px;display:flex;flex-direction:column;gap:2px">
+              <button class="process-item active"><span>项目（全部）</span><span class="pc">128</span></button>
+              <button class="process-item sub"><span>土方开挖</span><span class="pc">12</span></button>
+              <button class="process-item sub"><span>基础工程</span><span class="pc">24</span></button>
+              <button class="process-item sub"><span>主体结构</span><span class="pc">46</span></button>
+              <button class="process-item sub"><span>砌体工程</span><span class="pc">18</span></button>
+              <button class="process-item sub"><span>装饰装修</span><span class="pc">8</span></button>
+              <button class="process-item sub"><span>机电安装</span><span class="pc">15</span></button>
+              <button class="process-item sub"><span>室外工程</span><span class="pc">5</span></button>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div class="card" style="flex:1;display:flex;flex-direction:column">
+              <div class="card-head" style="flex-wrap:wrap;justify-content:flex-start">
+                <div class="card-title">实际活动数据列表</div>
+                <div class="flex" style="gap:10px;margin-left:16px">
+                  <button class="btn btn-outline" data-toast="请选择日报文件导入"><svg><use href="#i-upload"/></svg>导入</button>
+                  <button class="btn btn-primary" data-modal="modal-entry-row"><svg><use href="#i-plus"/></svg>新增</button>
+                  <button class="btn btn-outline" data-toast="已删除所选数据" style="color:var(--danger);border-color:var(--danger)"><svg><use href="#i-trash"/></svg>批量删除</button>
+                </div>
+                <div class="flex" style="gap:10px;margin-left:auto">
+                  <div class="tabbar" data-tabgroup="stage-actual">
+                    <button class="tab-btn active">全部</button>
+                    <button class="tab-btn">建材生产</button>
+                    <button class="tab-btn">建材运输</button>
+                    <button class="tab-btn">施工建造</button>
+                  </div>
+                  <div class="field"><span class="lbl">日期</span><input type="date" value="2026-10-19"></div>
+                </div>
+              </div>
+              <div class="table-wrap" style="flex:1;overflow:auto"><table class="tbl">
+                <thead><tr><th style="width:40px"><input type="checkbox" style="accent-color:var(--primary)"></th><th>阶段</th><th>工序</th><th>资源名称</th><th class="num">用量</th><th>单位</th><th class="num">碳排放因子</th><th class="num">碳排放量(tCO₂)</th><th>使用日期</th><th style="width:90px">操作</th></tr></thead>
+                <tbody>
+                  <tr><td><input type="checkbox" style="accent-color:var(--primary)"></td><td><span class="tag tag-blue">建材生产</span></td><td>主体结构</td><td class="mono">预拌混凝土 C30</td><td class="num">86</td><td>m³</td><td class="num">0.2950</td><td class="num mono">25.37</td><td>2026-10-19</td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button><button class="btn-icon"><svg><use href="#i-x"/></svg></button></td></tr>
+                  <tr><td><input type="checkbox" style="accent-color:var(--primary)"></td><td><span class="tag tag-blue">建材生产</span></td><td>主体结构</td><td class="mono">螺纹钢筋 HRB400</td><td class="num">12.5</td><td>t</td><td class="num">2.3400</td><td class="num mono">29.25</td><td>2026-10-19</td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button><button class="btn-icon"><svg><use href="#i-x"/></svg></button></td></tr>
+                  <tr><td><input type="checkbox" style="accent-color:var(--primary)"></td><td><span class="tag tag-blue">建材生产</span></td><td>砌体工程</td><td class="mono">加气混凝土砌块</td><td class="num">320</td><td>m³</td><td class="num">0.2100</td><td class="num mono">67.20</td><td>2026-10-18</td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button><button class="btn-icon"><svg><use href="#i-x"/></svg></button></td></tr>
+                  <tr><td><input type="checkbox" style="accent-color:var(--primary)"></td><td><span class="tag tag-purple">施工建造</span></td><td>基础工程</td><td class="mono">水泥 P.O 42.5</td><td class="num">45</td><td>t</td><td class="num">0.8200</td><td class="num mono">36.90</td><td>2026-10-19</td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button><button class="btn-icon"><svg><use href="#i-x"/></svg></button></td></tr>
+                  <tr><td><input type="checkbox" style="accent-color:var(--primary)"></td><td><span class="tag tag-orange">建材运输</span></td><td>主体结构</td><td class="mono">混凝土罐车运输</td><td class="num">18</td><td>km</td><td class="num">0.0400</td><td class="num mono">0.72</td><td>2026-10-18</td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button><button class="btn-icon"><svg><use href="#i-x"/></svg></button></td></tr>
+                </tbody>
+              </table></div>
+              <div class="pager"><span>共 128 条 · 第 1/26 页</span><div class="pg"><button class="on">1</button><button>2</button><button>3</button><button>›</button></div></div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><div class="card-title">碳排放计算结果</div></div>
+              <div class="card-body">
+                <div class="grid3">
+                  <div class="stat" style="box-shadow:none;border:1px solid var(--border)">
+                    <div class="ic" style="background:var(--primary-soft);color:var(--primary)"><svg><use href="#i-target"/></svg></div>
+                    <div><div class="k">碳排放指标</div><div class="v">15,000<small> tCO₂e</small></div></div>
+                  </div>
+                  <div class="stat" style="box-shadow:none;border:1px solid var(--border)">
+                    <div class="ic" style="background:var(--warning-soft);color:var(--warning)"><svg><use href="#i-plan"/></svg></div>
+                    <div><div class="k">计划碳排</div><div class="v">11,742<small> tCO₂e</small></div></div>
+                  </div>
+                  <div class="stat" style="box-shadow:none;border:1px solid var(--border)">
+                    <div class="ic" style="background:var(--success-soft);color:var(--success)"><svg><use href="#i-trend"/></svg></div>
+                    <div><div class="k">进度碳排</div><div class="v">8,215<small> tCO₂e</small></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 碳排放分布 ============ -->
+      <section class="view hide" id="view-distribution">
+        <div class="page-head"><div><div class="page-title">碳排放计算</div><div class="sub">按标签切片统计碳排与成本占比</div></div>
+          <div class="toolbar"><button class="btn btn-outline" data-goto="charts">配置切片</button></div>
+        </div>
+        <div class="stat-row">
+          <div class="stat"><div class="ic" style="background:var(--success-soft);color:var(--success)"><svg><use href="#i-leaf"/></svg></div><div><div class="k">碳排放合计</div><div class="v">12,846<small> tCO₂</small></div></div></div>
+          <div class="stat"><div class="ic" style="background:var(--warning-soft);color:var(--warning)"><svg><use href="#i-coin"/></svg></div><div><div class="k">成本合计</div><div class="v">18,460<small> 万元</small></div></div></div>
+        </div>
+        <div class="grid2">
+          <div class="card"><div class="card-head"><div class="card-title">碳排放分布</div></div>
+            <div class="card-body tc">
+              <svg viewBox="0 0 160 160" width="200" height="200">
+                <circle cx="80" cy="80" r="62" fill="none" stroke="#eef0f6" stroke-width="22"/>
+                <circle cx="80" cy="80" r="62" fill="none" stroke="#2563eb" stroke-width="22" stroke-dasharray="172 390" transform="rotate(-90 80 80)"/>
+                <circle cx="80" cy="80" r="62" fill="none" stroke="#22d3ee" stroke-width="22" stroke-dasharray="125 390" stroke-dashoffset="-172" transform="rotate(-90 80 80)"/>
+                <circle cx="80" cy="80" r="62" fill="none" stroke="#fbbf24" stroke-width="22" stroke-dasharray="62 390" stroke-dashoffset="-297" transform="rotate(-90 80 80)"/>
+                <circle cx="80" cy="80" r="62" fill="none" stroke="#34d399" stroke-width="22" stroke-dasharray="31 390" stroke-dashoffset="-359" transform="rotate(-90 80 80)"/>
+                <text x="80" y="76" text-anchor="middle" fill="#1f2937" font-size="20" font-weight="700">12846</text>
+                <text x="80" y="96" text-anchor="middle" fill="#9ca3af" font-size="12">tCO₂</text>
+              </svg>
+              <div class="mt" style="font-size:12.5px;color:var(--text-sub);display:flex;justify-content:center;gap:12px;flex-wrap:wrap">
+                <span><i class="sw" style="background:#2563eb"></i>材料 44%</span><span><i class="sw" style="background:#22d3ee"></i>机械 32%</span><span><i class="sw" style="background:#fbbf24"></i>运输 16%</span><span><i class="sw" style="background:#34d399"></i>其他 8%</span>
+              </div>
+            </div>
+          </div>
+          <div class="card"><div class="card-head"><div class="card-title">成本分布</div></div>
+            <div class="card-body tc">
+              <svg viewBox="0 0 160 160" width="200" height="200">
+                <circle cx="80" cy="80" r="62" fill="none" stroke="#eef0f6" stroke-width="22"/>
+                <circle cx="80" cy="80" r="62" fill="none" stroke="#9333ea" stroke-width="22" stroke-dasharray="207 390" transform="rotate(-90 80 80)"/>
+                <circle cx="80" cy="80" r="62" fill="none" stroke="#2563eb" stroke-width="22" stroke-dasharray="109 390" stroke-dashoffset="-207" transform="rotate(-90 80 80)"/>
+                <circle cx="80" cy="80" r="62" fill="none" stroke="#34d399" stroke-width="22" stroke-dasharray="74 390" stroke-dashoffset="-316" transform="rotate(-90 80 80)"/>
+                <text x="80" y="76" text-anchor="middle" fill="#1f2937" font-size="20" font-weight="700">18460</text>
+                <text x="80" y="96" text-anchor="middle" fill="#9ca3af" font-size="12">万元</text>
+              </svg>
+              <div class="mt" style="font-size:12.5px;color:var(--text-sub);display:flex;justify-content:center;gap:12px;flex-wrap:wrap">
+                <span><i class="sw" style="background:#9333ea"></i>材料 53%</span><span><i class="sw" style="background:#2563eb"></i>人工 28%</span><span><i class="sw" style="background:#34d399"></i>机械 19%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 优化结果 ============ -->
+      <section class="view hide" id="view-optimization">
+        <div class="page-head"><div><div class="page-title">多目标优化</div><div class="sub">在工期、成本、碳排放之间寻找帕累托最优解</div></div>
+          <div class="toolbar"><button class="btn btn-outline">历史运行</button><button class="btn btn-primary" data-modal="modal-optimize"><svg><use href="#i-target"/></svg>开始优化</button></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div class="card-title">帕累托最优解集（散点图）</div><span class="muted" style="font-size:12.5px">点选方案查看甘特图</span></div>
+          <div class="card-body">
+            <div class="scatter">
+              <span class="pt-dot" style="left:8%;bottom:18%"></span><span class="pt-dot" style="left:18%;bottom:34%"></span>
+              <span class="pt-dot" style="left:30%;bottom:22%"></span><span class="pt-dot" style="left:42%;bottom:42%"></span>
+              <span class="pt-dot" style="left:52%;bottom:28%"></span><span class="pt-dot" style="left:60%;bottom:52%"></span>
+              <span class="pt-dot" style="left:70%;bottom:38%"></span><span class="pt-dot" style="left:78%;bottom:60%"></span>
+              <span class="pt-dot opt" style="left:64%;bottom:64%"></span>
+              <span class="pt-dot" style="left:88%;bottom:50%"></span>
+              <span class="pt-dot" style="left:50%;bottom:72%"></span><span class="pt-dot" style="left:36%;bottom:58%"></span>
+              <span class="ax-x">工期（天）→</span><span class="ax-y">成本（万元）→</span>
+            </div>
+            <div class="flex" style="justify-content:center;gap:16px;font-size:12.5px;color:var(--text-sub)">
+              <span><i class="sw" style="background:#2563eb"></i>可行方案</span><span><i class="sw" style="background:#22d3ee"></i>已选方案（工期 508 天 · 成本 17,220 万 · 碳排 11,742 t）</span>
+            </div>
+          </div>
+        </div>
+        <div class="grid3 mt">
+          <div class="stat"><div class="ic" style="background:var(--primary-soft);color:var(--primary)"><svg><use href="#i-clock"/></svg></div><div><div class="k">最优工期</div><div class="v">472<small> 天</small></div></div></div>
+          <div class="stat"><div class="ic" style="background:var(--warning-soft);color:var(--warning)"><svg><use href="#i-coin"/></svg></div><div><div class="k">最优成本</div><div class="v">16,830<small> 万</small></div></div></div>
+          <div class="stat"><div class="ic" style="background:var(--success-soft);color:var(--success)"><svg><use href="#i-leaf"/></svg></div><div><div class="k">最少碳排</div><div class="v">11,420<small> t</small></div></div></div>
+        </div>
+      </section>
+
+      <!-- ============ 施工进度 ============ -->
+      <section class="view hide" id="view-progress">
+        <div class="page-head"><div><div class="page-title">施工进度</div><div class="sub">全景时间线：进度 · 碳排 · 天气</div></div>
+          <div class="toolbar"><div class="field"><span class="lbl">粒度</span><select><option>日</option><option>周</option><option>月</option></select></div><button class="btn btn-outline"><svg><use href="#i-cloud"/></svg>同步天气</button></div>
+        </div>
+        <div class="card"><div class="card-head"><div class="card-title">全景时间线（甘特 · 累计进度 · 碳排）</div></div>
+          <div class="card-body">
+            <div class="gantt-scale"><span>3月</span><span>4月</span><span>5月</span><span>6月</span><span>7月</span><span>8月</span><span>9月</span><span>10月</span></div>
+            <div class="gantt-row"><span class="name">土方开挖</span><div class="track"><i class="done" style="left:0%;width:18%"></i></div></div>
+            <div class="gantt-row"><span class="name">基础工程</span><div class="track"><i class="done" style="left:16%;width:22%"></i></div></div>
+            <div class="gantt-row"><span class="name">主体结构</span><div class="track"><i class="crit" style="left:34%;width:38%"></i></div></div>
+            <div class="gantt-row"><span class="name">装饰装修</span><div class="track"><i style="left:72%;width:22%"></i></div></div>
+            <div class="mt"><div style="font-size:12.5px;color:var(--text-sub);margin-bottom:8px">累计碳排放（tCO₂）</div>
+              <div class="bars" style="height:140px">
+                <div class="b"><i style="height:24%"></i><span>3月</span></div><div class="b"><i style="height:38%"></i><span>4月</span></div>
+                <div class="b"><i style="height:52%"></i><span>5月</span></div><div class="b"><i style="height:63%"></i><span>6月</span></div>
+                <div class="b"><i style="height:74%"></i><span>7月</span></div><div class="b"><i style="height:85%"></i><span>8月</span></div><div class="b"><i style="height:92%"></i><span>9月</span></div><div class="b"><i style="height:98%"></i><span>10月</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 计划编制 ============ -->
+      <section class="view hide" id="view-planning">
+        <div class="page-head"><div><div class="page-title">计划编制</div><div class="sub">选择优化方案，编制计划资源与基线</div></div>
+          <div class="toolbar"><button class="btn btn-outline" data-goto="optimization">查看优化结果</button><button class="btn btn-primary" data-toast="已保存为计划基线"><svg><use href="#i-check"/></svg>保存为计划基线</button></div>
+        </div>
+        <div class="card"><div class="card-head"><div class="card-title">方案摘要</div><span class="tag tag-green"><span class="dot"></span>当前基线 · 保存于 2026-10-12</span></div>
+          <div class="card-body">
+            <div class="grid3">
+              <div class="stat" style="box-shadow:none;border:1px solid var(--border)"><div class="ic" style="background:var(--primary-soft);color:var(--primary)"><svg><use href="#i-clock"/></svg></div><div><div class="k">工期</div><div class="v">508<small> 天</small></div></div></div>
+              <div class="stat" style="box-shadow:none;border:1px solid var(--border)"><div class="ic" style="background:var(--warning-soft);color:var(--warning)"><svg><use href="#i-coin"/></svg></div><div><div class="k">总成本</div><div class="v">17,220<small> 万</small></div></div></div>
+              <div class="stat" style="box-shadow:none;border:1px solid var(--border)"><div class="ic" style="background:var(--success-soft);color:var(--success)"><svg><use href="#i-leaf"/></svg></div><div><div class="k">总碳排</div><div class="v">11,742<small> t</small></div></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="card mt"><div class="card-head"><div class="card-title">计划资源 vs 实际资源</div></div>
+          <div class="table-wrap"><table class="tbl">
+            <thead><tr><th>资源</th><th class="num">计划用量</th><th class="num">实际用量</th><th class="num">差异</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">预拌混凝土 C30</td><td class="num">12,500 m³</td><td class="num">11,860 m³</td><td class="num" style="color:var(--success)">-5.1%</td></tr>
+              <tr><td class="mono">螺纹钢筋 HRB400</td><td class="num">2,840 t</td><td class="num">2,612 t</td><td class="num" style="color:var(--success)">-8.0%</td></tr>
+              <tr><td class="mono">塔式起重机</td><td class="num">1,240 台班</td><td class="num">1,198 台班</td><td class="num" style="color:var(--success)">-3.4%</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <!-- ============ 计划践行度 ============ -->
+      <section class="view hide" id="view-compliance">
+        <div class="page-head"><div><div class="page-title">计划践行度</div><div class="sub">计划基线与实际执行的差异对照与达标评价</div></div>
+          <div class="toolbar"><span class="tag tag-orange"><span class="dot"></span>基线已过期，建议重新预估</span></div>
+        </div>
+        <div class="stat-row">
+          <div class="stat"><div class="ic" style="background:var(--primary-soft);color:var(--primary)"><svg><use href="#i-clock"/></svg></div><div><div class="k">工期差异</div><div class="v">+6<small> 天</small></div><div class="trend up"><svg><use href="#i-trend-down"/></svg>可控</div></div></div>
+          <div class="stat"><div class="ic" style="background:var(--warning-soft);color:var(--warning)"><svg><use href="#i-coin"/></svg></div><div><div class="k">成本差异</div><div class="v">-3.2<small> %</small></div><div class="trend up"><svg><use href="#i-trend-down"/></svg>节约</div></div></div>
+          <div class="stat"><div class="ic" style="background:var(--success-soft);color:var(--success)"><svg><use href="#i-leaf"/></svg></div><div><div class="k">碳排差异</div><div class="v">-1.8<small> %</small></div><div class="trend up"><svg><use href="#i-trend-down"/></svg>减排</div></div></div>
+          <div class="stat"><div class="ic" style="background:var(--success-soft);color:var(--success)"><svg><use href="#i-check"/></svg></div><div><div class="k">评价</div><div class="v" style="font-size:16px">达标</div></div></div>
+        </div>
+        <div class="card"><div class="card-head"><div class="card-title">计划 vs 实际对照</div></div>
+          <div class="table-wrap"><table class="tbl">
+            <thead><tr><th>指标</th><th>计划</th><th>实际</th><th>差异</th><th>状态</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">总工期(天)</td><td class="num">508</td><td class="num">514</td><td class="num" style="color:var(--warning)">+6</td><td><span class="tag tag-orange">需关注</span></td></tr>
+              <tr><td class="mono">总成本(万元)</td><td class="num">17,220</td><td class="num">16,668</td><td class="num" style="color:var(--success)">-552</td><td><span class="tag tag-green">达标</span></td></tr>
+              <tr><td class="mono">总碳排(tCO₂)</td><td class="num">11,742</td><td class="num">11,530</td><td class="num" style="color:var(--success)">-212</td><td><span class="tag tag-green">达标</span></td></tr>
+              <tr><td class="mono">混凝土用量(m³)</td><td class="num">12,500</td><td class="num">11,860</td><td class="num" style="color:var(--success)">-640</td><td><span class="tag tag-green">达标</span></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <!-- ============ 低碳措施 ============ -->
+      <section class="view hide" id="view-measures">
+        <div class="page-head"><div><div class="page-title">低碳措施</div><div class="sub">光伏、设备替换等减碳措施的预估与实际节碳</div></div>
+          <div class="toolbar"><button class="btn btn-primary" data-modal="modal-measure"><svg><use href="#i-plus"/></svg>添加措施</button></div>
+        </div>
+        <div class="stat-row">
+          <div class="stat"><div class="ic" style="background:var(--success-soft);color:var(--success)"><svg><use href="#i-leaf"/></svg></div><div><div class="k">预估节碳合计</div><div class="v">1,520<small> tCO₂</small></div></div></div>
+          <div class="stat"><div class="ic" style="background:var(--purple-soft);color:var(--purple)"><svg><use href="#i-check"/></svg></div><div><div class="k">实际节碳合计</div><div class="v">1,203<small> tCO₂</small></div></div></div>
+          <div class="stat"><div class="ic" style="background:var(--warning-soft);color:var(--warning)"><svg><use href="#i-trend-down"/></svg></div><div><div class="k">差额</div><div class="v">-317<small> tCO₂</small></div></div></div>
+        </div>
+        <div class="card"><div class="card-head"><div class="card-title">措施清单</div></div>
+          <div class="table-wrap"><table class="tbl">
+            <thead><tr><th>措施</th><th>类型</th><th class="num">预估节碳(t)</th><th class="num">实际节碳(t)</th><th>状态</th><th style="width:100px">操作</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">光伏发电（屋面）</td><td><span class="tag tag-purple">添加类</span></td><td class="num">640</td><td class="num">520</td><td><span class="tag tag-green"><span class="dot"></span>已实施</span></td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+              <tr><td class="mono">电动机械替代燃油</td><td><span class="tag tag-blue">替换类</span></td><td class="num">380</td><td class="num">360</td><td><span class="tag tag-green"><span class="dot"></span>已实施</span></td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+              <tr><td class="mono">再生骨料混凝土</td><td><span class="tag tag-blue">替换类</span></td><td class="num">500</td><td class="num">323</td><td><span class="tag tag-orange"><span class="dot"></span>实施中</span></td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <!-- ============ 碳排数据看板（大屏） ============ -->
+      <section class="view hide" id="view-statistics">
+        <div style="position:fixed;inset:0;z-index:60;background:#050e1f">
+          <iframe src="施工碳排放管理平台_大屏可视化原型.html" title="碳排数据看板" style="width:100%;height:100%;border:0"></iframe>
+          <button class="dash-back" data-goto="info"><svg><use href="#i-home"/></svg>返回平台</button>
+        </div>
+      </section>
+
+      <!-- ============ 日报·导入 ============ -->
+      <section class="view hide" id="view-import">
+        <div class="page-head"><div><div class="page-title">导入日报</div><div class="sub">上传施工日报，系统自动解析资源使用数据</div></div></div>
+        <div class="steps">
+          <div class="step on"><span class="n">1</span>导入日报</div><div class="step-line"></div>
+          <div class="step"><span class="n">2</span>核对资源</div><div class="step-line"></div>
+          <div class="step"><span class="n">3</span>分配工序</div>
+        </div>
+        <div class="grid2">
+          <div class="card"><div class="card-head"><div class="card-title">上传日报文件</div></div>
+            <div class="card-body">
+              <div class="upload"><svg class="big"><use href="#i-file"/></svg><div><b>点击选择文件</b> 或拖拽到此处</div><div class="muted" style="font-size:12.5px">支持 .xlsx / .csv，文件应包含资源名称、类别、数量等信息</div></div>
+              <div class="flex mt" style="justify-content:space-between"><span class="muted" style="font-size:12.5px">解析配置：内置默认配置</span><button class="btn btn-ghost btn-sm" data-goto="ai"><svg><use href="#i-sparkle"/></svg>AI 生成解析配置</button></div>
+              <button class="btn btn-primary w-full mt" style="justify-content:center" data-toast="解析中…">开始解析</button>
+            </div>
+          </div>
+          <div class="card"><div class="card-head"><div class="card-title">解析结果</div></div>
+            <div class="card-body"><div class="empty">上传文件并解析后，将在此展示解析出的资源数据预览</div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 日报·核对资源 ============ -->
+      <section class="view hide" id="view-review">
+        <div class="page-head"><div><div class="page-title">核对资源</div><div class="sub">确认解析出的资源数据</div></div></div>
+        <div class="steps">
+          <div class="step done"><span class="n"><svg><use href="#i-check"/></svg></span>导入日报</div><div class="step-line"></div>
+          <div class="step on"><span class="n">2</span>核对资源</div><div class="step-line"></div>
+          <div class="step"><span class="n">3</span>分配工序</div>
+        </div>
+        <div class="card"><div class="card-head"><div class="card-title">解析数据核对 <span class="tag tag-blue">24 条资源 · 2 个新资源</span></div></div>
+          <div class="table-wrap"><table class="tbl">
+            <thead><tr><th>资源名称</th><th>类别</th><th class="num">数量</th><th>单位</th><th>匹配结果</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">预拌混凝土 C30</td><td>材料</td><td class="num">86</td><td>m³</td><td><span class="tag tag-green">已匹配</span></td></tr>
+              <tr><td class="mono">螺纹钢筋 HRB400</td><td>材料</td><td class="num">12.5</td><td>t</td><td><span class="tag tag-green">已匹配</span></td></tr>
+              <tr><td class="mono">加气混凝土砌块</td><td>材料</td><td class="num">320</td><td>m³</td><td><span class="tag tag-green">已匹配</span></td></tr>
+              <tr><td class="mono">塔式起重机</td><td>机械</td><td class="num">6</td><td>台班</td><td><span class="tag tag-orange">新资源</span></td></tr>
+            </tbody>
+          </table></div>
+          <div class="card-body" style="border-top:1px solid var(--border-soft);display:flex;justify-content:flex-end"><button class="btn btn-primary" data-toast="已提交，进入分配工序">提交 → 下一步：分配工序</button></div>
+        </div>
+      </section>
+
+      <!-- ============ 日报·分配工序 ============ -->
+      <section class="view hide" id="view-allocate">
+        <div class="page-head"><div><div class="page-title">分配工序</div><div class="sub">将资源使用量分配到具体工序</div></div></div>
+        <div class="steps">
+          <div class="step done"><span class="n"><svg><use href="#i-check"/></svg></span>导入日报</div><div class="step-line"></div>
+          <div class="step done"><span class="n"><svg><use href="#i-check"/></svg></span>核对资源</div><div class="step-line"></div>
+          <div class="step on"><span class="n">3</span>分配工序</div>
+        </div>
+        <div class="card"><div class="card-head"><div class="card-title">工序资源分配</div></div>
+          <div class="table-wrap"><table class="tbl">
+            <thead><tr><th>资源</th><th class="num">用量</th><th>分配至工序</th><th style="width:70px"></th></tr></thead>
+            <tbody>
+              <tr><td class="mono">预拌混凝土 C30</td><td class="num">86 m³</td><td><span class="tag tag-blue">主体结构</span></td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+              <tr><td class="mono">螺纹钢筋 HRB400</td><td class="num">12.5 t</td><td><span class="tag tag-blue">主体结构</span></td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+              <tr><td class="mono">加气混凝土砌块</td><td class="num">320 m³</td><td><span class="tag tag-orange">待分配</span></td><td><button class="btn-icon"><svg><use href="#i-edit"/></svg></button></td></tr>
+            </tbody>
+          </table></div>
+          <div class="card-body" style="border-top:1px solid var(--border-soft);display:flex;justify-content:space-between;align-items:center">
+            <span class="muted" style="font-size:13px">1 条待分配</span><button class="btn btn-primary" data-toast="已提交">确认提交</button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- ================= 弹窗 ================= -->
+<div class="modal-mask" id="modal-project">
+  <div class="modal"><div class="modal-head"><div class="modal-title">创建项目</div><button class="modal-close" data-close>×</button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="f-item full"><label>项目名称 <span class="req">*</span></label><input placeholder="例如：某某高速公路项目"></div>
+      <div class="f-item full"><label>项目描述</label><textarea placeholder="可选，简要描述项目内容"></textarea></div>
+    </div></div>
+    <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-primary" data-close>创建项目</button></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="modal-resource">
+  <div class="modal"><div class="modal-head"><div class="modal-title">添加资源</div><button class="modal-close" data-close>×</button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="f-item"><label>资源名称 <span class="req">*</span></label><input placeholder="如：商品混凝土"></div>
+      <div class="f-item"><label>分类</label><select><option>材料</option><option>机械</option><option>人工</option><option>运输</option><option>其他</option></select></div>
+      <div class="f-item"><label>计量单位</label><input placeholder="如 m³"></div>
+      <div class="f-item"><label>单价(元)</label><input placeholder="如 480"></div>
+      <div class="f-item"><label>碳排放因子</label><input placeholder="如 0.2950（负值表碳汇）"></div>
+      <div class="f-item"><label>周转复用</label><select><option>否</option><option>是</option></select></div>
+      <div class="f-item full"><label>标签</label><input placeholder="选择标签（可多选）"></div>
+    </div></div>
+    <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-primary" data-close>确定</button></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="modal-resource-import">
+  <div class="modal sm"><div class="modal-head"><div class="modal-title">从公共资源导入</div><button class="modal-close" data-close>×</button></div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:8px">
+      <label class="flex" style="gap:10px;padding:10px;border:1px solid var(--border);border-radius:8px"><input type="checkbox"> 预拌混凝土 C30（480 元/m³ · 0.2950）</label>
+      <label class="flex" style="gap:10px;padding:10px;border:1px solid var(--border);border-radius:8px"><input type="checkbox"> 螺纹钢筋 HRB400（4,200 元/t · 2.3400）</label>
+      <label class="flex" style="gap:10px;padding:10px;border:1px solid var(--border);border-radius:8px"><input type="checkbox"> 水泥 P.O 42.5（520 元/t · 0.8200）</label>
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-primary" data-close>导入</button></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="modal-tag">
+  <div class="modal sm"><div class="modal-head"><div class="modal-title">新建标签</div><button class="modal-close" data-close>×</button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="f-item full"><label>标签名称 <span class="req">*</span></label><input placeholder="如：材料"></div>
+      <div class="f-item full"><label>分组</label><input placeholder="仅用于界面归类展示"></div>
+      <div class="f-item full"><label>描述</label><textarea placeholder="选填"></textarea></div>
+    </div></div>
+    <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-primary" data-close>保存</button></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="modal-chart">
+  <div class="modal lg"><div class="modal-head"><div class="modal-title">新建图表</div><button class="modal-close" data-close>×</button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="f-item full"><label>图表名称 <span class="req">*</span></label><input placeholder="如：碳排放构成"></div>
+      <div class="f-item full"><label>切片 1</label><input value="材料（命中标签：混凝土、钢材、砌体、木材）"></div>
+      <div class="f-item full"><label>切片 2</label><input placeholder="命中标签：机械"></div>
+      <div class="f-item full"><label>切片 3</label><input placeholder="命中标签：运输"></div>
+    </div></div>
+    <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-primary" data-close>保存</button></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="modal-task">
+  <div class="modal"><div class="modal-head"><div class="modal-title">添加任务</div><button class="modal-close" data-close>×</button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="f-item full"><label>任务名称 <span class="req">*</span></label><input placeholder="如：主体结构"></div>
+      <div class="f-item"><label>工期(天)</label><input placeholder="如 120"></div>
+      <div class="f-item"><label>开始时间</label><input type="date"></div>
+      <div class="f-item full"><label>前置依赖</label><input placeholder="选择前置任务"></div>
+    </div></div>
+    <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-primary" data-close>确定</button></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="modal-entry-row">
+  <div class="modal"><div class="modal-head"><div class="modal-title">新增活动数据</div><button class="modal-close" data-close>×</button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="f-item"><label>阶段 <span class="req">*</span></label><select><option>建材生产</option><option>建材运输</option><option>施工建造</option></select></div>
+      <div class="f-item"><label>使用日期 <span class="req">*</span></label><input type="date" value="2026-10-19"></div>
+      <div class="f-item"><label>工序</label><select><option>主体结构</option><option>砌体工程</option><option>基础工程</option></select></div>
+      <div class="f-item"><label>资源名称</label><select><option>预拌混凝土 C30</option><option>螺纹钢筋 HRB400</option><option>加气混凝土砌块</option><option>水泥 P.O 42.5</option></select></div>
+      <div class="f-item"><label>用量</label><input type="number" placeholder="请输入用量"></div>
+      <div class="f-item"><label>单位</label><input value="m³" disabled style="background:#fafbfd"></div>
+      <div class="f-item"><label>碳排放因子</label><input value="0.2950" disabled style="background:#fafbfd"></div>
+      <div class="f-item"><label>碳排放量(tCO₂)</label><input placeholder="自动计算" disabled style="background:#fafbfd"></div>
+    </div></div>
+    <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-primary" data-close>确定</button></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="modal-optimize">
+  <div class="modal"><div class="modal-head"><div class="modal-title">开始优化</div><button class="modal-close" data-close>×</button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="f-item full"><label>运行名称 <span class="req">*</span></label><input placeholder="如：串行施工方案"></div>
+      <div class="f-item"><label>策略</label><select><option>低碳优先</option><option>成本优先</option><option>时间优先</option><option>加速且低碳</option></select></div>
+      <div class="f-item"><label>代数</label><input value="100"></div>
+      <div class="f-item"><label>权重（工期/成本/碳排）</label><input value="1 : 1 : 1"></div>
+      <div class="f-item"><label>加速比</label><input value="1.0"></div>
+    </div></div>
+    <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-primary" data-close>开始优化</button></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="modal-measure">
+  <div class="modal"><div class="modal-head"><div class="modal-title">添加低碳措施</div><button class="modal-close" data-close>×</button></div>
+    <div class="modal-body"><div class="form-grid">
+      <div class="f-item full"><label>措施名称 <span class="req">*</span></label><input placeholder="如：光伏发电（屋面）"></div>
+      <div class="f-item"><label>措施类型</label><select><option>添加类（负碳因子资源）</option><option>替换类（设备替换）</option></select></div>
+      <div class="f-item"><label>实施日期</label><input type="date"></div>
+      <div class="f-item"><label>规模</label><input placeholder="如 500 kWp"></div>
+      <div class="f-item"><label>预估节碳(tCO₂)</label><input placeholder="请输入"></div>
+      <div class="f-item full"><label>备注</label><textarea placeholder="选填"></textarea></div>
+    </div></div>
+    <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-primary" data-close>添加</button></div>
+  </div>
+</div>
+
+<div id="toast-wrap"></div>
+
+<script>
+const VIEWS = {
+  projects:'项目列表', info:'项目信息', tags:'碳排放标签',
+  charts:'碳排放图表', diagnostics:'数据体检', schedule:'施工工序管理', 'entry-plan':'计划数据录入', 'entry-actual':'实际数据录入',
+  distribution:'碳排放计算', optimization:'优化结果', progress:'施工进度', planning:'计划编制',
+  compliance:'计划践行度', measures:'低碳措施', statistics:'碳排数据看板',
+  import:'导入日报', review:'核对资源', allocate:'分配工序'
+};
+const navLinks = document.querySelectorAll('.nav a[data-view]');
+const crumb = document.getElementById('crumb');
+const content = document.getElementById('content');
+
+function showView(id){
+  navLinks.forEach(a => a.classList.toggle('active', a.dataset.view === id));
+  document.querySelectorAll('.view').forEach(v => v.classList.add('hide'));
+  const el = document.getElementById('view-' + id);
+  if(el) el.classList.remove('hide');
+  if(id === 'statistics'){ const ifr = el ? el.querySelector('iframe') : null; if(ifr) ifr.src = ifr.getAttribute('src'); }
+  crumb.textContent = VIEWS[id] || '';
+  content.scrollTop = 0; window.scrollTo(0,0);
+  location.hash = id;
+}
+navLinks.forEach(a => a.addEventListener('click', () => showView(a.dataset.view)));
+document.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => showView(b.dataset.goto)));
+
+const init = (location.hash || '#info').replace('#','');
+showView(VIEWS[init] ? init : 'info');
+window.addEventListener('hashchange', () => { const id = location.hash.replace('#',''); if(VIEWS[id]) showView(id); });
+
+// 分组折叠
+document.querySelectorAll('.nav-group').forEach(g => g.addEventListener('click', () => {
+  g.classList.toggle('collapsed');
+  const grp = document.querySelector('.grp[data-grp="'+g.dataset.group+'"]');
+  if(grp) grp.classList.toggle('hide');
+}));
+
+// 弹窗
+function openModal(id){ const m = document.getElementById(id); if(m) m.classList.add('show'); }
+document.querySelectorAll('[data-modal]').forEach(btn => btn.addEventListener('click', () => openModal(btn.dataset.modal)));
+document.querySelectorAll('[data-close]').forEach(btn => btn.addEventListener('click', () => btn.closest('.modal-mask').classList.remove('show')));
+document.querySelectorAll('.modal-mask').forEach(m => m.addEventListener('click', e => { if(e.target === m) m.classList.remove('show'); }));
+document.addEventListener('keydown', e => { if(e.key === 'Escape') document.querySelectorAll('.modal-mask.show').forEach(m => m.classList.remove('show')); });
+
+// ============ 交互逻辑 ============
+// 侧栏折叠
+document.getElementById('collapseBtn').addEventListener('click', () => {
+  document.querySelector('.app').classList.toggle('collapsed');
+});
+// 项目下拉
+const projDrop = document.getElementById('projDrop');
+document.getElementById('projTrigger').addEventListener('click', e => { e.stopPropagation(); projDrop.classList.toggle('open'); });
+document.addEventListener('click', e => {
+  if(!projDrop.contains(e.target) || e.target.closest('.dropdown-menu .mi')) projDrop.classList.remove('open');
+});
+// Toast
+const toastWrap = document.getElementById('toast-wrap');
+function toast(msg, type){
+  type = type || 'success';
+  const t = document.createElement('div');
+  t.className = 'toast toast-' + type;
+  const ic = type === 'success' ? '#i-check' : (type === 'warning' ? '#i-warning' : '#i-info');
+  t.innerHTML = '<svg><use href="' + ic + '"/></svg><span>' + msg + '</span>';
+  toastWrap.appendChild(t);
+  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, 2400);
+}
+// 操作反馈：data-toast 按钮 / 模态框确认按钮
+document.addEventListener('click', e => {
+  const b = e.target.closest('.btn');
+  if(!b) return;
+  if(b.dataset.toast){ toast(b.dataset.toast, b.dataset.toastType || 'success'); return; }
+  if(b.classList.contains('btn-primary') && b.closest('.modal-foot')){ toast('操作成功'); }
+});
+// 标签页切换
+document.querySelectorAll('[data-tabgroup]').forEach(group => {
+  const btns = group.querySelectorAll('.tab-btn');
+  btns.forEach(btn => btn.addEventListener('click', () => {
+    btns.forEach(x => x.classList.toggle('active', x === btn));
+    const name = btn.dataset.tab;
+    const scope = group.closest('.view') || document;
+    scope.querySelectorAll('[data-tabpanel]').forEach(p => p.classList.toggle('hide', p.dataset.tabpanel !== name));
+  }));
+});
+// 表格行选中
+document.querySelectorAll('.tbl tbody').forEach(tb => {
+  tb.addEventListener('click', e => {
+    if(e.target.closest('button')) return;
+    const tr = e.target.closest('tr');
+    if(tr) tr.classList.toggle('selected');
+  });
+});
+// 施工工序切换
+document.querySelectorAll('.process-item').forEach(item => {
+  item.addEventListener('click', () => {
+    const list = item.parentElement;
+    list.querySelectorAll('.process-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>

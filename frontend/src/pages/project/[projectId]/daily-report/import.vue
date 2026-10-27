@@ -7,6 +7,7 @@ import { listConfigsQuery, parseDailyReportMutation } from '@/client/@pinia/cola
 import { useProjectContext } from '@/composables/useProjectContext'
 import { useUsageDateType } from '@/composables/useUsageDateType'
 import { useCapabilities } from '@/composables/useCapabilities'
+import ReportSteps from '@/components/daily-report/ReportSteps.vue'
 
 definePage({
   meta: {
@@ -128,6 +129,7 @@ function goToReview() {
 
 <template>
   <div class="p-6 pb-24 max-w-3xl mx-auto">
+    <ReportSteps :current="1" />
     <div v-if="storeV2.parsedResourceItems.length === 0" class="space-y-4">
       <div class="text-center mb-8">
         <h2 class="text-xl font-semibold text-base-content mb-2">导入日报文件</h2>

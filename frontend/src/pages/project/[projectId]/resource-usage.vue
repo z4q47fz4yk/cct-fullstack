@@ -9,13 +9,13 @@
 definePage({
   meta: {
     title: '活动数据管理',
-    description: '录入与查看资源使用量（手动/日报统一入口）',
+    description: '计划/实际资源使用量录入与历史批次',
     icon: 'inventory_2',
     showInNav: true,
     navOrder: 3,
   },
   redirect: {
-    name: '/project/[projectId]/resource-usage/history',
+    name: '/project/[projectId]/resource-usage/entry-actual',
   },
 })
 </script>

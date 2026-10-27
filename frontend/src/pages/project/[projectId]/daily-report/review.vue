@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import ReviewTable from '@/components/daily-report/ReviewTable.vue'
+import ReportSteps from '@/components/daily-report/ReportSteps.vue'
 import { useDailyReportStoreV2 } from '@/stores/report'
 
 definePage({
@@ -53,6 +54,7 @@ async function goToAllocate() {
     </div>
 
     <div v-else class="space-y-4">
+      <ReportSteps :current="2" />
       <!-- 标题和统计 -->
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-4">

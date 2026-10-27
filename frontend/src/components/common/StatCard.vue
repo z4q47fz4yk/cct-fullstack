@@ -1,12 +1,10 @@
 <script setup lang="ts">
 /**
- * StatCard - KPI 统计卡片（统一模板）
+ * StatCard - KPI 统计卡片（设计稿 · Element 风格）
  *
- * 取代散落在 OptimizationConfig / EmissionAnalysisTab /
- * ResourceStats 等组件中的 createReusableTemplate 重复实现。
- *
- * 工程面板风格：扁平面板 + 小标签行 + 等宽大数值 + 单位。
+ * 布局：左侧 42px 圆角图标块（语义色软底）+ 右侧标签行 + 等宽大数值。
  * 数值统一使用 font-num（等宽数字），千分位由父组件通过 fmt* 工具处理。
+ * 主数值使用前景色（设计稿 value 为深色），语义色只体现在图标块上。
  *
  * 注意：颜色类必须用对象语法显式列出，Tailwind 编译期无法识别
  * 运行时拼接的字符串（如 `text-${color}`）。
@@ -21,11 +19,11 @@ interface Props {
   unit?: string
   /** Material Symbols 图标名（可选） */
   icon?: string
-  /** 主色调（控制数值与图标颜色），默认 primary */
+  /** 图标块语义色，默认 primary */
   color?: SemanticColor
   /** 加载中（显示 spinner） */
   loading?: boolean
-  /** 数值大小：'default' = 32px，'sm' = 24px（用于密集布局） */
+  /** 数值大小：'default' = 22px，'sm' = 18px（用于密集布局） */
   size?: 'default' | 'sm'
   /** 货币前缀（如 "¥"），会显示在 value 之前 */
   prefix?: string
@@ -44,48 +42,45 @@ const {
 </script>
 
 <template>
-  <div class="panel p-3 min-w-0">
-    <!-- 标题行：小图标 + label -->
-    <div class="flex items-center gap-1.5 mb-1.5">
-      <span
-        v-if="icon"
-        class="material-symbols-outlined icon-sm shrink-0"
-        :class="{
-          'text-primary': color === 'primary',
-          'text-info': color === 'info',
-          'text-success': color === 'success',
-          'text-warning': color === 'warning',
-          'text-error': color === 'error',
-          'text-accel': color === 'accel',
-          'text-neutral-content': color === 'neutral',
-        }"
-        >{{ icon }}</span
-      >
-      <span class="text-xs text-fg-muted truncate">{{ label }}</span>
+  <div class="panel p-4 flex items-center gap-3.5 min-w-0">
+    <!-- 图标块：42px 圆角软底 -->
+    <div
+      v-if="icon"
+      class="w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0"
+      :class="{
+        'bg-primary/10 text-primary': color === 'primary',
+        'bg-info/10 text-info': color === 'info',
+        'bg-success/10 text-success': color === 'success',
+        'bg-warning/10 text-warning': color === 'warning',
+        'bg-error/10 text-error': color === 'error',
+        'bg-accel/10 text-accel': color === 'accel',
+        'bg-base-300/60 text-fg-muted': color === 'neutral',
+      }"
+    >
+      <span class="material-symbols-outlined icon-xl">{{ icon }}</span>
     </div>
 
-    <!-- 数值行 -->
-    <p v-if="loading" class="loading loading-spinner loading-sm" />
-    <div v-else class="flex items-baseline gap-1">
-      <span v-if="prefix" class="text-sm text-fg-muted font-num shrink-0">{{ prefix }}</span>
-      <span
-        class="font-num font-semibold truncate"
-        :class="[
-          size === 'sm' ? 'text-2xl' : 'metric-value',
-          {
-            'text-primary': color === 'primary',
-            'text-info': color === 'info',
-            'text-success': color === 'success',
-            'text-warning': color === 'warning',
-            'text-error': color === 'error',
-            'text-accel': color === 'accel',
-            'text-neutral-content': color === 'neutral',
-          },
-        ]"
-      >
-        {{ value }}
-      </span>
-      <span v-if="unit" class="text-xs text-fg-muted shrink-0">{{ unit }}</span>
+    <div class="min-w-0">
+      <!-- 标签行 -->
+      <div class="text-[13px] text-fg-muted truncate">{{ label }}</div>
+
+      <!-- 数值行 -->
+      <p v-if="loading" class="loading loading-spinner loading-sm" />
+      <div v-else class="flex items-baseline gap-1 mt-0.5">
+        <span v-if="prefix" class="text-sm text-fg-muted font-num shrink-0">{{ prefix }}</span>
+        <span
+          class="font-num font-bold text-base-content truncate"
+          :class="size === 'sm' ? 'text-lg' : 'text-[22px] leading-tight'"
+        >
+          {{ value }}
+        </span>
+        <span v-if="unit" class="text-xs text-fg-muted shrink-0">{{ unit }}</span>
+      </div>
+
+      <!-- 附加行（趋势 / 说明，可选） -->
+      <div v-if="$slots.default" class="text-xs text-fg-subtle mt-0.5">
+        <slot />
+      </div>
     </div>
   </div>
 </template>

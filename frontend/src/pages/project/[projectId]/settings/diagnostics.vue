@@ -2,7 +2,6 @@
 import { computed, ref } from 'vue'
 import { useQuery, useQueryCache } from '@pinia/colada'
 import LoadingState from '@/components/common/LoadingState.vue'
-import ChartEmptyState from '@/components/common/ChartEmptyState.vue'
 import SegmentControl, { type SegmentOption } from '@/components/common/SegmentControl.vue'
 import StatCard from '@/components/common/StatCard.vue'
 import { useProjectContext } from '@/composables/useProjectContext'
@@ -39,12 +38,17 @@ const usageTypeOptions: ReadonlyArray<SegmentOption<DiagnosticsUsageType>> = [
   { value: 'PLANNED', label: '计划', icon: 'edit_note' },
 ]
 
-const { items, isLoading, zeroFactorCount, infoCount, refresh } = useDiagnosticsApi(
+const { items, isLoading, zeroFactorCount, refresh } = useDiagnosticsApi(
   () => usageType.value,
 )
 
 /** 检查的资源总数 */
 const checkedCount = computed(() => items.value.length)
+
+/** 零单价资源数（设计稿概览卡） */
+const zeroPriceCount = computed(
+  () => items.value.filter((it) => it.flags?.includes('ZERO_PRICE')).length,
+)
 
 // ──── 计划基线过期检查（手动触发：仅本页检查时更新，不监听业务变更） ──
 const queryCache = useQueryCache()
@@ -70,6 +74,28 @@ async function recheckPlan() {
 const zeroFactorItems = computed(() =>
   items.value.filter((it) => it.flags?.includes('ZERO_FACTOR')),
 )
+
+/** 零单价（且非零因子）资源 */
+const zeroPriceItems = computed(() =>
+  items.value.filter(
+    (it) => it.flags?.includes('ZERO_PRICE') && !it.flags?.includes('ZERO_FACTOR'),
+  ),
+)
+
+/** 负因子（碳汇，且非零因子）资源 */
+const negativeFactorItems = computed(() =>
+  items.value.filter(
+    (it) => it.flags?.includes('NEGATIVE_FACTOR') && !it.flags?.includes('ZERO_FACTOR'),
+  ),
+)
+
+/** 提示项摘要：名称列表（设计稿 alert 描述），过长时截断 */
+function namesOf(list: ResourceDiagnosticItem[], max = 6): string {
+  const names = list.map((it) => it.name)
+  if (names.length <= max) return names.join('、')
+  return `${names.slice(0, max).join('、')} 等 ${names.length} 个`
+}
+
 const infoItems = computed(() =>
   items.value.filter((it) => {
     const flags = it.flags ?? []
@@ -87,6 +113,15 @@ const {
 // ──── 物化视图新鲜度 + 手动刷新 ───────────────────────────
 const { info: snapshotInfo, refresh: refreshSnapshotInfo } = useSnapshotRefreshInfo()
 const { refreshSnapshot, isRefreshing } = useSnapshotManualRefresh()
+
+// ──── 全局重新检查（设计稿 toolbar「重新检查」：汇总所有只读检查） ──
+const isRechecking = computed(
+  () => isLoadingPlan.value || isTagChartLoading.value || isRefreshing.value,
+)
+
+async function recheckAll() {
+  await Promise.allSettled([refresh(), recheckPlan(), refreshTagChart(), refreshSnapshotInfo()])
+}
 
 async function handleManualRefresh() {
   try {
@@ -125,175 +160,230 @@ const flagMeta: Record<DiagnosticFlag, { label: string; cls: string }> = {
     <LoadingState v-if="isLoading" variant="skeleton" />
 
     <template v-else>
-      <!-- 概览 -->
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <!-- 概览（设计稿 4 统计卡：检查总数 / 零碳因子 / 零单价 / 计划基线） -->
+      <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
-          label="检查资源数"
+          label="检查资源总数"
           :value="fmtNumber(checkedCount, 0)"
           unit="种"
-          icon="inventory"
-          color="neutral"
+          icon="fact_check"
+          color="success"
         />
         <StatCard
-          label="需注意（零碳因子）"
+          label="零碳因子资源"
           :value="fmtNumber(zeroFactorCount, 0)"
           unit="种"
-          icon="eco"
+          icon="warning"
           color="warning"
         />
         <StatCard
-          label="提示项"
-          :value="fmtNumber(infoCount, 0)"
+          label="零单价资源"
+          :value="fmtNumber(zeroPriceCount, 0)"
           unit="种"
-          icon="info"
-          color="info"
+          icon="payments"
+          color="warning"
+        />
+        <StatCard
+          label="计划基线"
+          :value="!planCheck ? '—' : !planCheck.hasPlan ? '未保存' : planCheck.isStale ? '已过期' : '正常'"
+          icon="schedule"
+          :color="!planCheck || !planCheck.hasPlan ? 'neutral' : planCheck.isStale ? 'error' : 'success'"
         />
       </div>
 
-      <!-- 计划基线过期检查 -->
-      <section class="panel p-4">
-        <div class="flex items-center justify-between gap-4 mb-1">
-          <div class="flex items-center gap-2">
-            <span class="material-symbols-outlined text-base-content icon-sm">fact_check</span>
-            <h2 class="text-sm font-semibold text-base-content">计划基线过期检查</h2>
-          </div>
-          <button class="btn btn-ghost btn-xs" :disabled="isLoadingPlan" @click="recheckPlan">
-            <span v-if="isLoadingPlan" class="loading loading-spinner loading-xs"></span>
+      <!-- 提示项（设计稿：单卡片 alert 列表） -->
+      <section class="panel p-0">
+        <div class="card-head">
+          <h2 class="section-title m-0">提示项</h2>
+          <button class="btn btn-ghost btn-sm" :disabled="isRechecking" @click="recheckAll">
+            <span v-if="isRechecking" class="loading loading-spinner loading-xs" />
             <span v-else class="material-symbols-outlined icon-sm">refresh</span>
             重新检查
           </button>
         </div>
-        <p class="text-xs text-fg-subtle mb-3">
-          对比「计划编制」保存基线时的任务/依赖/计划用量/资源/周转/措施等输入与当前数据。
-          仅在本页点击检查时更新，不监听业务变更。
-        </p>
-        <div v-if="isLoadingPlan && !planCheck" class="skeleton h-8 w-full rounded-lg"></div>
-        <div v-else-if="!planCheck" class="text-xs text-fg-subtle">
-          暂无检查结果，点击「重新检查」获取。
-        </div>
-        <div v-else-if="!planCheck.hasPlan" class="flex items-center gap-2 text-xs text-fg-subtle">
-          <span class="material-symbols-outlined icon-sm">info</span>
-          尚未保存施工计划基线，请先到「分析洞察 → 计划编制」保存基线。
-        </div>
-        <div v-else class="flex items-center gap-3 flex-wrap">
-          <span
-            class="text-xs font-medium px-2 py-0.5 rounded-full"
-            :class="planCheck.isStale ? 'bg-warning/15 text-warning' : 'bg-success/15 text-success'"
-          >
-            {{ planCheck.isStale ? '基线已过期' : '基线最新' }}
-          </span>
-          <span class="text-xs text-fg-subtle">
-            {{
-              planCheck.isStale
-                ? '任务/依赖/计划用量/资源/周转/措施等已变化，建议到「计划编制」重新预估并保存基线。'
-                : '基线输入与当前数据一致，无需重新保存。'
-            }}
-          </span>
-          <span v-if="planCheck.checkedAt" class="text-[11px] text-fg-muted font-mono ml-auto">
-            检查于 {{ new Date(planCheck.checkedAt).toLocaleString() }}
-          </span>
-        </div>
-      </section>
-
-      <!-- 标签/切片重叠体检 -->
-      <section class="panel p-4">
-        <div class="flex items-center justify-between gap-4 mb-1">
-          <div class="flex items-center gap-2">
-            <span class="material-symbols-outlined text-base-content icon-sm">donut_small</span>
-            <h2 class="text-sm font-semibold text-base-content">标签 / 切片配置体检</h2>
-          </div>
-          <button
-            class="btn btn-ghost btn-xs"
-            :disabled="isTagChartLoading"
-            @click="refreshTagChart"
-          >
-            <span v-if="isTagChartLoading" class="loading loading-spinner loading-xs"></span>
-            <span v-else class="material-symbols-outlined icon-sm">refresh</span>
-            重新检查
-          </button>
-        </div>
-        <p class="text-xs text-fg-subtle mb-3">
-          切片命中标签不再互斥校验，同一图表内不同切片标签重叠会让同一条用量被重复计入多个切片；
-          此处只读提示重叠配置，请按需调整切片标签（去「碳排放图表」编辑）。
-        </p>
-        <div v-if="tagChartItems.length === 0" class="text-xs text-success flex items-center gap-2">
-          <span class="material-symbols-outlined icon-sm">verified</span>
-          未发现切片标签重叠
-        </div>
-        <div v-else class="flex flex-col gap-2">
-          <div
-            v-for="(item, i) in tagChartItems"
-            :key="i"
-            class="rounded-field bg-warning/10 border border-warning/30 px-3 py-2 text-xs"
-          >
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="material-symbols-outlined icon-sm text-warning">warning</span>
-              <span class="font-medium text-base-content">图表「{{ item.chartName }}」</span>
-              <span class="text-fg-muted">切片：{{ item.sliceNames?.join('、') }}</span>
+        <div class="card-body flex flex-col gap-2.5">
+          <!-- 无使用记录资源 -->
+          <div v-if="checkedCount === 0" class="alert alert-soft">
+            <span class="material-symbols-outlined icon-md shrink-0 text-fg-muted">info</span>
+            <div class="min-w-0">
+              <p class="font-semibold text-sm text-base-content">暂无有使用记录的资源</p>
+              <p class="text-xs text-fg-muted mt-0.5">
+                录入日报或资源使用后，这里会自动出现体检结果。
+              </p>
             </div>
-            <p class="text-fg-muted mt-1">{{ item.detail }}</p>
           </div>
+
+          <template v-else>
+            <!-- 零碳因子 -->
+            <div v-if="zeroFactorItems.length > 0" class="alert alert-warning">
+              <span class="material-symbols-outlined icon-md shrink-0">warning</span>
+              <div class="min-w-0">
+                <p class="font-semibold text-sm text-base-content">
+                  {{ zeroFactorItems.length }} 个资源存在使用记录但碳排放因子为 0
+                </p>
+                <p class="text-xs text-fg-muted mt-0.5">
+                  {{ namesOf(zeroFactorItems) }} ——
+                  其用量不会计入任何碳排结果，请到资源管理补填。
+                </p>
+              </div>
+              <RouterLink
+                class="btn btn-ghost btn-sm ml-auto shrink-0"
+                :to="{
+                  name: '/project/[projectId]/settings/resources',
+                  params: { projectId: currentProjectId ?? 0 },
+                }"
+              >
+                去补填
+              </RouterLink>
+            </div>
+            <div v-else class="alert alert-success">
+              <span class="material-symbols-outlined icon-md shrink-0">check_circle</span>
+              <div class="min-w-0">
+                <p class="font-semibold text-sm text-base-content">碳排放因子检查通过</p>
+                <p class="text-xs text-fg-muted mt-0.5">
+                  所有有使用记录的资源均已设置碳排放因子。
+                </p>
+              </div>
+            </div>
+
+            <!-- 零单价 -->
+            <div v-if="zeroPriceItems.length > 0" class="alert alert-warning">
+              <span class="material-symbols-outlined icon-md shrink-0">payments</span>
+              <div class="min-w-0">
+                <p class="font-semibold text-sm text-base-content">
+                  {{ zeroPriceItems.length }} 个资源单价为 0
+                </p>
+                <p class="text-xs text-fg-muted mt-0.5">
+                  {{ namesOf(zeroPriceItems) }} —— 用量不计成本，如符合预期可忽略。
+                </p>
+              </div>
+            </div>
+
+            <!-- 碳汇（负因子） -->
+            <div v-if="negativeFactorItems.length > 0" class="alert alert-success">
+              <span class="material-symbols-outlined icon-md shrink-0">eco</span>
+              <div class="min-w-0">
+                <p class="font-semibold text-sm text-base-content">
+                  {{ negativeFactorItems.length }} 个碳汇资源（负因子）
+                </p>
+                <p class="text-xs text-fg-muted mt-0.5">
+                  {{ namesOf(negativeFactorItems) }} ——
+                  「低碳措施」的添加类措施依赖碳汇资源抵扣碳排放。
+                </p>
+              </div>
+            </div>
+
+            <!-- 计划基线 -->
+            <div v-if="isLoadingPlan && !planCheck" class="skeleton h-9 w-full rounded-lg" />
+            <div v-else-if="!planCheck" class="alert alert-soft">
+              <span class="material-symbols-outlined icon-md shrink-0 text-fg-muted">info</span>
+              <div class="min-w-0">
+                <p class="font-semibold text-sm text-base-content">基线检查暂不可用</p>
+                <p class="text-xs text-fg-muted mt-0.5">点击「重新检查」重试。</p>
+              </div>
+            </div>
+            <div v-else-if="!planCheck.hasPlan" class="alert alert-warning">
+              <span class="material-symbols-outlined icon-md shrink-0">schedule</span>
+              <div class="min-w-0">
+                <p class="font-semibold text-sm text-base-content">尚未保存施工计划基线</p>
+                <p class="text-xs text-fg-muted mt-0.5">
+                  请先到「分析洞察 → 计划编制」预估并保存基线。
+                </p>
+              </div>
+              <RouterLink
+                class="btn btn-ghost btn-sm ml-auto shrink-0"
+                :to="{
+                  name: '/project/[projectId]/insights/planning',
+                  params: { projectId: currentProjectId ?? 0 },
+                }"
+              >
+                前往
+              </RouterLink>
+            </div>
+            <div v-else-if="planCheck.isStale" class="alert alert-warning">
+              <span class="material-symbols-outlined icon-md shrink-0">schedule</span>
+              <div class="min-w-0">
+                <p class="font-semibold text-sm text-base-content">计划基线已过期</p>
+                <p class="text-xs text-fg-muted mt-0.5">
+                  任务/依赖/计划用量/资源/周转/措施等已变化，建议到「计划编制」重新预估并保存基线。
+                </p>
+              </div>
+              <RouterLink
+                class="btn btn-ghost btn-sm ml-auto shrink-0"
+                :to="{
+                  name: '/project/[projectId]/insights/planning',
+                  params: { projectId: currentProjectId ?? 0 },
+                }"
+              >
+                前往
+              </RouterLink>
+            </div>
+            <div v-else class="alert alert-success">
+              <span class="material-symbols-outlined icon-md shrink-0">check_circle</span>
+              <div class="min-w-0">
+                <p class="font-semibold text-sm text-base-content">计划基线最新</p>
+                <p class="text-xs text-fg-muted mt-0.5">
+                  基线输入与当前数据一致，无需重新保存。
+                </p>
+              </div>
+            </div>
+
+            <!-- 标签 / 切片重叠 -->
+            <div
+              v-if="!isTagChartLoading && tagChartItems.length === 0"
+              class="alert alert-success"
+            >
+              <span class="material-symbols-outlined icon-md shrink-0">check_circle</span>
+              <div class="min-w-0">
+                <p class="font-semibold text-sm text-base-content">切片标签无重叠</p>
+                <p class="text-xs text-fg-muted mt-0.5">
+                  未发现同一图表内切片标签重叠导致重复计入。
+                </p>
+              </div>
+            </div>
+            <template v-else>
+              <div v-for="(item, i) in tagChartItems" :key="i" class="alert alert-warning">
+                <span class="material-symbols-outlined icon-md shrink-0">warning</span>
+                <div class="min-w-0">
+                  <p class="font-semibold text-sm text-base-content">
+                    图表「{{ item.chartName }}」切片标签重叠
+                  </p>
+                  <p class="text-xs text-fg-muted mt-0.5">
+                    切片：{{ item.sliceNames?.join('、') }} —— {{ item.detail }}
+                  </p>
+                </div>
+              </div>
+            </template>
+
+            <!-- 数据新鲜度 -->
+            <div class="alert alert-info">
+              <span class="material-symbols-outlined icon-md shrink-0">database</span>
+              <div class="min-w-0">
+                <p class="font-semibold text-sm text-base-content">碳排放数据源新鲜度</p>
+                <p class="text-xs text-fg-muted mt-0.5">
+                  上次刷新 {{ fmtTime(snapshotInfo?.lastRefreshedAt) }} · 下次计划刷新
+                  {{ fmtTime(snapshotInfo?.nextRefreshDue) }}
+                </p>
+              </div>
+              <button
+                class="btn btn-ghost btn-sm ml-auto shrink-0"
+                :disabled="isRefreshing"
+                @click="handleManualRefresh"
+              >
+                <span v-if="isRefreshing" class="loading loading-spinner loading-xs" />
+                立即刷新
+              </button>
+            </div>
+          </template>
         </div>
       </section>
 
-      <!-- 物化视图数据新鲜度 -->
-      <section class="panel p-4">
-        <div class="flex items-center justify-between gap-4 mb-1">
-          <div class="flex items-center gap-2">
-            <span class="material-symbols-outlined text-base-content icon-sm">database</span>
-            <h2 class="text-sm font-semibold text-base-content">碳排放数据源新鲜度</h2>
-          </div>
-          <button
-            class="btn btn-ghost btn-xs"
-            :disabled="isRefreshing"
-            @click="handleManualRefresh"
-          >
-            <span v-if="isRefreshing" class="loading loading-spinner loading-xs"></span>
-            <span v-else class="material-symbols-outlined icon-sm">refresh</span>
-            立即刷新
-          </button>
+      <!-- warning：零碳因子（明细） -->
+      <section v-if="zeroFactorItems.length > 0" class="panel p-0">
+        <div class="card-head">
+          <h2 class="section-title m-0">零碳因子资源明细（{{ zeroFactorItems.length }}）</h2>
         </div>
-        <p class="text-xs text-fg-subtle mb-3">
-          图表 / 用量「合并标签」基于约 30
-          分钟自动刷新的物化视图；大量打标或录入后如需立即生效可手动刷新。
-        </p>
-        <div class="flex items-center gap-4 flex-wrap text-xs">
-          <span class="text-fg-muted"
-            >上次刷新：<span class="font-mono text-base-content">{{
-              fmtTime(snapshotInfo?.lastRefreshedAt)
-            }}</span></span
-          >
-          <span class="text-fg-muted"
-            >下次计划：<span class="font-mono text-base-content">{{
-              fmtTime(snapshotInfo?.nextRefreshDue)
-            }}</span></span
-          >
-        </div>
-      </section>
-
-      <!-- 无任何提示 -->
-      <ChartEmptyState
-        v-if="checkedCount === 0"
-        icon="task_alt"
-        title="暂无有使用记录的资源"
-        description="录入日报或资源使用后，这里会自动出现体检结果。"
-      />
-      <template v-else-if="zeroFactorItems.length === 0 && infoItems.length === 0">
-        <ChartEmptyState
-          icon="verified"
-          title="一切正常"
-          description="所有有使用记录的资源均已设置碳排放因子与单价。"
-        />
-      </template>
-
-      <!-- warning：零碳因子 -->
-      <section v-if="zeroFactorItems.length > 0" class="panel p-4">
-        <div class="flex items-center gap-2 mb-1">
-          <span class="material-symbols-outlined text-warning icon-sm">warning</span>
-          <h2 class="text-sm font-semibold text-base-content">
-            零碳因子资源（{{ zeroFactorItems.length }}）
-          </h2>
-        </div>
+        <div class="card-body">
         <p class="text-xs text-fg-subtle mb-3">
           以下资源存在使用记录但碳排放因子为 0——其用量<b>不会计入任何碳排结果</b>。
           若这符合项目的计算边界（如工种仅用于统计峰值人数、资源约束），可忽略；
@@ -329,14 +419,15 @@ const flagMeta: Record<DiagnosticFlag, { label: string; cls: string }> = {
             </tr>
           </tbody>
         </table>
+        </div>
       </section>
 
-      <!-- info：负因子 / 零单价 -->
-      <section v-if="infoItems.length > 0" class="panel p-4">
-        <div class="flex items-center gap-2 mb-1">
-          <span class="material-symbols-outlined text-info icon-sm">info</span>
-          <h2 class="text-sm font-semibold text-base-content">提示项（{{ infoItems.length }}）</h2>
+      <!-- info：负因子 / 零单价（明细） -->
+      <section v-if="infoItems.length > 0" class="panel p-0">
+        <div class="card-head">
+          <h2 class="section-title m-0">提示项明细（{{ infoItems.length }}）</h2>
         </div>
+        <div class="card-body">
         <p class="text-xs text-fg-subtle mb-3">
           负因子 = 碳汇资源（如光伏发电，「低碳措施」的添加类措施依赖它）；零单价 =
           用量不计成本。确认符合预期即可忽略。
@@ -375,6 +466,7 @@ const flagMeta: Record<DiagnosticFlag, { label: string; cls: string }> = {
             </tr>
           </tbody>
         </table>
+        </div>
       </section>
     </template>
   </div>

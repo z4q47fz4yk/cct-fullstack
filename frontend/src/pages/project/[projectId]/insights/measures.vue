@@ -6,6 +6,7 @@ import { BarChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import ChartEmptyState from '@/components/common/ChartEmptyState.vue'
+import StatCard from '@/components/common/StatCard.vue'
 import { usePlanApi } from '@/composables/usePlanApi'
 import { useProjectContext } from '@/composables/useProjectContext'
 import { FETCH_ALL_PAGE_SIZE } from '@/constants/pagination'
@@ -117,34 +118,31 @@ const chartOption = computed(() => ({
 <template>
   <div class="h-full flex flex-col gap-4 overflow-y-auto">
     <div class="grid grid-cols-3 gap-4">
-      <div class="panel px-4 py-3">
-        <p class="text-[11px] text-fg-subtle">预估节碳合计</p>
-        <p class="text-lg font-semibold font-num text-info">
-          {{ fmtNumber(totals.estimated / 1000, 2)
-          }}<span class="text-xs text-fg-subtle font-normal"> t</span>
-        </p>
-      </div>
-      <div class="panel px-4 py-3">
-        <p class="text-[11px] text-fg-subtle">实际节碳合计</p>
-        <p class="text-lg font-semibold font-num text-success">
-          {{ fmtNumber(totals.actual / 1000, 2)
-          }}<span class="text-xs text-fg-subtle font-normal"> t</span>
-        </p>
-      </div>
-      <div class="panel px-4 py-3">
-        <p class="text-[11px] text-fg-subtle">差额（实际 − 预估）</p>
-        <p
-          class="text-lg font-semibold font-num"
-          :class="totals.difference <= 0 ? 'text-success' : 'text-warning'"
-        >
-          {{ totals.difference > 0 ? '+' : '' }}{{ fmtNumber(totals.difference / 1000, 2) }}
-          <span class="text-xs text-fg-subtle font-normal"> t</span>
-        </p>
-      </div>
+      <StatCard
+        label="预估节碳合计"
+        :value="fmtNumber(totals.estimated / 1000, 2)"
+        unit="t"
+        icon="eco"
+        color="info"
+      />
+      <StatCard
+        label="实际节碳合计"
+        :value="fmtNumber(totals.actual / 1000, 2)"
+        unit="t"
+        icon="task_alt"
+        color="success"
+      />
+      <StatCard
+        label="差额（实际 − 预估）"
+        :value="`${totals.difference > 0 ? '+' : ''}${fmtNumber(totals.difference / 1000, 2)}`"
+        unit="t"
+        icon="swap_vert"
+        :color="totals.difference <= 0 ? 'success' : 'warning'"
+      />
     </div>
 
     <div class="panel p-4">
-      <h2 class="text-sm font-semibold text-base-content mb-3">措施清单</h2>
+      <h2 class="section-title">措施清单</h2>
       <div v-if="isLoadingMeasures" class="space-y-2">
         <div v-for="i in 3" :key="i" class="skeleton h-12 w-full rounded-lg"></div>
       </div>
@@ -205,7 +203,7 @@ const chartOption = computed(() => ({
     </div>
 
     <div class="panel p-4">
-      <h2 class="text-sm font-semibold text-base-content mb-2">预估 vs 实际节碳</h2>
+      <h2 class="section-title">预估 vs 实际节碳</h2>
       <div v-if="measures.length > 0" class="h-56">
         <VChart :option="chartOption" autoresize />
       </div>

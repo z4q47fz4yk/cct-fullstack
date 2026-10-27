@@ -29,12 +29,12 @@ import type {
 
 definePage({
   meta: {
-    title: '历史',
+    title: '历史批次',
     description: '查看全部手动/日报使用量批次',
     icon: 'history',
     showInNav: true,
     parentName: '/project/[projectId]/resource-usage',
-    navOrder: 1,
+    navOrder: 4,
   },
 })
 
