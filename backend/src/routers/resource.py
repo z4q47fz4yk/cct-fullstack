@@ -1,6 +1,7 @@
 from typing import Annotated, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import ColumnElement, and_, exists, or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import SQLModel, col, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -23,7 +24,11 @@ from src.schemas.resource import (
     ResourceWithConfigResp,
 )
 from src.schemas.resource_reuse_config import ResourceReuseConfigResp
-from src.schemas.tag import RESOURCE_CATEGORY_LABEL, TagResp
+from src.schemas.tag import (
+    RESOURCE_CATEGORY_CODE_BY_LABEL,
+    RESOURCE_CATEGORY_LABEL,
+    TagResp,
+)
 from src.utils.db_errors import is_unique_violation
 from src.utils.query import project_count_filter, project_filter
 
@@ -53,8 +58,9 @@ T = TypeVar("T", bound="SQLModel")
         "- ``constrained=true`` 仅返回项目内拥有日用量约束的资源；\n"
         "- ``reusable=true`` 仅返回项目内拥有周转复用配置的资源；\n"
         "- 二者互斥，同时为 true 返回 422；\n"
-        "- ``tag_ids=1&tag_ids=2`` 仅返回同时挂载所有指定标签的资源（AND 过滤，"
-        "仅看 ``resource_tag`` 直接挂载行，不含默认分类标签）。\n\n"
+        "- ``tag_ids=1&tag_ids=2`` 仅返回同时命中所有指定标签的资源（AND 过滤）。"
+        "命中口径与 ``include_tags`` 返回的 tags 一致：``resource_tag`` 直接挂载行，"
+        "以及按资源类别派生的分类默认标签（如材料类资源命中「材料」默认标签）。\n\n"
         "结果选项：\n"
         "- ``include_tags=true`` 每个资源附带其直接挂载标签，并按资源类别并入对应的"
         "分类默认标签（如材料类资源恒带「材料」默认标签），与用量物化视图按名称合并"
@@ -101,17 +107,44 @@ async def list_resources(
             col(ResourceReuseConfig.project_id) == project.id
         )
 
-    # tag_ids AND 子查询：仅看直接挂载（resource_tag 行）；默认分类标签不入此过滤。
-    def _tag_ids_and_subq(ids: list[int]) -> SelectOfScalar[int]:
-        return (
-            select(ResourceTag.resource_id)
-            .where(
-                col(ResourceTag.project_id) == project.id,
-                col(ResourceTag.tag_id).in_(ids),
+    # tag_ids AND 过滤：请求的每个标签都必须命中。命中口径与 include_tags 返回的
+    # tags 一致——
+    #   - 直接挂载：存在 resource_tag 关联行；或
+    #   - 分类默认标签（is_default）：不落 resource_tag 行，按资源类别派生命中
+    #     （如材料类资源恒带「材料」默认标签）。
+    # 不存在 / 不属于本项目的标签 id 无法命中任何资源（与既有行为一致）。
+    tag_filter: ColumnElement[bool] | None = None
+    if tag_ids:
+        tag_rows = (
+            await session.exec(
+                select(Tag).where(
+                    Tag.project_id == project.id,
+                    col(Tag.id).in_(tag_ids),
+                )
             )
-            .group_by(col(ResourceTag.resource_id))
-            .having(func.count(func.distinct(col(ResourceTag.tag_id))) == len(ids))
-        )
+        ).all()
+        # 默认标签（名称即分类显示名）→ 资源类别，用于按类别派生命中
+        default_tag_category: dict[int, ResourceCategory] = {}
+        for t in tag_rows:
+            if t.is_default and t.id is not None:
+                code = RESOURCE_CATEGORY_CODE_BY_LABEL.get(t.name)
+                if code is not None:
+                    default_tag_category[t.id] = ResourceCategory(code)
+
+        per_tag_conditions: list[ColumnElement[bool]] = []
+        for tid in dict.fromkeys(tag_ids):
+            matched: ColumnElement[bool] = exists(
+                select(ResourceTag.id).where(
+                    col(ResourceTag.project_id) == project.id,
+                    col(ResourceTag.resource_id) == col(Resource.id),
+                    col(ResourceTag.tag_id) == tid,
+                )
+            )
+            default_category = default_tag_category.get(tid)
+            if default_category is not None:
+                matched = or_(matched, col(Resource.category) == default_category)
+            per_tag_conditions.append(matched)
+        tag_filter = and_(*per_tag_conditions)
 
     def filter[T](s: SelectOfScalar[T]) -> SelectOfScalar[T]:
         if name is not None:
@@ -122,8 +155,8 @@ async def list_resources(
             s = s.filter(col(Resource.id).in_(_constrained_subq()))
         if reusable:
             s = s.filter(col(Resource.id).in_(_reusable_subq()))
-        if tag_ids:
-            s = s.filter(col(Resource.id).in_(_tag_ids_and_subq(tag_ids)))
+        if tag_filter is not None:
+            s = s.filter(tag_filter)
         return s
 
     stmt = filter(stmt)

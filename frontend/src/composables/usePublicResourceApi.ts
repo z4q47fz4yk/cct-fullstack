@@ -33,7 +33,9 @@ export function usePublicResources(options: UsePublicResourcesOptions) {
     listPublicResourcesQuery({
       query: {
         category: options.category.value,
-        name: options.searchQuery.value?.trim() || null,
+        // 与 useResourceApi 的 listResources 口径一致：空关键字传 undefined（不过滤），
+        // 否则后端按名称 LIKE 过滤
+        name: options.searchQuery.value?.trim() || undefined,
         page: options.page.value,
         per_page: options.pageSize.value,
       },

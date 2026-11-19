@@ -115,7 +115,8 @@ const isEmpty = computed(() => displayed.value.length === 0)
       <div class="w-12 h-12 rounded-full bg-base-300/60 flex items-center justify-center">
         <span class="material-symbols-outlined icon-xl text-fg-subtle">pie_chart</span>
       </div>
-      <p class="text-xs text-fg-muted">暂无碳排放数据</p>
+      <!-- 空态文案随当前指标（碳排放 / 成本）切换 -->
+      <p class="text-xs text-fg-muted">{{ isCost ? '暂无成本数据' : '暂无碳排放数据' }}</p>
       <p class="text-[11px] text-fg-subtle">录入资源使用量后自动展示</p>
     </div>
 

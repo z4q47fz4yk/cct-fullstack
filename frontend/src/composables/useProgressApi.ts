@@ -85,7 +85,9 @@ export function useProgressApi() {
     isLoadingTimeline,
     recordProgress,
     recordProgressBatch,
-    isRecording: createMutation.isLoading.value || batchMutation.isLoading.value,
+    // computed 保持响应式：此前直接展开 .value 会退化为 setup 时求值一次的普通布尔，
+    // 「提交中禁用」实际不生效
+    isRecording: computed(() => createMutation.isLoading.value || batchMutation.isLoading.value),
     refresh: projectSummariesQuery.refresh,
     refreshTimeline: timelineQuery.refresh,
   }

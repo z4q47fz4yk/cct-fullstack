@@ -85,5 +85,14 @@ export default defineConfig<DefaultTheme.Config & { appBase?: string }>({
     darkModeSwitchLabel: '主题',
     lightModeSwitchTitle: '切换到浅色模式',
     darkModeSwitchTitle: '切换到深色模式',
+
+    // 404 页本地化（默认主题 NotFound 的缺省文案是英文）
+    notFound: {
+      code: '404',
+      title: '页面未找到',
+      quote: '您访问的文档页面不存在或已被移动，请检查地址，或从下方入口返回文档首页。',
+      linkText: '返回文档首页',
+      linkLabel: '返回文档首页',
+    },
   },
 })

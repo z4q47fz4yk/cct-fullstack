@@ -1214,7 +1214,7 @@
           "resource"
         ],
         "summary": "Resource List",
-        "description": "列出资源条目，支持分页、按名称查找、按分类筛选、按资源约束/周转复用过滤、按标签 AND 过滤。\n\n过滤器：\n- ``constrained=true`` 仅返回项目内拥有日用量约束的资源；\n- ``reusable=true`` 仅返回项目内拥有周转复用配置的资源；\n- 二者互斥，同时为 true 返回 422；\n- ``tag_ids=1&tag_ids=2`` 仅返回同时挂载所有指定标签的资源（AND 过滤，仅看 ``resource_tag`` 直接挂载行，不含默认分类标签）。\n\n结果选项：\n- ``include_tags=true`` 每个资源附带其直接挂载标签，并按资源类别并入对应的分类默认标签（如材料类资源恒带「材料」默认标签），与用量物化视图按名称合并 tags 口径一致；\n- ``include_constraint=true`` 附带 ``constraint`` 字段；无约束则为 null；\n- ``include_reuse_config=true`` 附带 ``reuse_config`` 字段；无配置则为 null。",
+        "description": "列出资源条目，支持分页、按名称查找、按分类筛选、按资源约束/周转复用过滤、按标签 AND 过滤。\n\n过滤器：\n- ``constrained=true`` 仅返回项目内拥有日用量约束的资源；\n- ``reusable=true`` 仅返回项目内拥有周转复用配置的资源；\n- 二者互斥，同时为 true 返回 422；\n- ``tag_ids=1&tag_ids=2`` 仅返回同时命中所有指定标签的资源（AND 过滤）。命中口径与 ``include_tags`` 返回的 tags 一致：``resource_tag`` 直接挂载行，以及按资源类别派生的分类默认标签（如材料类资源命中「材料」默认标签）。\n\n结果选项：\n- ``include_tags=true`` 每个资源附带其直接挂载标签，并按资源类别并入对应的分类默认标签（如材料类资源恒带「材料」默认标签），与用量物化视图按名称合并 tags 口径一致；\n- ``include_constraint=true`` 附带 ``constraint`` 字段；无约束则为 null；\n- ``include_reuse_config=true`` 附带 ``reuse_config`` 字段；无配置则为 null。",
         "operationId": "list_resources",
         "parameters": [
           {
@@ -11654,14 +11654,18 @@
           },
           "unitPrice": {
             "type": "number",
+            "maximum": 1000000000.0,
+            "minimum": 0.0,
             "title": "Unitprice",
-            "description": "单价",
+            "description": "单价（元）；非负，上限 1e9",
             "default": 0.0
           },
           "carbonFactor": {
             "type": "number",
+            "maximum": 1000000000.0,
+            "minimum": -1000000000.0,
             "title": "Carbonfactor",
-            "description": "碳排放因子",
+            "description": "碳排放因子（kg/单位）；可为负（如光伏抵消），绝对值上限 1e9",
             "default": 0.0
           }
         },
@@ -11854,13 +11858,13 @@
           "unitPrice": {
             "type": "number",
             "title": "Unitprice",
-            "description": "单价",
+            "description": "单价（元）；非负",
             "default": 0.0
           },
           "carbonFactor": {
             "type": "number",
             "title": "Carbonfactor",
-            "description": "碳排放因子",
+            "description": "碳排放因子（kg/单位）；可为负（如光伏抵消）",
             "default": 0.0
           }
         },
@@ -12088,12 +12092,12 @@
           "unitPrice": {
             "type": "number",
             "title": "Unitprice",
-            "description": "单价"
+            "description": "单价（元）；非负"
           },
           "carbonFactor": {
             "type": "number",
             "title": "Carbonfactor",
-            "description": "碳排放因子"
+            "description": "碳排放因子（kg/单位）；可为负（如光伏抵消）"
           }
         },
         "type": "object",
@@ -12153,12 +12157,12 @@
           "unitPrice": {
             "type": "number",
             "title": "Unitprice",
-            "description": "单价"
+            "description": "单价（元）；非负"
           },
           "carbonFactor": {
             "type": "number",
             "title": "Carbonfactor",
-            "description": "碳排放因子"
+            "description": "碳排放因子（kg/单位）；可为负（如光伏抵消）"
           }
         },
         "type": "object",
@@ -12377,13 +12381,17 @@
           },
           "unitPrice": {
             "type": "number",
+            "maximum": 1000000000.0,
+            "minimum": 0.0,
             "title": "Unitprice",
-            "description": "单价"
+            "description": "单价（元）；非负，上限 1e9"
           },
           "carbonFactor": {
             "type": "number",
+            "maximum": 1000000000.0,
+            "minimum": -1000000000.0,
             "title": "Carbonfactor",
-            "description": "碳排放因子"
+            "description": "碳排放因子（kg/单位）；可为负（如光伏抵消），绝对值上限 1e9"
           }
         },
         "type": "object",
@@ -12756,12 +12764,12 @@
           "unitPrice": {
             "type": "number",
             "title": "Unitprice",
-            "description": "单价"
+            "description": "单价（元）；非负"
           },
           "carbonFactor": {
             "type": "number",
             "title": "Carbonfactor",
-            "description": "碳排放因子"
+            "description": "碳排放因子（kg/单位）；可为负（如光伏抵消）"
           },
           "tags": {
             "items": {

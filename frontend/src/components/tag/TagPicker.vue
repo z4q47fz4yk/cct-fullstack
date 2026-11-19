@@ -24,6 +24,11 @@ const keyword = computed(() => props.search ?? localSearch.value)
 const visibleTags = computed(() => filterTags(props.tags, keyword.value))
 const groups = computed(() => groupTags(visibleTags.value))
 
+// 区分两种空态：「项目确实没有可选标签」 vs「搜索无匹配」
+const noSearchMatch = computed(
+  () => props.tags.length > 0 && visibleTags.value.length === 0 && keyword.value.trim() !== '',
+)
+
 function isChecked(id: number): boolean {
   return props.modelValue.includes(id)
 }
@@ -52,8 +57,10 @@ function toggle(id: number) {
       />
     </label>
 
+    <!-- 空态：区分「项目确实没有标签」与「搜索无匹配」 -->
     <div v-if="groups.length === 0" class="text-center py-6 text-xs text-fg-subtle">
-      暂无标签，请先在「碳排放标签」中创建
+      <template v-if="noSearchMatch">未找到匹配的标签，请调整搜索关键词</template>
+      <template v-else>暂无标签，请先在「碳排放标签」中创建</template>
     </div>
 
     <div v-for="group in groups" :key="group.group" class="flex flex-col gap-0.5">

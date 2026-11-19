@@ -78,20 +78,32 @@ def _dataframe_to_markdown(
 
 
 def get_polars_df(filename: str, content: bytes) -> pl.DataFrame:
-    """读取文件为 Polars DataFrame"""
-    ext = Path(filename).suffix.lstrip(".")
+    """读取文件为 Polars DataFrame
+
+    读取失败（编码错误、非 Excel 内容改后缀、文件损坏等）统一抛
+    :class:`FileParseError`，由路由层转成 400 + 可读文案；
+    避免底库异常（如 zipfile.BadZipFile）漏成 500「服务器错误」。
+    """
+    ext = Path(filename).suffix.lstrip(".").lower()
     if ext == "csv":
         try:
             return pl.read_csv(io.BytesIO(content))
         except UnicodeDecodeError as e:
             raise FileParseError("确认文件编码为 UTF-8") from e
+        except (pl.exceptions.PolarsError, ValueError, OSError) as e:
+            raise FileParseError(f"无法解析 CSV 文件：{e}") from e
     elif ext in ("xlsx", "xls"):
         try:
             return pl.read_excel(io.BytesIO(content))
         except pl.exceptions.ComputeError as e:
             raise FileParseError("无法解析 excel 文件，确认文件未损坏") from e
+        except Exception as e:
+            # 非 zip 的伪 xlsx（BadZipFile）、openpyxl InvalidFileException 等
+            raise FileParseError(
+                f"无法解析 excel 文件（{filename}），请确认是未损坏的 .xlsx/.xls 文件"
+            ) from e
     else:
-        raise FileParseError("不能识别的文件格式")
+        raise FileParseError("不能识别的文件格式，请上传 .xlsx/.xls/.csv 文件")
 
 
 def parse_report(

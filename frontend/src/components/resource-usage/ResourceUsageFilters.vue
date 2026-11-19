@@ -44,6 +44,19 @@ function setFilter<K extends keyof ResourceUsageFilters>(key: K, val: ResourceUs
   filters.value = { ...filters.value, [key]: val }
 }
 
+// 批次 ID 输入：本地输入态 + 防抖生效（仅靠 change/blur 提交时，输入后不失焦不会触发过滤）
+const batchIdInput = ref(filters.value.batchId ?? '')
+const debouncedBatchId = useDebounceFn((v: string) => {
+  setFilter('batchId', v.trim() || null)
+}, 300)
+watch(batchIdInput, (v) => debouncedBatchId(v))
+
+/** 回车 / 失焦立即生效（取消待触发的防抖，避免重复请求） */
+function commitBatchId() {
+  debouncedBatchId.cancel()
+  setFilter('batchId', batchIdInput.value.trim() || null)
+}
+
 function toggleTask(id: number) {
   const cur = filters.value.taskIds ?? []
   const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
@@ -59,6 +72,7 @@ function toggleResource(id: number) {
 function reset() {
   filters.value = {}
   searchKeyword.value = ''
+  batchIdInput.value = ''
 }
 
 // SegmentControl 桥接：filters.usageType (含 null) ⇄ 非 null 的 'ALL' | UsageType
@@ -110,11 +124,12 @@ const selectedResourceIds = computed(() => filters.value.resourceIds ?? [])
       <fieldset class="fieldset">
         <label class="fieldset-label text-xs">批次 ID</label>
         <input
-          type="text"
-          :value="filters.batchId || ''"
+          v-model="batchIdInput"
+          type="search"
           class="input h-9 text-sm"
-          placeholder="输入批次 UUID（可选）"
-          @change="(e) => setFilter('batchId', (e.target as HTMLInputElement).value || null)"
+          placeholder="完整批次 ID（数字）或日报批次 UUID"
+          @keydown.enter.prevent="commitBatchId"
+          @change="commitBatchId"
         />
       </fieldset>
       <!-- 重置 -->

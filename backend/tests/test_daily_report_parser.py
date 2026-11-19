@@ -4,7 +4,9 @@
 from pathlib import Path
 
 import polars as pl
+import pytest
 
+from src.schemas.daily_report import FileParseError
 from src.utils.daily_report_parser import (
     ParsedItem,
     ParsedResult,
@@ -27,6 +29,23 @@ class TestDailyReportParser:
         content = get_csv_content()
         df = get_polars_df("test.csv", content)
         assert isinstance(df, pl.DataFrame)
+        assert len(df) > 0
+
+    def test_get_polars_df_fake_xlsx_raises_parse_error(self):
+        """伪 xlsx（非 zip 内容）→ FileParseError（E-7：曾漏成 500 服务器错误）"""
+        with pytest.raises(FileParseError):
+            get_polars_df("施工日报.xlsx", b"this is not a zip file")
+
+    def test_get_polars_df_unknown_extension(self):
+        """未知扩展名 → FileParseError，文案给出可上传的格式"""
+        with pytest.raises(FileParseError) as exc:
+            get_polars_df("施工日报.txt", b"whatever")
+        assert ".xlsx" in str(exc.value)
+
+    def test_get_polars_df_extension_case_insensitive(self):
+        """扩展名大小写不敏感（.CSV/.XLSX 同样可读）"""
+        content = get_csv_content()
+        df = get_polars_df("施工日报.CSV", content)
         assert len(df) > 0
 
     def test_parse_daily_report_returns_typed_result(self):

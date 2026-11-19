@@ -28,8 +28,28 @@ export interface ResourceUsageFilters {
   dateTo?: string | null
   taskIds?: number[] | null
   resourceIds?: number[] | null
+  /** 批次筛选原文：手动批次完整数字 ID / 日报批次 UUID / 其它（前端模糊匹配） */
   batchId?: string | null
   usageType?: ResourceUsageFilterUsageType
+}
+
+/** 批次筛选输入分类：纯数字 = 手动批次 ID；UUID = 日报批次 UUID；其它 = 前端模糊匹配 */
+type BatchFilterKind = 'none' | 'manual' | 'uuid' | 'fuzzy'
+
+const UUID_RE = /^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$/
+
+/** 手动批次 ID 解析：纯数字且在安全整数范围内才返回 number */
+function parseManualBatchId(raw: string): number | null {
+  if (!/^\d+$/.test(raw)) return null
+  const n = Number(raw)
+  return Number.isSafeInteger(n) ? n : null
+}
+
+function classifyBatchFilter(raw: string): BatchFilterKind {
+  if (!raw) return 'none'
+  if (parseManualBatchId(raw) !== null) return 'manual'
+  if (UUID_RE.test(raw)) return 'uuid'
+  return 'fuzzy'
 }
 
 export interface UseResourceUsageApiOptions {
@@ -87,6 +107,14 @@ export function useResourceUsageApi(options: UseResourceUsageApiOptions) {
     })
   }
 
+  // 批次筛选输入分类（E-2）：
+  // - 完整数字 ID → 后端 manual_batch_id 精确过滤（手动批次）
+  // - UUID → 后端 batch_id 精确过滤（日报批次）
+  // - 其它（部分 ID / 非法输入）→ 后端无模糊参数（batch_id 传非 UUID 会 422），
+  //   不带批次参数取回窗口数据后由前端按批次 id 包含匹配
+  const rawBatchFilter = computed(() => (filters.value.batchId ?? '').trim())
+  const batchFilterKind = computed<BatchFilterKind>(() => classifyBatchFilter(rawBatchFilter.value))
+
   // 查询资源使用量列表（include_tags 附带直接挂载的标签，供批次列表标签展示）
   // 后端该端点不分页：按筛选条件返回窗口内全部记录，前端再按 (usage-date, batch-id) 分块
   const { state, asyncStatus, error, refresh } = useQuery(() =>
@@ -97,7 +125,9 @@ export function useResourceUsageApi(options: UseResourceUsageApiOptions) {
         to_date: filters.value.dateTo || null,
         task_ids: filters.value.taskIds ?? null,
         resource_ids: filters.value.resourceIds ?? null,
-        batch_id: filters.value.batchId || null,
+        batch_id: batchFilterKind.value === 'uuid' ? rawBatchFilter.value : null,
+        manual_batch_id:
+          batchFilterKind.value === 'manual' ? parseManualBatchId(rawBatchFilter.value) : null,
         // 'ALL' / null / undefined 都映射为 null → 后端"返回全部"
         usageType:
           filters.value.usageType === 'ALL' || filters.value.usageType == null
@@ -108,8 +138,19 @@ export function useResourceUsageApi(options: UseResourceUsageApiOptions) {
     }),
   )
 
-  const usages = computed<ResourceUsageWithTagsResp[]>(() => state.value?.data?.items ?? [])
-  const totalCount = computed(() => state.value?.data?.total ?? 0)
+  const usages = computed<ResourceUsageWithTagsResp[]>(() => {
+    const items = state.value?.data?.items ?? []
+    if (batchFilterKind.value !== 'fuzzy') return items
+    // 前端模糊匹配：批次 id / UUID 均以字符串包含匹配
+    const raw = rawBatchFilter.value.toLowerCase()
+    return items.filter((u) => {
+      const id = getUsageBatchId(u)
+      return id !== null && String(id).toLowerCase().includes(raw)
+    })
+  })
+  const totalCount = computed(() =>
+    batchFilterKind.value === 'fuzzy' ? usages.value.length : (state.value?.data?.total ?? 0),
+  )
   const isLoading = computed(() => asyncStatus.value === 'loading')
 
   // 批量创建（手动录入的唯一创建路径）

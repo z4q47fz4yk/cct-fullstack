@@ -17,7 +17,7 @@ const { placeholder = '搜索资源名称或ID...', disabled = false } = defineP
     <label class="input w-full flex items-center gap-2">
       <span class="material-symbols-outlined text-neutral-content text-base"> search </span>
       <input
-        v-model.lazy="query"
+        v-model="query"
         type="text"
         :placeholder="placeholder"
         class="grow bg-transparent focus:outline-none"

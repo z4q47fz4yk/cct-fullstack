@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { TaskCreate, TaskUpdate, TaskResp } from '@/client'
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useForm } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/valibot'
 import { vTaskCreate, vTaskUpdate } from '@/client/valibot.gen'
@@ -30,7 +30,34 @@ const [name, nameAttrs] = defineField('name')
 const [duration, durationAttrs] = defineField('duration')
 const [code, codeAttrs] = defineField('code')
 const [description, descriptionAttrs] = defineField('description')
-const [completed, completedAttrs] = defineField('completed')
+
+// ──── 完成度：百分比输入 ↔ 0–1 小数 ─────────────────────────
+// 后端 completed 语义为 0–1 小数；表单按百分比（0–100，可含小数）录入、
+// 提交前转换，避免「输入 30 显示 3000%」的语义错位与浮点尾数。
+// 录入页「当日工序进度」同样按百分比（0–100）录入（经 progress 接口的 percent 字段提交），
+// 两处用户语义一致，仅本表单在提交 TaskCreate/TaskUpdate 前做百分比 → 小数转换。
+const completedPct = ref<string | number>('')
+
+/** 0–1 小数 → 百分比显示值（保留 2 位小数，消除浮点尾数，如 0.3 → 30） */
+function toPercentInput(completed: number | null | undefined): number {
+  return Math.round((completed ?? 0) * 10000) / 100
+}
+
+/** 百分比 → 0–1 小数（保留 4 位小数，消除浮点尾数，如 30 → 0.3） */
+function toCompletedValue(pct: number): number {
+  return Math.round(pct * 100) / 10000
+}
+
+/** 非法输入的可见提示（不只靠保存按钮禁用） */
+const completedPctError = computed(() => {
+  if (mode !== 'edit') return ''
+  const raw = completedPct.value
+  if (raw === '') return '请输入 0–100 之间的数字'
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return '请输入 0–100 之间的数字'
+  if (n < 0 || n > 100) return '完成度需在 0–100 之间'
+  return ''
+})
 
 // 编辑模式初始化
 watch(
@@ -38,6 +65,7 @@ watch(
   (data) => {
     if (data && mode === 'edit') {
       setValues(data)
+      completedPct.value = toPercentInput(data.completed)
     }
   },
   { immediate: true },
@@ -45,6 +73,11 @@ watch(
 
 // 提交处理
 const onSubmit = handleSubmit((values) => {
+  // 完成度按百分比录入（0–100），提交前转换为 0–1 小数
+  if (completedPctError.value) return
+  const pct = Number(completedPct.value)
+  const completed = toCompletedValue(pct)
+
   if (mode === 'edit' && initialData) {
     // 只发送变化的字段
     const updateData: TaskUpdate = {}
@@ -52,7 +85,7 @@ const onSubmit = handleSubmit((values) => {
     if (values.name !== initialData.name) updateData.name = values.name
     if (values.description !== initialData.description) updateData.description = values.description
     if (values.duration !== initialData.duration) updateData.duration = values.duration
-    if (values.completed !== initialData.completed) updateData.completed = values.completed
+    if (pct !== toPercentInput(initialData.completed)) updateData.completed = completed
     emit('submit', updateData)
   } else {
     emit('submit', values as TaskCreate)
@@ -62,6 +95,7 @@ const onSubmit = handleSubmit((values) => {
 // 取消
 function handleCancel() {
   resetForm()
+  completedPct.value = ''
   emit('cancel')
 }
 </script>
@@ -121,26 +155,25 @@ function handleCancel() {
         </span>
       </fieldset>
 
-      <!-- 完成度 - 仅在编辑模式显示 -->
+      <!-- 完成度 - 仅在编辑模式显示（按百分比 0–100 输入，提交时转 0–1 小数） -->
       <fieldset v-if="mode === 'edit'" class="fieldset">
         <legend class="fieldset-legend">完成度</legend>
         <label class="input w-full">
           <input
-            v-model.number="completed"
-            v-bind="completedAttrs"
+            v-model="completedPct"
             :disabled="isSubmitting"
             class="w-full"
-            :class="{ 'input-error': errors.completed }"
-            max="1"
+            :class="{ 'input-error': completedPctError }"
             min="0"
-            placeholder="0"
-            step="0.01"
+            max="100"
+            placeholder="0-100"
+            step="any"
             type="number"
           />
-          <span>{{ Math.round((completed || 0) * 100) }}%</span>
+          <span>%</span>
         </label>
-        <span v-if="errors.completed" class="text-xs text-error mt-1">
-          {{ errors.completed }}
+        <span v-if="completedPctError" class="text-xs text-error mt-1">
+          {{ completedPctError }}
         </span>
       </fieldset>
 
@@ -169,7 +202,11 @@ function handleCancel() {
       <button :disabled="isSubmitting" class="btn btn-ghost" type="button" @click="handleCancel">
         取消
       </button>
-      <button :disabled="isSubmitting || !meta.valid" class="btn btn-primary" type="submit">
+      <button
+        :disabled="isSubmitting || !meta.valid || !!completedPctError"
+        class="btn btn-primary"
+        type="submit"
+      >
         <span v-if="isSubmitting" class="loading loading-spinner loading-xs"></span>
         <span>{{ mode === 'edit' ? '保存' : '创建' }}</span>
       </button>

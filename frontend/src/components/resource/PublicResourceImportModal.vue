@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useDebounceFn } from '@vueuse/core'
 import type { ResourceCategory, ResourcePublicCopyReq } from '@/client/types.gen'
 import { categoryConfigMap } from '@/types/resource'
 import { usePublicResources } from '@/composables/usePublicResourceApi'
@@ -21,6 +22,12 @@ const emit = defineEmits<{
 // 内部筛选 / 分页状态
 const activeCategory = ref<ResourceCategory>('labor')
 const searchQuery = ref('')
+// 名称关键字：服务端 LIKE 包含匹配（与资源管理页搜索框一致，防抖 300ms 后生效）
+const debouncedSearch = ref('')
+const updateDebouncedSearch = useDebounceFn((v: string) => {
+  debouncedSearch.value = v
+}, 300)
+watch(searchQuery, (v) => updateDebouncedSearch(v))
 const currentPage = ref(1)
 const pageSize = ref(10)
 
@@ -29,13 +36,13 @@ const selectedIds = ref<Set<number>>(new Set())
 
 const { publicResources, totalCount, isLoading, error, refresh } = usePublicResources({
   category: activeCategory,
-  searchQuery,
+  searchQuery: debouncedSearch,
   page: currentPage,
   pageSize,
 })
 
 // 切换分类 / 搜索时回到第 1 页
-watch([activeCategory, searchQuery], () => {
+watch([activeCategory, debouncedSearch], () => {
   currentPage.value = 1
 })
 
@@ -44,6 +51,7 @@ watch(show, (v) => {
   if (!v) {
     selectedIds.value = new Set()
     searchQuery.value = ''
+    debouncedSearch.value = ''
     currentPage.value = 1
     activeCategory.value = 'labor'
   }

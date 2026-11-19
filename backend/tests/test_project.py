@@ -384,6 +384,47 @@ async def test_update_project_basic_attribute_validation(projects, client: Async
     assert resp.status_code == 422
 
 
+async def test_update_project_coordinates_must_be_paired(projects, client: AsyncClient):
+    """经纬度成对校验：只给一半数值（含另一半显式 null）→ 422。
+
+    成对提供（含同时 null）→ 200。
+    """
+    resp = await client.put("/project/100", json={"latitude": 30.0})
+    assert resp.status_code == 422
+
+    resp = await client.put("/project/100", json={"longitude": 120.0})
+    assert resp.status_code == 422
+
+    resp = await client.put("/project/100", json={"latitude": 30.0, "longitude": None})
+    assert resp.status_code == 422
+
+    resp = await client.put("/project/100", json={"latitude": 30.0, "longitude": 120.0})
+    assert resp.status_code == 200
+    assert resp.json()["latitude"] == 30.0
+    assert resp.json()["longitude"] == 120.0
+
+    resp = await client.put("/project/100", json={"latitude": None, "longitude": None})
+    assert resp.status_code == 200
+    assert resp.json()["latitude"] is None
+    assert resp.json()["longitude"] is None
+
+
+async def test_create_project_coordinates_must_be_paired(client: AsyncClient):
+    """创建项目时经纬度同样成对校验。"""
+    resp = await client.post("/project", json={"name": "坐标项目", "latitude": 30.0})
+    assert resp.status_code == 422
+
+    resp = await client.post("/project", json={"name": "坐标项目", "longitude": 120.0})
+    assert resp.status_code == 422
+
+    resp = await client.post(
+        "/project", json={"name": "坐标项目", "latitude": 30.0, "longitude": 120.0}
+    )
+    assert resp.status_code == 201
+    assert resp.json()["latitude"] == 30.0
+    assert resp.json()["longitude"] == 120.0
+
+
 @pytest.mark.parametrize(
     "payload, code",
     [
