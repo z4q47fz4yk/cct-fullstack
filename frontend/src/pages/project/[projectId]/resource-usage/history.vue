@@ -7,6 +7,7 @@
  */
 import { computed, ref } from 'vue'
 import ErrorState from '@/components/common/ErrorState.vue'
+import PageHead from '@/components/common/PageHead.vue'
 import ResourceUsageBatchList from '@/components/resource-usage/ResourceUsageBatchList.vue'
 import ResourceUsageBatchDetail from '@/components/resource-usage/ResourceUsageBatchDetail.vue'
 import ResourceUsageFilters from '@/components/resource-usage/ResourceUsageFilters.vue'
@@ -32,7 +33,8 @@ definePage({
     title: '历史批次',
     description: '查看全部手动/日报使用量批次',
     icon: 'history',
-    showInNav: true,
+    /** 设计稿导航无此入口（1106 html），不在侧边栏展示 */
+    showInNav: false,
     parentName: '/project/[projectId]/resource-usage',
     navOrder: 4,
   },
@@ -141,6 +143,8 @@ const taggingBatchInitialTags = computed<TagResp[]>(() => {
 </script>
 
 <template>
+  <PageHead title="活动数据历史" subtitle="查看历史录入批次与明细" />
+
   <ErrorState
     v-if="error"
     title="加载失败"

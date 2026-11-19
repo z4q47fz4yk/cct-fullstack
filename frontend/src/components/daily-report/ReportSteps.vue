@@ -14,7 +14,7 @@ const STEPS = ['导入日报', '核对资源', '分配工序'] as const
 </script>
 
 <template>
-  <div class="flex items-center justify-center mb-6 select-none" aria-label="导入进度">
+  <div class="flex items-center mb-4.5 select-none" aria-label="导入进度">
     <template v-for="(label, i) in STEPS" :key="label">
       <div class="flex items-center gap-2" :class="i + 1 === current ? 'text-base-content' : ''">
         <span

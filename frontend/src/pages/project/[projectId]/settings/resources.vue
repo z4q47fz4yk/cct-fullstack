@@ -370,23 +370,26 @@ function retryLoad() {
   <!-- 正常内容 -->
   <template v-else>
     <div class="space-y-4">
-      <!-- 操作工具条（设计稿 page-head toolbar：导入 / 添加资源） -->
-      <div class="flex items-center justify-end gap-2">
-        <button
-          class="btn btn-secondary gap-1 px-4"
-          :disabled="isLoading || isCopying"
-          @click="showImportModal = true"
-        >
-          <span class="material-symbols-outlined icon-sm">library_add</span>
-          从公共资源导入
-        </button>
-        <button class="btn btn-primary gap-1 px-5" :disabled="isLoading" @click="openAddModal">
-          <span class="material-symbols-outlined icon-sm">add</span>
-          添加资源
-        </button>
-      </div>
-
       <section class="panel p-0" aria-labelledby="list-title">
+        <!-- 资源列表头部（设计稿 view-info basedata：card-head 标题 + 导入/添加按钮组） -->
+        <div class="card-head">
+          <h2 id="list-title" class="section-title m-0">资源列表</h2>
+          <div class="toolbar">
+            <button
+              class="btn btn-outline gap-1"
+              :disabled="isLoading || isCopying"
+              @click="showImportModal = true"
+            >
+              <span class="material-symbols-outlined icon-sm">library_add</span>
+              从公共资源导入
+            </button>
+            <button class="btn btn-primary gap-1" :disabled="isLoading" @click="openAddModal">
+              <span class="material-symbols-outlined icon-sm">add</span>
+              添加资源
+            </button>
+          </div>
+        </div>
+
         <!-- 筛选器：名称 / 分类(全部=null) / 限制 / 可复用 / 标签(AND) -->
         <div class="m-4 flex flex-wrap items-center gap-x-4 gap-y-2">
           <fieldset class="fieldset w-56 shrink-0">

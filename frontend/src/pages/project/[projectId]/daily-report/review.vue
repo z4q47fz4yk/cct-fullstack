@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import ReviewTable from '@/components/daily-report/ReviewTable.vue'
 import ReportSteps from '@/components/daily-report/ReportSteps.vue'
+import PageHead from '@/components/common/PageHead.vue'
 import { useDailyReportStoreV2 } from '@/stores/report'
 
 definePage({
@@ -39,7 +40,8 @@ async function goToAllocate() {
 </script>
 
 <template>
-  <div class="p-6 pb-24 max-w-6xl mx-auto">
+  <div class="p-6 pb-24">
+    <PageHead title="核对资源" subtitle="确认解析出的资源数据" />
     <div v-if="store.mappingDecision.length === 0" class="text-center py-8">
       <div
         class="w-20 h-20 rounded-full bg-base-200 flex items-center justify-center mx-auto mb-4 border border-base-300"
@@ -72,21 +74,23 @@ async function goToAllocate() {
         </div>
       </div>
 
-      <ReviewTable></ReviewTable>
+      <div class="card">
+        <div class="card-head"><div class="card-title">解析数据核对</div></div>
+        <ReviewTable></ReviewTable>
 
-      <div v-if="store.error" class="alert alert-error alert-sm" role="alert">
-        <span class="material-symbols-outlined icon-sm">error</span>
-        <span>{{ store.error }}</span>
-      </div>
-
-      <div class="pt-4">
-        <button class="btn btn-primary btn-block" :disabled="store.isLoading" @click="goToAllocate">
-          <span v-if="store.isLoading" class="loading loading-spinner loading-xs"></span>
-          <span v-else class="material-symbols-outlined">arrow_forward</span>
-          <span>
-            {{ store.isLoading ? '处理中...' : '下一步：分配工序' }}
-          </span>
-        </button>
+        <div class="card-body border-t border-base-300 flex flex-col items-end gap-3">
+          <div v-if="store.error" class="alert alert-error alert-sm w-full" role="alert">
+            <span class="material-symbols-outlined icon-sm">error</span>
+            <span>{{ store.error }}</span>
+          </div>
+          <button class="btn btn-primary" :disabled="store.isLoading" @click="goToAllocate">
+            <span v-if="store.isLoading" class="loading loading-spinner loading-xs"></span>
+            <span v-else class="material-symbols-outlined">arrow_forward</span>
+            <span>
+              {{ store.isLoading ? '处理中...' : '提交 → 下一步：分配工序' }}
+            </span>
+          </button>
+        </div>
       </div>
     </div>
   </div>

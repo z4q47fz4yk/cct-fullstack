@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useQuery, useQueryCache } from '@pinia/colada'
 import LoadingState from '@/components/common/LoadingState.vue'
+import PageHead from '@/components/common/PageHead.vue'
 import SegmentControl, { type SegmentOption } from '@/components/common/SegmentControl.vue'
 import StatCard from '@/components/common/StatCard.vue'
 import { useProjectContext } from '@/composables/useProjectContext'
@@ -152,16 +153,24 @@ const flagMeta: Record<DiagnosticFlag, { label: string; cls: string }> = {
 
 <template>
   <div class="h-full flex flex-col gap-4 overflow-y-auto">
-    <!-- 用量口径切换 -->
-    <div class="flex items-center justify-end">
+    <!-- 页头（设计稿 view-diagnostics page-head：上次检查 + 重新检查） -->
+    <PageHead title="数据体检" subtitle="检查资源碳排放因子、单价与计划基线一致性">
       <SegmentControl v-model="usageType" :options="usageTypeOptions" aria-label="用量口径" />
-    </div>
+      <span class="text-xs text-fg-muted shrink-0">
+        上次检查：{{ fmtTime(snapshotInfo?.lastRefreshedAt) }}
+      </span>
+      <button class="btn btn-primary gap-1" :disabled="isRechecking" @click="recheckAll">
+        <span v-if="isRechecking" class="loading loading-spinner loading-xs" />
+        <span v-else class="material-symbols-outlined icon-sm">refresh</span>
+        重新检查
+      </button>
+    </PageHead>
 
     <LoadingState v-if="isLoading" variant="skeleton" />
 
     <template v-else>
       <!-- 概览（设计稿 4 统计卡：检查总数 / 零碳因子 / 零单价 / 计划基线） -->
-      <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div class="stat-row">
         <StatCard
           label="检查资源总数"
           :value="fmtNumber(checkedCount, 0)"
@@ -195,11 +204,6 @@ const flagMeta: Record<DiagnosticFlag, { label: string; cls: string }> = {
       <section class="panel p-0">
         <div class="card-head">
           <h2 class="section-title m-0">提示项</h2>
-          <button class="btn btn-ghost btn-sm" :disabled="isRechecking" @click="recheckAll">
-            <span v-if="isRechecking" class="loading loading-spinner loading-xs" />
-            <span v-else class="material-symbols-outlined icon-sm">refresh</span>
-            重新检查
-          </button>
         </div>
         <div class="card-body flex flex-col gap-2.5">
           <!-- 无使用记录资源 -->

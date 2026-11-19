@@ -10,6 +10,7 @@ import ChartCard from '@/components/chart/ChartCard.vue'
 import ChartEditorDrawer from '@/components/chart/ChartEditorDrawer.vue'
 import ErrorState from '@/components/common/ErrorState.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
+import PageHead from '@/components/common/PageHead.vue'
 
 definePage({
   meta: {
@@ -125,24 +126,13 @@ async function handleDelete(chart: ChartResp) {
   />
 
   <div v-else class="space-y-4">
-    <!-- 操作工具条（设计稿 page-head toolbar：新建图表） -->
-    <div class="flex items-center justify-end">
-      <button class="btn btn-primary gap-1 px-5" :disabled="isLoading" @click="openCreate">
+    <!-- 页头（设计稿 view-charts page-head：新建图表） -->
+    <PageHead title="碳排放图表" subtitle="按标签切片配置饼图，展示碳排/成本分布">
+      <button class="btn btn-primary gap-1" :disabled="isLoading" @click="openCreate">
         <span class="material-symbols-outlined icon-sm">add</span>
         新建图表
       </button>
-    </div>
-
-    <!-- 说明 -->
-    <section class="panel px-4 py-3 flex items-center gap-3">
-      <span class="material-symbols-outlined text-violet-400 icon-md shrink-0">pie_chart</span>
-      <p class="text-xs text-fg-muted leading-relaxed">
-        每个切片 =
-        若干标签组：同组标签需同时命中（且），组间命中任一（或）；支持「资源类别」默认标签
-        （人工/机械/材料/运输/其他）按资源类别命中。
-        切片重叠时同一用量会重复计入，可在「数据体检」检查。
-      </p>
-    </section>
+    </PageHead>
 
     <!-- 卡片网格（设计稿 grid3） -->
     <div v-if="isLoading" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

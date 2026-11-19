@@ -6,6 +6,7 @@ import { BarChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import ChartEmptyState from '@/components/common/ChartEmptyState.vue'
+import PageHead from '@/components/common/PageHead.vue'
 import StatCard from '@/components/common/StatCard.vue'
 import { usePlanApi } from '@/composables/usePlanApi'
 import { useProjectContext } from '@/composables/useProjectContext'
@@ -22,8 +23,7 @@ use([BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]
 definePage({
   meta: {
     title: '低碳措施',
-    description:
-      '添加类（光伏等负碳因子资源）即时抵扣 · 替换类按资源流逐日计算 · 状态在施工阶段维护',
+    description: '减碳措施的预估与实际节碳',
     icon: 'energy_savings_leaf',
     showInNav: true,
     parentName: '/project/[projectId]/insights',
@@ -117,7 +117,17 @@ const chartOption = computed(() => ({
 
 <template>
   <div class="h-full flex flex-col gap-4 overflow-y-auto">
-    <div class="grid grid-cols-3 gap-4">
+    <PageHead title="低碳措施" subtitle="光伏、设备替换等减碳措施的预估与实际节碳">
+      <RouterLink
+        :to="`/project/${currentProjectId}/insights/planning`"
+        class="btn btn-primary btn-sm"
+      >
+        <span class="material-symbols-outlined icon-sm">add</span>
+        添加措施
+      </RouterLink>
+    </PageHead>
+
+    <div class="stat-row">
       <StatCard
         label="预估节碳合计"
         :value="fmtNumber(totals.estimated / 1000, 2)"
@@ -150,7 +160,6 @@ const chartOption = computed(() => ({
         v-else-if="measures.length === 0"
         icon="energy_savings_leaf"
         title="暂无低碳措施"
-        description="请到「计划编制」页添加光伏或设备替换措施"
       />
       <div v-else class="overflow-x-auto">
         <table class="table table-sm">
@@ -162,6 +171,7 @@ const chartOption = computed(() => ({
               <th class="table-num">预估节碳 t</th>
               <th class="table-num">实际节碳 t</th>
               <th class="table-num">差额 t</th>
+              <th class="w-[120px] text-right">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -195,6 +205,14 @@ const chartOption = computed(() => ({
                 :class="m.savingDifference <= 0 ? 'text-success' : 'text-warning'"
               >
                 {{ m.savingDifference > 0 ? '+' : '' }}{{ fmtNumber(m.savingDifference / 1000, 2) }}
+              </td>
+              <td class="text-right whitespace-nowrap">
+                <RouterLink
+                  :to="`/project/${currentProjectId}/insights/planning`"
+                  class="action-text"
+                >
+                  编辑
+                </RouterLink>
               </td>
             </tr>
           </tbody>

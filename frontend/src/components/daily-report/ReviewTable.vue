@@ -106,7 +106,7 @@ function ignoreResource(item: ResourceMappingCreateItem) {
 </script>
 
 <template>
-  <div class="panel p-0 h-full overflow-hidden">
+  <div class="h-full overflow-hidden">
     <div class="h-full overflow-x-auto">
       <table class="table h-full table-pin-rows">
         <thead>
@@ -118,7 +118,7 @@ function ignoreResource(item: ResourceMappingCreateItem) {
             <th class="table-num">资源用量</th>
             <th>单位</th>
             <th>状态</th>
-            <th>操作</th>
+            <th class="w-[120px]">操作</th>
           </tr>
         </thead>
         <tbody class="overflow-y-auto">
@@ -170,10 +170,12 @@ function ignoreResource(item: ResourceMappingCreateItem) {
               <div v-else class="flex items-center justify-end gap-2">
                 <span class="font-num">{{ item.quantity }}</span>
                 <button
-                  class="btn btn-ghost btn-circle btn-sm"
+                  type="button"
+                  class="action-text"
+                  title="编辑数量"
                   @click="addOrReturnChangingItem(item)"
                 >
-                  <span class="material-symbols-outlined icon-sm text-fg-muted"> edit</span>
+                  <span class="material-symbols-outlined icon-sm">edit</span>
                 </button>
               </div>
             </td>
@@ -208,25 +210,28 @@ function ignoreResource(item: ResourceMappingCreateItem) {
 
             <!--actions-->
             <td class="">
-              <div class="grid grid-cols-3 gap-2">
+              <div class="flex items-center gap-3">
                 <button
                   v-if="availableActions.get(item.resourceName)!.includes('CREATE_NEW')"
-                  class="btn btn-xs btn-outline btn-secondary"
+                  type="button"
+                  class="action-text"
                   @click="addNewResource(item)"
                 >
                   {{ item.action == 'CREATE_NEW' ? '修改' : '新建' }}
                 </button>
                 <button
                   v-if="availableActions.get(item.resourceName)!.includes('SKIP')"
+                  type="button"
+                  class="action-text action-delete"
                   :disabled="item.action == 'SKIP'"
-                  class="btn btn-xs btn-outline col-start-2"
                   @click="ignoreResource(item)"
                 >
                   忽略
                 </button>
                 <button
+                  type="button"
+                  class="action-text"
                   :disabled="!store.mappingChanges.find((i) => i.resourceName == item.resourceName)"
-                  class="btn btn-xs btn-ghost col-start-3"
                   @click="
                     () =>
                       (store.mappingChanges = store.mappingChanges.filter(
@@ -234,7 +239,7 @@ function ignoreResource(item: ResourceMappingCreateItem) {
                       ))
                   "
                 >
-                  <span class="material-symbols-outlined icon-sm">replay</span>
+                  撤销
                 </button>
               </div>
             </td>

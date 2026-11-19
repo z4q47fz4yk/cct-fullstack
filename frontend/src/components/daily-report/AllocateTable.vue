@@ -115,14 +115,14 @@ defineEmits<{
 
 <template>
   <!--资源分配列表-->
-  <div v-if="taskId" class="panel p-0 h-full overflow-hidden">
+  <div v-if="taskId" class="h-full overflow-hidden">
     <div class="h-full overflow-x-auto">
       <table class="table table-pin-rows h-full">
         <thead>
           <tr>
             <th>资源名称</th>
             <th class="table-num">分配量</th>
-            <th>操作</th>
+            <th class="w-[120px]">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -167,15 +167,17 @@ defineEmits<{
               </div>
             </td>
             <td>
-              <div class="flex gap-2">
+              <div class="flex items-center gap-3">
                 <button
-                  class="btn btn-xs btn-outline"
+                  type="button"
+                  class="action-text"
                   @click="() => (allocatedQuantity[item.resourceName] = 0)"
                 >
                   清零
                 </button>
                 <button
-                  class="btn btn-xs btn-outline btn-secondary"
+                  type="button"
+                  class="action-text"
                   @click="() => (allocatedQuantity[item.resourceName] = item.quantity)"
                 >
                   全量

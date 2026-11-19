@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import { useInsightsStore } from '@/stores/insights'
+import PageHead from '@/components/common/PageHead.vue'
 import GanttChart, { type GanttChartItem } from '@/components/common/GanttChart.vue'
 import ChartEmptyState from '@/components/common/ChartEmptyState.vue'
 import StatCard from '@/components/common/StatCard.vue'
@@ -44,21 +44,6 @@ definePage({
 const store = useInsightsStore()
 const { confirmWarn, confirmDanger } = useConfirm()
 const { currentProjectId } = useProjectContext()
-const router = useRouter()
-const route = useRoute()
-
-function handlePlanEntry() {
-  if (!store.selectedSolutionId) return
-  const projectId = (route.params as { projectId?: string }).projectId ?? ''
-  router.push({
-    name: '/project/[projectId]/insights/planning',
-    params: { projectId },
-    query: {
-      runId: store.currentRunId ?? '',
-      solutionId: String(store.selectedSolutionId),
-    },
-  })
-}
 
 // ──── 运行对比（选择两个历史运行，自动合并解集） ──────────────
 
@@ -201,6 +186,20 @@ watch(pastRunSelect, (id) => {
   loadPastRun(id)
   pastRunSelect.value = ''
 })
+
+/** 「历史运行」工具条入口：空闲态聚焦历史选择器，否则直接载入最近一次已完成运行 */
+const pastRunSelectEl = ref<HTMLSelectElement | null>(null)
+
+function handleHistoryEntry() {
+  if (pastRunSelectEl.value) {
+    pastRunSelectEl.value.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    pastRunSelectEl.value.focus()
+    return
+  }
+  if (!store.isCompleted && latestSuccessRunId.value) {
+    loadPastRun(latestSuccessRunId.value)
+  }
+}
 
 const RUN_STATUS_TEXT: Record<RunStatusEnum, string> = {
   PENDING: '排队中',
@@ -433,27 +432,32 @@ const tableSelectedId = computed<number | null>({
 </script>
 
 <template>
-  <!-- 操作工具条（设计稿 page-head toolbar：编制计划 / 重新开始 / 运行状态） -->
-  <div class="flex items-center justify-end gap-2 mb-4 flex-wrap min-h-9">
-    <button
-      v-if="store.isCompleted && store.selectedSolutionId"
-      class="btn btn-primary"
-      @click="handlePlanEntry"
-    >
-      <span class="material-symbols-outlined icon-sm">edit_calendar</span>
-      编制计划
-    </button>
-    <button
-      v-if="store.isCompleted || store.isFailed"
-      class="btn btn-ghost"
-      @click="handleResetOptimization"
-    >
-      <span class="material-symbols-outlined icon-sm">refresh</span>
-      重新开始
-    </button>
+  <!-- 页头工具条（设计稿 page-head toolbar） -->
+  <PageHead title="多目标优化" subtitle="在工期、成本、碳排放之间寻找帕累托最优解">
+    <RunStatusBar
+      v-if="store.currentRunId && !store.isCompleted && !store.isFailed"
+      :run-id="store.currentRunId"
+    />
 
-    <RunStatusBar v-else-if="store.currentRunId" :run-id="store.currentRunId" />
-  </div>
+    <button
+      v-if="successRuns.length > 0 && !store.isCompleted"
+      class="btn btn-outline btn-sm"
+      @click="handleHistoryEntry"
+    >
+      <span class="material-symbols-outlined icon-sm">history</span>
+      历史运行
+    </button>
+    <button
+      v-if="!store.isCompleted && !store.hasActiveRun"
+      class="btn btn-primary btn-sm"
+      :disabled="!runName.trim()"
+      :title="runName.trim() ? '' : '请先在下方填写运行名称'"
+      @click="handleStartOptimization"
+    >
+      <span class="material-symbols-outlined icon-sm">play_arrow</span>
+      开始优化
+    </button>
+  </PageHead>
 
   <div class="space-y-4">
     <!-- 中央 CTA（运行未完成时显示；完成后让位给图表） -->
@@ -518,20 +522,9 @@ const tableSelectedId = computed<number | null>({
         </div>
       </div>
 
-      <!-- 4. idle：中央 CTA + 运行名称 + 配置摘要 -->
+      <!-- 4. idle：运行名称 + 配置摘要（设计稿 toolbar：开始优化） -->
       <div v-else class="panel indigo p-4">
         <div class="flex flex-col items-center text-center gap-4">
-          <div
-            class="w-16 h-16 rounded-2xl flex items-center justify-center bg-primary/15 shrink-0"
-          >
-            <span class="material-symbols-outlined icon-2xl text-primary">auto_awesome</span>
-          </div>
-          <div class="space-y-1">
-            <h2 class="text-xl font-semibold text-base-content">NSGA-II 多目标优化</h2>
-            <p class="text-sm text-fg-muted">
-              基于当前资源约束，在工期、成本、碳排放三者之间寻找帕累托最优解
-            </p>
-          </div>
           <!-- 配置摘要 + 内联参数修改入口 -->
           <div class="w-full text-xs font-mono mt-1" :class="showConfig ? 'max-w-xl' : 'max-w-sm'">
             <div class="flex items-center justify-between gap-3">
@@ -583,7 +576,7 @@ const tableSelectedId = computed<number | null>({
               @keydown.enter="handleStartOptimization"
             />
             <span v-if="runNameTouched && !runName.trim()" class="mt-1 text-xs text-error">
-              请输入本次运行的名称（用于历史记录与运行对比辨认）
+              请输入运行名称
             </span>
           </div>
 
@@ -612,8 +605,8 @@ const tableSelectedId = computed<number | null>({
             class="w-full max-w-sm border-t border-base-content/10 pt-4"
           >
             <div class="flex items-center gap-2">
-              <span class="text-sm text-fg-muted shrink-0">或查看历史运行</span>
               <select
+                ref="pastRunSelectEl"
                 v-model="pastRunSelect"
                 class="select select-sm flex-1"
                 aria-label="选择历史运行"
@@ -638,31 +631,6 @@ const tableSelectedId = computed<number | null>({
 
     <!-- 完成后：单一 panel + 发丝线分割（运行对比 / 图表 / 解集表格） -->
     <template v-else>
-      <!-- 最优解概览（设计稿 3 统计卡） -->
-      <div v-if="bestStats" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-        <StatCard
-          label="最优工期"
-          :value="fmtNumber(bestStats.duration, 1)"
-          unit="天"
-          icon="schedule"
-          color="primary"
-        />
-        <StatCard
-          label="最优成本"
-          :value="fmtNumber(bestStats.cost, 1)"
-          unit="元"
-          icon="payments"
-          color="warning"
-        />
-        <StatCard
-          label="最少碳排"
-          :value="fmtNumber(bestStats.emission, 2)"
-          unit="tCO₂e"
-          icon="eco"
-          color="success"
-        />
-      </div>
-
       <div class="panel panel-grid grid-cols-12 overflow-hidden">
         <!-- ① 运行对比选择器 -->
         <section
@@ -672,9 +640,6 @@ const tableSelectedId = computed<number | null>({
           <div class="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <h2 class="section-title">运行对比</h2>
-              <p class="text-xs text-fg-muted">
-                勾选两个已完成运行，自动合并解集并在图表中叠加对比
-              </p>
             </div>
             <p class="text-xs font-mono text-fg-subtle text-right font-num">
               {{ summaryLine }}
@@ -771,6 +736,31 @@ const tableSelectedId = computed<number | null>({
             />
           </div>
         </section>
+      </div>
+
+      <!-- 最优解概览（设计稿底部 3 统计卡） -->
+      <div v-if="bestStats" class="stat-row">
+        <StatCard
+          label="最优工期"
+          :value="fmtNumber(bestStats.duration, 1)"
+          unit="天"
+          icon="schedule"
+          color="primary"
+        />
+        <StatCard
+          label="最优成本"
+          :value="fmtWanYuan(bestStats.cost)"
+          unit="万元"
+          icon="payments"
+          color="warning"
+        />
+        <StatCard
+          label="最少碳排"
+          :value="fmtNumber(bestStats.emission, 2)"
+          unit="t"
+          icon="eco"
+          color="success"
+        />
       </div>
     </template>
   </div>

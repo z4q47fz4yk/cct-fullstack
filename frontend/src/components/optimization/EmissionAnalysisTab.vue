@@ -216,7 +216,7 @@ watch(isNotFound, async (notFound) => {
 
   <div v-else class="space-y-4">
     <!-- Row 1: 4 张概览卡片（StatCard + glow） -->
-    <div class="grid grid-cols-4 gap-4 anim-fade-up">
+    <div class="stat-row anim-fade-up">
       <StatCard
         label="累计碳排放"
         :value="formattedEmission()"
@@ -252,7 +252,7 @@ watch(isNotFound, async (notFound) => {
     </div>
 
     <!-- Row 1.5: 成本与水电卡片 -->
-    <div class="grid grid-cols-4 gap-4">
+    <div class="stat-row">
       <StatCard
         label="累计成本（名义）"
         :value="fmtNumber(totalCost / 10000, 2)"
@@ -310,8 +310,7 @@ watch(isNotFound, async (notFound) => {
 
     <!-- Row 2.5: 月度成本 -->
     <div class="panel p-4">
-      <h2 class="text-sm font-semibold text-base-content mb-1">月度成本（名义）</h2>
-      <p class="text-xs text-fg-subtle mb-3">实际用量 × 有效单价，按自然月聚合</p>
+      <h2 class="section-title">月度成本（名义）</h2>
       <div v-if="byMonthCost.length > 0" class="h-48">
         <VChart :option="monthlyCostOption" autoresize />
       </div>

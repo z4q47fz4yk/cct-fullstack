@@ -23,7 +23,7 @@ const tableHeaders = [
   { key: 'description', label: '任务说明', width: 'flex-1' },
   { key: 'duration', label: '工期(天)', width: 'w-20', num: true },
   { key: 'predecessors', label: '前置任务', width: 'w-44' },
-  { key: 'actions', label: '操作', width: 'w-36' },
+  { key: 'actions', label: '操作', width: 'w-[132px]' },
 ]
 
 /** 前置任务列：每行最多展示的编码 chip 数 */
@@ -159,21 +159,27 @@ function truncateDescription(desc: string, maxLength: number = 50): string {
             <td>
               <div class="flex items-center gap-1">
                 <button
-                  class="btn btn-ghost btn-sm btn-square"
+                  type="button"
+                  class="action-text"
                   title="编辑"
                   @click="emit('edit', task)"
                 >
-                  <span class="material-symbols-outlined icon-sm">edit</span>
+                  编辑
                 </button>
                 <button
-                  class="btn btn-ghost btn-sm btn-square text-error hover:bg-error/10"
+                  type="button"
+                  class="action-text action-delete"
                   :disabled="deletingId === task.id"
                   :aria-label="deletingId === task.id ? '正在删除...' : `删除任务 ${task.name}`"
                   title="删除"
                   @click="emit('delete', task)"
                 >
-                  <span v-if="deletingId === task.id" class="loading loading-spinner loading-xs" />
-                  <span v-else class="material-symbols-outlined icon-sm">delete</span>
+                  <span
+                    v-if="deletingId === task.id"
+                    class="loading loading-spinner loading-xs"
+                    aria-hidden="true"
+                  />
+                  删除
                 </button>
               </div>
             </td>

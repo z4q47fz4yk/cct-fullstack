@@ -27,9 +27,25 @@ const expandedMenu = computed(() => {
 
 <template>
   <aside class="sidebar" :class="{ 'is-collapsed': collapsed }">
-    <!-- 品牌标识（设计稿：渐变 mark + 平台名 + 副标语） -->
+    <!-- 品牌标识（设计稿内嵌 SVG：CCT 字母 + 建筑轮廓，不依赖外部图片） -->
     <div class="logo">
-      <div class="mark">C</div>
+      <svg
+        class="platform-logo"
+        viewBox="0 0 96 96"
+        role="img"
+        aria-label="CCT 施工多目标优化平台"
+      >
+        <rect x="3" y="3" width="90" height="90" rx="18" fill="#12264A" stroke="#285A89" stroke-width="2" />
+        <path
+          d="M22 43V25l17-9 17 9v18M56 43V30l17 8v5M30 28v5m9-9v9m9-5v5"
+          fill="none"
+          stroke="#22D3EE"
+          stroke-width="4"
+          stroke-linejoin="round"
+        />
+        <path d="M17 45h61" stroke="#409EFF" stroke-width="3" />
+        <text x="48" y="76" text-anchor="middle" fill="#FFFFFF" font-family="Arial,Helvetica,sans-serif" font-size="30" font-weight="700" letter-spacing="1">CCT</text>
+      </svg>
       <div class="logo-text">
         <div class="logo-title">CCT 施工多目标优化</div>
         <div class="logo-sub">工期 · 成本 · 碳排放</div>
@@ -98,7 +114,6 @@ const expandedMenu = computed(() => {
                     class="submenu-item"
                     :class="{ active: route.matched.some((r) => r.name === child.name) }"
                   >
-                    <span class="submenu-dot" />
                     <span class="truncate">{{ child.label }}</span>
                   </RouterLink>
                 </template>
@@ -111,7 +126,6 @@ const expandedMenu = computed(() => {
                 class="submenu-item"
                 :class="{ active: route.matched.some((r) => r.name === child.name) }"
               >
-                <span class="submenu-dot" />
                 <span class="truncate">{{ child.label }}</span>
               </RouterLink>
             </div>
@@ -163,18 +177,11 @@ const expandedMenu = computed(() => {
   border-bottom: 1px solid var(--color-sidebar-border);
   flex-shrink: 0;
 }
-.mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  background: linear-gradient(135deg, #22d3ee, #2563eb);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 700;
-  font-size: 15px;
-  flex: 0 0 34px;
+.platform-logo {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: block;
 }
 .logo-text {
   min-width: 0;
@@ -305,23 +312,23 @@ const expandedMenu = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding-left: 14px;
 }
 .stage-label {
-  padding: 10px 12px 4px;
+  padding: 10px 12px 4px 40px;
   font-size: 10.5px;
   font-weight: 500;
   letter-spacing: 0.08em;
   color: #5f75b5;
   user-select: none;
 }
+/* 设计稿：二级菜单无圆点，文字与顶级菜单文字左对齐（padding-left: 40px） */
 .submenu-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 12px;
-  border-radius: 7px;
+  padding: 8px 12px 8px 40px;
+  border-radius: 8px;
   font-size: 13px;
+  font-weight: 400;
   color: var(--color-sidebar-text-dim);
   transition:
     background-color 0.15s,
@@ -334,14 +341,6 @@ const expandedMenu = computed(() => {
 .submenu-item.active {
   color: var(--color-sidebar-active);
   font-weight: 500;
-}
-.submenu-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.7;
-  flex-shrink: 0;
 }
 
 /* ── 底部折叠按钮 ── */

@@ -67,11 +67,12 @@ function sliceValue(name: string): number {
         </p>
       </div>
       <button
-        class="btn btn-ghost btn-xs btn-square shrink-0"
+        type="button"
+        class="action-text shrink-0"
         title="编辑图表"
         @click="emit('edit', chart)"
       >
-        <span class="material-symbols-outlined icon-sm text-fg-subtle">edit</span>
+        编辑
       </button>
     </div>
 
@@ -114,12 +115,12 @@ function sliceValue(name: string): number {
         >{{ boundSlices.length }} 个切片 · 每组标签同组且、组间或</span
       >
       <div class="flex items-center gap-2">
-        <button class="btn btn-ghost btn-xs" @click="emit('edit', chart)">
-          <span class="material-symbols-outlined icon-sm">edit</span>
-          编辑
-        </button>
-        <button class="btn btn-ghost btn-xs text-error" @click="emit('delete', chart)">
-          <span class="material-symbols-outlined icon-sm">delete</span>
+        <button
+          type="button"
+          class="action-text action-delete"
+          title="删除图表"
+          @click="emit('delete', chart)"
+        >
           删除
         </button>
       </div>

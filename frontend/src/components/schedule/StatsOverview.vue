@@ -9,7 +9,8 @@ const { stats, criticalPathCount = 0 } = defineProps<{
 </script>
 
 <template>
-  <div class="grid grid-cols-3 gap-4">
+  <!-- 统计卡行（模板 .stat-row：自适应网格，卡体用 StatCard） -->
+  <div class="stat-row">
     <StatCard label="总工序数" :value="stats.totalTasks" icon="checklist" color="primary" />
     <StatCard
       label="关键路径工期"

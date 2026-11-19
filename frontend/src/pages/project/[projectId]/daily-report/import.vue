@@ -8,6 +8,16 @@ import { useProjectContext } from '@/composables/useProjectContext'
 import { useUsageDateType } from '@/composables/useUsageDateType'
 import { useCapabilities } from '@/composables/useCapabilities'
 import ReportSteps from '@/components/daily-report/ReportSteps.vue'
+import PageHead from '@/components/common/PageHead.vue'
+import type { ResourceCategory } from '@/client'
+import { categoryConfigMap } from '@/types/resource'
+
+function categoryLabel(category: string | undefined): string {
+  if (!category || !categoryConfigMap[category as keyof typeof categoryConfigMap]) {
+    return category ?? '--'
+  }
+  return categoryConfigMap[category as keyof typeof categoryConfigMap].label
+}
 
 definePage({
   meta: {
@@ -128,182 +138,217 @@ function goToReview() {
 </script>
 
 <template>
-  <div class="p-6 pb-24 max-w-3xl mx-auto">
+  <div class="p-6 pb-24">
+    <PageHead title="导入日报" subtitle="上传施工日报，系统自动解析资源使用数据" />
     <ReportSteps :current="1" />
-    <div v-if="storeV2.parsedResourceItems.length === 0" class="space-y-4">
-      <div class="text-center mb-8">
-        <h2 class="text-xl font-semibold text-base-content mb-2">导入日报文件</h2>
-        <p class="text-sm text-fg-subtle">
-          请上传施工现场的 Excel 日报文件，系统将自动解析资源使用数据
-        </p>
-      </div>
 
-      <!-- AI 生成解析配置入口：日报结构特殊/首次导入时，可先用 AI 生成解析配置 -->
-      <div v-if="aiEnabled" class="panel panel-hover p-4 flex flex-wrap items-center gap-3">
-        <div class="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-          <span class="material-symbols-outlined text-primary icon-lg">auto_awesome</span>
+    <!-- 通栏两列：左卡上传 / 右卡解析结果 -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+      <!-- 左卡：上传日报文件 -->
+      <div class="card">
+        <div class="card-head"><div class="card-title">上传日报文件</div></div>
+        <div class="card-body space-y-4">
+          <template v-if="storeV2.parsedResourceItems.length === 0">
+            <!-- 计划口径提示：日报导入按实际口径落库 -->
+            <div
+              v-if="effectiveUsageType === 'PLANNED'"
+              class="alert alert-warning alert-sm"
+              role="alert"
+            >
+              <span class="material-symbols-outlined icon-sm">warning</span>
+              <span class="text-sm">
+                当前为「计划」口径，日报导入将按「实际」口径落库；如需录入计划数据请回到资源使用量页切换口径。
+              </span>
+            </div>
+
+            <!-- AI 生成解析配置入口 -->
+            <div v-if="aiEnabled" class="flex items-center gap-2">
+              <span class="text-xs text-fg-muted flex-1">
+                解析不理想？试试 AI 分析日报结构并生成解析配置
+              </span>
+              <button class="btn btn-ghost btn-sm" :disabled="isLoading" @click="gotoAiConfig">
+                <span class="material-symbols-outlined icon-sm">auto_awesome</span>
+                <span>AI 生成解析配置</span>
+              </button>
+            </div>
+
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">使用日期</legend>
+              <input v-model="usageDate" type="date" class="input w-full" :disabled="isLoading" />
+            </fieldset>
+
+            <!-- 解析配置选择：默认使用内置配置；有 AI 生成的配置时可选用 -->
+            <fieldset v-if="configs && configs.length > 0" class="fieldset">
+              <legend class="fieldset-legend flex items-center gap-1">
+                解析配置
+                <span class="text-xs text-fg-subtle font-normal">（留空 = 内置默认配置）</span>
+              </legend>
+              <div class="flex items-center gap-2">
+                <select
+                  v-model="selectedConfigId"
+                  class="select w-full"
+                  :disabled="isLoading || configsLoading"
+                >
+                  <option :value="null">内置默认配置</option>
+                  <option v-for="cfg in configs" :key="cfg.configId" :value="cfg.configId">
+                    {{ cfg.name ?? `配置 ${cfg.configId.slice(0, 8)}` }}（{{ cfg.blockCount }} 块 ·
+                    {{ cfg.categories.join(' / ') }}）
+                  </option>
+                </select>
+                <button
+                  v-if="selectedConfigId"
+                  class="btn btn-ghost btn-sm"
+                  title="清除所选配置"
+                  @click="clearSelectedConfig"
+                >
+                  <span class="material-symbols-outlined icon-sm">close</span>
+                </button>
+              </div>
+              <p v-if="selectedConfigId" class="text-xs text-primary mt-1">
+                {{
+                  selectedConfigName
+                    ? `将使用「${selectedConfigName}」解析`
+                    : '将使用所选 AI 配置解析'
+                }}
+              </p>
+            </fieldset>
+
+            <label
+              class="border-2 border-dashed border-base-300 rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-base-200/50 transition-colors block"
+            >
+              <span class="flex flex-col items-center gap-3">
+                <span
+                  class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-2"
+                >
+                  <span class="material-symbols-outlined icon-2xl text-primary">
+                    {{ selectedFile ? 'check_circle' : 'upload_file' }}
+                  </span>
+                </span>
+                <span class="text-lg font-medium">
+                  {{ selectedFile ? selectedFile.name : '点击选择文件' }}
+                </span>
+                <span v-if="selectedFile">
+                  {{ Math.round(selectedFile.size / 1024).toLocaleString() }} kB
+                </span>
+                <span v-if="!selectedFile" class="text-xs text-fg-subtle">支持 .xlsx, .xls 格式</span>
+              </span>
+              <button
+                v-if="selectedFile"
+                type="button"
+                class="btn btn-error translate-y-4"
+                @click.self="selectedFile = null"
+              >
+                点击重选
+              </button>
+              <input
+                v-else
+                type="file"
+                class="hidden"
+                placeholder=""
+                accept=".application/vnd.ms-excel"
+                @change="handleFileChange"
+              />
+            </label>
+
+            <div v-if="storeV2.error" class="alert alert-error alert-sm" role="alert">
+              <span class="material-symbols-outlined icon-sm">error</span>
+              <span>{{ storeV2.error }}</span>
+            </div>
+
+            <button
+              class="btn btn-primary w-full"
+              :disabled="!selectedFile || !usageDate || isLoading"
+              @click="handleParse"
+            >
+              <span v-if="isLoading" class="loading loading-spinner loading-xs"></span>
+              <span v-else class="material-symbols-outlined icon-sm">play_arrow</span>
+              <span>{{ isLoading ? '正在解析...' : '开始解析' }}</span>
+            </button>
+          </template>
+
+          <!-- 解析成功：重新导入 / 下一步 -->
+          <template v-else>
+            <div class="flex items-center gap-3">
+              <div class="w-12 h-12 rounded-full bg-success/20 flex items-center justify-center">
+                <span class="material-symbols-outlined icon-xl text-success">check_circle</span>
+              </div>
+              <div>
+                <h3 class="font-semibold text-base-content">导入成功</h3>
+                <p class="text-sm text-fg-subtle">
+                  已解析 {{ storeV2.parsedResourceItems.length }} 项资源数据
+                </p>
+              </div>
+            </div>
+
+            <div v-if="(data?.warnings.length || 0) > 0" class="alert alert-warning alert-sm">
+              <span class="material-symbols-outlined icon-sm">warning</span>
+              <div>
+                <p class="font-medium">解析警告</p>
+                <ul class="text-xs mt-1">
+                  <li v-for="(warning, index) in data?.warnings" :key="index">
+                    {{ warning }}
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="flex gap-2">
+              <button class="btn btn-outline btn-sm flex-1" @click="resetImport">
+                <span class="material-symbols-outlined icon-sm">refresh</span>
+                <span>重新导入</span>
+              </button>
+              <button class="btn btn-primary btn-sm flex-1" @click="goToReview">
+                <span>下一步：核对资源</span>
+                <span class="material-symbols-outlined icon-sm">arrow_forward</span>
+              </button>
+            </div>
+          </template>
         </div>
-        <div class="flex-1 min-w-48">
-          <p class="font-medium text-base-content">解析不理想？试试 AI 生成解析配置</p>
-          <p class="text-xs text-fg-subtle mt-0.5">
-            上传日报给 AI 对话，AI 会分析表格结构并生成、校验、保存解析配置
-          </p>
-        </div>
-        <button class="btn btn-primary btn-sm" :disabled="isLoading" @click="gotoAiConfig">
-          <span class="material-symbols-outlined icon-sm">auto_awesome</span>
-          <span>AI 生成配置</span>
-        </button>
       </div>
 
-      <!-- 计划口径提示：日报导入按实际口径落库 -->
-      <div
-        v-if="effectiveUsageType === 'PLANNED'"
-        class="alert alert-warning alert-sm mb-4"
-        role="alert"
-      >
-        <span class="material-symbols-outlined icon-sm">warning</span>
-        <span class="text-sm">
-          当前为「计划」口径，日报导入将按「实际」口径落库；如需录入计划数据请回到资源使用量页切换口径。
-        </span>
-      </div>
-
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">使用日期</legend>
-        <input v-model="usageDate" type="date" class="input w-full" :disabled="isLoading" />
-      </fieldset>
-
-      <!-- 解析配置选择：默认使用内置配置；有 AI 生成的配置时可选用 -->
-      <fieldset v-if="configs && configs.length > 0" class="fieldset">
-        <legend class="fieldset-legend flex items-center gap-1">
-          解析配置
-          <span class="text-xs text-fg-subtle font-normal">（留空 = 内置默认配置）</span>
-        </legend>
-        <div class="flex items-center gap-2">
-          <select
-            v-model="selectedConfigId"
-            class="select w-full"
-            :disabled="isLoading || configsLoading"
+      <!-- 右卡：解析结果 -->
+      <div class="card">
+        <div class="card-head"><div class="card-title">解析结果</div></div>
+        <div class="card-body">
+          <!-- 空态 -->
+          <div
+            v-if="storeV2.parsedResourceItems.length === 0"
+            class="flex flex-col items-center justify-center text-center py-8 gap-3"
           >
-            <option :value="null">内置默认配置</option>
-            <option v-for="cfg in configs" :key="cfg.configId" :value="cfg.configId">
-              {{ cfg.name ?? `配置 ${cfg.configId.slice(0, 8)}` }}（{{ cfg.blockCount }} 块 ·
-              {{ cfg.categories.join(' / ') }}）
-            </option>
-          </select>
-          <button
-            v-if="selectedConfigId"
-            class="btn btn-ghost btn-sm"
-            title="清除所选配置"
-            @click="clearSelectedConfig"
-          >
-            <span class="material-symbols-outlined icon-sm">close</span>
-          </button>
-        </div>
-        <p v-if="selectedConfigId" class="text-xs text-primary mt-1">
-          {{
-            selectedConfigName ? `将使用「${selectedConfigName}」解析` : '将使用所选 AI 配置解析'
-          }}
-        </p>
-      </fieldset>
-
-      <label
-        class="border-2 border-dashed border-base-300 rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-base-200/50 transition-colors block"
-      >
-        <span class="flex flex-col items-center gap-3">
-          <span class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-2">
-            <span class="material-symbols-outlined icon-2xl text-primary">
-              {{ selectedFile ? 'check_circle' : 'upload_file' }}
-            </span>
-          </span>
-          <span class="text-lg font-medium">
-            {{ selectedFile ? selectedFile.name : '点击选择文件' }}
-          </span>
-          <span v-if="selectedFile">
-            {{ Math.round(selectedFile.size / 1024).toLocaleString() }} kB
-          </span>
-          <span v-if="!selectedFile" class="text-xs text-fg-subtle">支持 .xlsx, .xls 格式</span>
-        </span>
-        <button
-          v-if="selectedFile"
-          type="button"
-          class="btn btn-error translate-y-4"
-          @click.self="selectedFile = null"
-        >
-          点击重选
-        </button>
-        <input
-          v-else
-          type="file"
-          class="hidden"
-          placeholder=""
-          accept=".application/vnd.ms-excel"
-          @change="handleFileChange"
-        />
-      </label>
-
-      <div v-if="storeV2.error" class="alert alert-error alert-sm" role="alert">
-        <span class="material-symbols-outlined icon-sm">error</span>
-        <span>{{ storeV2.error }}</span>
-      </div>
-
-      <button
-        class="btn btn-primary btn-block"
-        :disabled="!selectedFile || !usageDate || isLoading"
-        @click="handleParse"
-      >
-        <span v-if="isLoading" class="loading loading-spinner loading-xs"></span>
-        <span v-else class="material-symbols-outlined icon-sm">play_arrow</span>
-        <span>{{ isLoading ? '正在解析...' : '开始解析' }}</span>
-      </button>
-
-      <div class="panel p-4">
-        <h3 class="font-medium text-base-content mb-2 flex items-center gap-2">
-          <span class="material-symbols-outlined text-primary icon-sm">info</span>
-          导入说明
-        </h3>
-        <ul class="text-sm text-base-content/70 space-y-1">
-          <li>• 确保文件格式为标准的 Excel 表格</li>
-          <li>• 文件应包含资源名称、类别、数量等信息</li>
-          <li>• 导入后可在下一步核对和编辑数据</li>
-        </ul>
-      </div>
-    </div>
-
-    <div v-else class="space-y-4">
-      <div class="card card-border bg-success/10 border-success/30 p-6">
-        <div class="flex items-center gap-3 mb-4">
-          <div class="w-12 h-12 rounded-full bg-success/20 flex items-center justify-center">
-            <span class="material-symbols-outlined icon-xl text-success">check_circle</span>
-          </div>
-          <div>
-            <h3 class="font-semibold text-base-content">导入成功</h3>
+            <div class="w-14 h-14 rounded-full bg-base-200 flex items-center justify-center">
+              <span class="material-symbols-outlined icon-xl text-fg-muted">description</span>
+            </div>
             <p class="text-sm text-fg-subtle">
-              已解析 {{ storeV2.parsedResourceItems.length }} 项资源数据
+              上传文件并解析后，将在此展示解析出的资源数据预览
             </p>
+            <div class="text-left text-xs text-fg-subtle space-y-1 mt-2">
+              <p>• 确保文件格式为标准的 Excel 表格</p>
+              <p>• 文件应包含资源名称、类别、数量等信息</p>
+              <p>• 导入后可在下一步核对和编辑数据</p>
+            </div>
           </div>
-        </div>
 
-        <div v-if="(data?.warnings.length || 0) > 0" class="alert alert-warning alert-sm mb-4">
-          <span class="material-symbols-outlined icon-sm">warning</span>
-          <div>
-            <p class="font-medium">解析警告</p>
-            <ul class="text-xs mt-1">
-              <li v-for="(warning, index) in data?.warnings" :key="index">
-                {{ warning }}
-              </li>
-            </ul>
+          <!-- 预览 -->
+          <div v-else class="overflow-x-auto">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>资源名称</th>
+                  <th>类别</th>
+                  <th class="table-num">数量</th>
+                  <th>单位</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in storeV2.parsedResourceItems" :key="item.resourceName">
+                  <td>{{ item.resourceName }}</td>
+                  <td>{{ categoryLabel(item.category) }}</td>
+                  <td class="table-num">{{ item.quantity }}</td>
+                  <td>{{ item.resourceUnit || '--' }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-        </div>
-
-        <div class="flex gap-2">
-          <button class="btn btn-outline btn-sm flex-1" @click="resetImport">
-            <span class="material-symbols-outlined icon-sm">refresh</span>
-            <span>重新导入</span>
-          </button>
-          <button class="btn btn-primary btn-sm flex-1" @click="goToReview">
-            <span>下一步：核对资源</span>
-            <span class="material-symbols-outlined icon-sm">arrow_forward</span>
-          </button>
         </div>
       </div>
     </div>

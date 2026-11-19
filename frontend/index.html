@@ -18,7 +18,7 @@
     <link rel="manifest" href="/manifest.json" />
 
     <!-- Theme Color -->
-    <meta name="theme-color" content="#1a2332" />
+    <meta name="theme-color" content="#f2f3f5" />
 
     <!-- Open Graph / Social -->
     <meta property="og:type" content="website" />
@@ -30,17 +30,14 @@
     <title>CCT 施工多目标优化平台</title>
     <script>
       ;(function () {
+        // 默认浅色 starglass-light；显式选择 auto 时跟随系统
         var s = localStorage.getItem('app-theme'),
-          t
-        if (!s || s === '"auto"')
-          t = window.matchMedia('(prefers-color-scheme: dark)').matches
-            ? 'starglass'
-            : 'starglass-light'
-        else {
+          t = 'starglass-light'
+        if (s) {
           try {
             t = JSON.parse(s)
           } catch (e) {
-            t = 'starglass'
+            t = 'starglass-light'
           }
           if (t === 'auto')
             t = window.matchMedia('(prefers-color-scheme: dark)').matches

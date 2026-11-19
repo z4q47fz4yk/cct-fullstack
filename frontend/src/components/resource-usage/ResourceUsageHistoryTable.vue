@@ -132,25 +132,28 @@ function formatTime(iso: string) {
               <td>
                 <div class="flex items-center gap-1">
                   <button
-                    class="btn btn-ghost btn-sm btn-square"
+                    type="button"
+                    class="action-text"
                     title="为用量打标"
                     @click="emit('tags', rec)"
                   >
-                    <span class="material-symbols-outlined icon-sm">label</span>
+                    打标
                   </button>
                   <button
-                    class="btn btn-ghost btn-sm btn-square"
+                    type="button"
+                    class="action-text"
                     title="编辑"
                     @click="handleEdit(rec)"
                   >
-                    <span class="material-symbols-outlined icon-sm">edit</span>
+                    编辑
                   </button>
                   <button
-                    class="btn btn-ghost btn-sm btn-square text-error hover:bg-error/10"
+                    type="button"
+                    class="action-text action-delete"
                     title="删除"
                     @click="handleDelete(rec)"
                   >
-                    <span class="material-symbols-outlined icon-sm">delete</span>
+                    删除
                   </button>
                 </div>
               </td>

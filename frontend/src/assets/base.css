@@ -21,9 +21,9 @@
 /* 桥接：让 Tailwind 工具类（bg-base-100 / rounded-field / shadow-glass-2 等）
  * 引用运行时主题变量。值在下方 :root / [data-theme] 块定义。 */
 @theme inline {
+  /* 需求说明 §2：中文优先 PingFang SC / Microsoft YaHei；数字用 font-num（等宽） */
   --font-sans:
-    'Inter', 'PingFang SC', 'HarmonyOS Sans SC', 'Noto Sans SC', 'Microsoft YaHei', system-ui,
-    -apple-system, sans-serif;
+    'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, 'Segoe UI', 'Inter', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
 
   --color-base-100: var(--color-base-100);
@@ -115,7 +115,6 @@
 }
 
 /* ── 深色主题：starglass（工程深色面板） ── */
-:root,
 [data-theme='starglass'] {
   color-scheme: dark;
 
@@ -196,7 +195,8 @@
   --ease-snap: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* ── 亮色主题：starglass-light（设计稿 · Element 风格工程浅色面板） ── */
+/* ── 亮色主题：starglass-light（设计稿 · Element 风格工程浅色面板，默认主题） ── */
+:root,
 [data-theme='starglass-light'] {
   color-scheme: light;
 

@@ -226,7 +226,7 @@ function goBackToImport() {
             <span class="material-symbols-outlined text-primary icon-lg">auto_awesome</span>
             AI 生成解析配置
           </h2>
-          <p class="text-sm text-fg-subtle">
+          <p class="text-sm text-fg-muted">
             上传施工日报，与 AI 对话生成解析配置（AI 仅使用受控工具，不访问文件系统）
           </p>
         </div>

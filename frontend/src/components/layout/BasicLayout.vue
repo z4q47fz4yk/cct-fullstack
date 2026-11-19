@@ -26,8 +26,8 @@ const docsUrl = docsHref('/guide/intro')
 
     <!-- 主内容区 -->
     <main class="main-content flex-1 flex flex-col min-w-200">
-      <!-- 顶栏：面包屑 + 项目切换 + 操作区（设计稿白色 topbar） -->
-      <header class="topbar shrink-0 h-14 flex items-center gap-4 px-5 border-b border-panel-border bg-panel">
+      <!-- 顶栏：面包屑 + 项目切换 + 操作区（设计稿白色 topbar，高 58px） -->
+      <header class="topbar shrink-0 h-[58px] flex items-center gap-4 px-[22px] border-b border-panel-border bg-panel">
         <nav class="crumbs flex items-center gap-1.5 text-sm text-fg-muted min-w-0" aria-label="面包屑">
           <template v-for="(c, i) in crumbs" :key="i">
             <span v-if="i > 0" class="text-fg-subtle">/</span>
@@ -55,8 +55,8 @@ const docsUrl = docsHref('/guide/intro')
         <UserMenu />
       </header>
 
-      <!-- 主内容滚动区域 -->
-      <div class="main-body flex-1 overflow-y-auto overflow-x-hidden p-4 scrollbar-thin">
+      <!-- 主内容滚动区域（设计稿 content：padding 20px 22px 40px） -->
+      <div class="main-body flex-1 overflow-y-auto overflow-x-hidden px-[22px] pt-5 pb-10 scrollbar-thin">
         <slot />
       </div>
     </main>

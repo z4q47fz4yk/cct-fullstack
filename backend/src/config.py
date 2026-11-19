@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     app_name: str = Field("MyApp", validation_alias="APP_NAME")
     debug: bool = Field(False, validation_alias="DEBUG")
     database_url: str = Field(
-        "postgresql://cct:cct@localhost:5432/cctv2",
+        "postgresql://postgres:postgres@192.168.0.122:5432/cctv2",
         validation_alias="DATABASE_URL",
     )
     # 开发期多 worktree 场景：允许任意来源跨域（allow_origins=["*"]）。

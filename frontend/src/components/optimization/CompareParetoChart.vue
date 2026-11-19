@@ -94,8 +94,8 @@ const dominatedDots = computed(() => {
   <div class="h-full flex flex-col">
     <div class="flex items-center justify-between mb-4 shrink-0">
       <div>
-        <h2 class="text-base font-semibold text-base-content">帕累托前沿（对比）</h2>
-        <p class="text-xs text-fg-muted mt-0.5">两个运行解集叠加 · 半透明为被支配解</p>
+        <h2 class="text-base font-semibold text-base-content">帕累托最优解集（散点图）</h2>
+        <p class="text-xs text-fg-muted mt-0.5">点选方案查看甘特图</p>
       </div>
 
       <div class="tabs tabs-boxed tabs-sm bg-transparent">

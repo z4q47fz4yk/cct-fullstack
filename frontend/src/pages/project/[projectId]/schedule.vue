@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import PaginationBar from '@/components/common/PaginationBar.vue'
 import ErrorState from '@/components/common/ErrorState.vue'
+import PageHead from '@/components/common/PageHead.vue'
 import SegmentControl, { type SegmentOption } from '@/components/common/SegmentControl.vue'
 import StatsOverview from '@/components/schedule/StatsOverview.vue'
 import TaskTable from '@/components/schedule/TaskTable.vue'
@@ -86,11 +87,10 @@ const criticalPathCount = computed(() => {
 
 function getTaskColor(task: TaskWithTagsResp): string {
   const C = getThemeColors()
-  // 关键路径 → 红；完成 → 绿；进行中 → 蓝；未开始 → 灰
-  if (task.isCritical) return C.error
+  // 模板语义：关键路径 → 红；已完成 → 绿；普通任务 → 蓝
+  if (task.isCritical) return C.red
   if (task.completed >= 1) return C.success
-  if (task.completed > 0) return C.info
-  return C.label
+  return C.blue
 }
 
 // ──── 甘特图：数据转换 ────────────────────────────────────
@@ -132,7 +132,7 @@ function formatGanttTooltip(item: GanttChartItem<TaskGanttMeta>): string {
       <div>工期：${duration} 天</div>
       <div>完成度：${percent}%</div>
       <div style="margin-top:4px;">
-        <span style="background:${meta.isCritical ? C.error : C.success};
+        <span style="background:${meta.isCritical ? C.red : C.success};
                       padding:1px 6px; border-radius:3px; font-size:10px;">
           ${meta.isCritical ? '关键路径' : '非关键'}
         </span>
@@ -295,8 +295,8 @@ const closeManagePredecessorModal = () => {
 </script>
 
 <template>
-  <!-- 操作工具条（设计稿 page-head toolbar：视图切换 / 添加任务） -->
-  <div class="flex items-center justify-end gap-2 mb-4 flex-wrap">
+  <!-- 页头（设计稿 page-head：标题 + 副标题 + 右侧 toolbar） -->
+  <PageHead title="施工工序管理" subtitle="任务编排、前置依赖与关键路径管理">
     <SegmentControl
       v-model="currentView"
       :options="viewOptions"
@@ -307,7 +307,7 @@ const closeManagePredecessorModal = () => {
       <span class="material-symbols-outlined icon-sm">add</span>
       添加任务
     </button>
-  </div>
+  </PageHead>
 
   <ErrorState
     v-if="tasksError"
@@ -323,62 +323,61 @@ const closeManagePredecessorModal = () => {
   </div>
 
   <template v-else>
-    <div v-if="stats" class="mb-4">
+    <div v-if="stats">
       <StatsOverview :stats :critical-path-count="criticalPathCount" />
     </div>
 
-    <!-- 甘特图视图 -->
+    <!-- 甘特图视图（设计稿 card：card-head 标题 + 右侧图例） -->
     <section
       v-if="currentView === 'gantt'"
-      class="p-4 panel overflow-hidden"
+      class="card overflow-hidden"
       aria-labelledby="schedule-gantt-title"
     >
-      <div class="flex items-center justify-between gap-3 flex-wrap">
-        <h2 id="schedule-gantt-title" class="section-title m-0">施工进度甘特图</h2>
-        <!-- 图例（设计稿：关键路径 / 已完成 / 进行中 / 未开始） -->
-        <div class="flex items-center gap-4 text-xs text-fg-muted">
+      <div class="card-head">
+        <h2 id="schedule-gantt-title" class="card-title">施工进度甘特图</h2>
+        <!-- 图例（设计稿：红圆点=关键路径、绿圆点=已完成；另补蓝=普通任务，与条形色一致） -->
+        <div class="flex items-center gap-3 text-xs text-fg-muted">
           <span class="inline-flex items-center gap-1.5">
-            <i class="w-2 h-2 rounded-full bg-error inline-block" />关键路径
+            <i class="w-2 h-2 rounded-full bg-red inline-block" />关键路径
           </span>
           <span class="inline-flex items-center gap-1.5">
             <i class="w-2 h-2 rounded-full bg-success inline-block" />已完成
           </span>
           <span class="inline-flex items-center gap-1.5">
-            <i class="w-2 h-2 rounded-full bg-info inline-block" />进行中
-          </span>
-          <span class="inline-flex items-center gap-1.5">
-            <i class="w-2 h-2 rounded-full bg-fg-subtle inline-block" />未开始
+            <i class="w-2 h-2 rounded-full bg-blue inline-block" />普通任务
           </span>
         </div>
       </div>
-      <div v-if="tasks.length === 0" class="py-8 flex flex-col items-center gap-3">
-        <div class="w-16 h-16 rounded-full bg-base-300 flex items-center justify-center">
-          <span class="material-symbols-outlined icon-2xl text-base-content/30">view_timeline</span>
+      <div class="card-body">
+        <div v-if="tasks.length === 0" class="py-8 flex flex-col items-center gap-3">
+          <div class="w-16 h-16 rounded-full bg-base-300 flex items-center justify-center">
+            <span class="material-symbols-outlined icon-2xl text-base-content/30">view_timeline</span>
+          </div>
+          <div class="text-center">
+            <h3 class="text-lg font-semibold text-base-content/70">暂无任务</h3>
+            <p class="text-sm text-fg-subtle mt-1">点击添加按钮创建第一个任务</p>
+          </div>
         </div>
-        <div class="text-center">
-          <h3 class="text-lg font-semibold text-base-content/70">暂无任务</h3>
-          <p class="text-sm text-fg-subtle mt-1">点击添加按钮创建第一个任务</p>
+        <div v-else>
+          <GanttChart
+            :items="ganttItems"
+            :total-days="stats?.criticalDuration ?? 30"
+            :tooltip-formatter="formatGanttTooltip as (item: unknown) => string"
+          />
         </div>
-      </div>
-      <div v-else>
-        <GanttChart
-          :items="ganttItems"
-          :total-days="stats?.criticalDuration ?? 30"
-          :tooltip-formatter="formatGanttTooltip as (item: unknown) => string"
-        />
       </div>
     </section>
 
     <!-- 列表视图 -->
     <template v-else>
-      <section class="panel p-0 overflow-hidden" aria-labelledby="schedule-list-title">
-        <!-- 头栏：标题 + 搜索 -->
-        <div class="px-4 py-2.5 border-b border-base-content/10 flex flex-wrap items-center gap-3">
-          <h2 id="schedule-list-title" class="section-title !mb-0">
+      <section class="card overflow-hidden" aria-labelledby="schedule-list-title">
+        <!-- card-head：标题 + 搜索 -->
+        <div class="card-head">
+          <h2 id="schedule-list-title" class="card-title">
             任务列表
             <span class="badge badge-sm">{{ tasks.length }} 个任务</span>
           </h2>
-          <div class="ml-auto">
+          <div>
             <label class="input flex items-center gap-2 w-64">
               <span class="material-symbols-outlined icon-sm opacity-50" aria-hidden="true"
                 >search</span

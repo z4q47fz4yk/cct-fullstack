@@ -47,7 +47,7 @@ const tableHeaders = computed<TableHeader[]>(() => {
     // 表头居中（覆盖两列），数字与单位间收紧 padding 营造单列观感
     { key: 'unitPrice', label: '单价', width: 'w-40', colspan: 2, center: true },
     { key: 'carbonFactor', label: '碳排放因子', width: 'w-44', colspan: 2, center: true },
-    { key: 'actions', label: '操作', width: 'w-28' },
+    { key: 'actions', label: '操作', width: 'w-[120px]' },
   ]
   return headers
 })
@@ -168,18 +168,20 @@ function hasDescription(resource: ResourceWithConfigResp): boolean {
             <td>
               <div class="flex items-center gap-1">
                 <button
-                  class="btn btn-ghost btn-xs btn-square"
+                  type="button"
+                  class="action-text"
                   title="编辑"
                   @click="emit('edit', resource)"
                 >
-                  <span class="material-symbols-outlined icon-sm">edit</span>
+                  编辑
                 </button>
                 <button
-                  class="btn btn-ghost btn-xs btn-square text-error hover:bg-error/10"
+                  type="button"
+                  class="action-text action-delete"
                   title="删除"
                   @click="emit('delete', resource)"
                 >
-                  <span class="material-symbols-outlined icon-sm">delete</span>
+                  删除
                 </button>
               </div>
             </td>

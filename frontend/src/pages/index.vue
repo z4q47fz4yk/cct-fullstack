@@ -3,12 +3,19 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import BasicLayout from '@/components/layout/BasicLayout.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
+import PageHead from '@/components/common/PageHead.vue'
 import SegmentControl from '@/components/common/SegmentControl.vue'
 import { useProjectApi } from '@/composables/useProjectApi'
 import type { ProjectResp } from '@/client/types.gen'
 
 definePage({
-  meta: { title: '项目列表', description: '选择或创建一个施工项目开始优化' },
+  meta: {
+    title: '项目列表',
+    description: '选择或创建一个施工项目开始优化',
+    icon: 'home',
+    showInNav: true,
+    navOrder: 0,
+  },
 })
 
 const router = useRouter()
@@ -23,8 +30,9 @@ const newProjectDescription = ref('')
 // 视图切换：卡片 / 列表（设计稿 tabbar）
 const viewMode = ref<'card' | 'list'>('card')
 
+// 设计稿交互：点击项目卡片 / 进入按钮 → 项目信息页
 function enterProject(project: ProjectResp) {
-  router.push(`/project/${project.id}/schedule`)
+  router.push(`/project/${project.id}/settings/info`)
 }
 
 function openCreateDialog() {
@@ -97,26 +105,20 @@ function statusBadge(status?: string) {
 
       <template v-else>
         <!-- 页头：标题 + 视图切换 + 创建 -->
-        <div class="flex items-end justify-between mb-4 gap-4 flex-wrap">
-          <div>
-            <h2 class="text-xl font-bold text-base-content">项目列表</h2>
-            <p class="text-sm text-fg-muted mt-0.5">选择或创建一个施工项目开始优化</p>
-          </div>
-          <div class="flex items-center gap-2.5">
-            <SegmentControl
-              v-model="viewMode"
-              :options="[
-                { value: 'card', label: '卡片', icon: 'grid_view' },
-                { value: 'list', label: '列表', icon: 'view_list' },
-              ]"
-              aria-label="项目视图"
-            />
-            <button class="btn btn-primary gap-1.5" @click="openCreateDialog">
-              <span class="material-symbols-outlined icon-sm">add</span>
-              创建项目
-            </button>
-          </div>
-        </div>
+        <PageHead title="项目列表" subtitle="选择或创建一个施工项目开始优化">
+          <SegmentControl
+            v-model="viewMode"
+            :options="[
+              { value: 'card', label: '卡片', icon: 'grid_view' },
+              { value: 'list', label: '列表', icon: 'view_list' },
+            ]"
+            aria-label="项目视图"
+          />
+          <button class="btn btn-primary gap-1.5" @click="openCreateDialog">
+            <span class="material-symbols-outlined icon-sm">add</span>
+            创建项目
+          </button>
+        </PageHead>
 
         <!-- 卡片视图（设计稿：指标行 + 虚线创建卡） -->
         <div v-if="viewMode === 'card'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -174,7 +176,7 @@ function statusBadge(status?: string) {
                   <th class="table-num">占地面积(㎡)</th>
                   <th>创建时间</th>
                   <th>状态</th>
-                  <th class="w-24">操作</th>
+                  <th class="w-[120px]">操作</th>
                 </tr>
               </thead>
               <tbody>

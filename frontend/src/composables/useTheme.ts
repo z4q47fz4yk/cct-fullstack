@@ -8,13 +8,13 @@ type Theme = 'starglass' | 'starglass-light'
 export type ThemeMode = Theme | 'auto'
 
 /**
- * 用户主题偏好：auto（跟随系统）｜ starglass（深色）｜ starglass-light（浅色）
+ * 用户主题偏好：默认浅色 starglass-light；auto（跟随系统）｜ starglass（深色）｜ starglass-light（浅色）
  */
-const stored = useStorage<ThemeMode>('app-theme', 'auto')
+const stored = useStorage<ThemeMode>('app-theme', 'starglass-light')
 const preferredDark = usePreferredDark()
 
-/** 三态循环顺序：auto → 浅色 → 深色 → auto */
-const CYCLE_ORDER: ThemeMode[] = ['auto', 'starglass-light', 'starglass']
+/** 三态循环顺序：浅色 → 深色 → auto → 浅色 */
+const CYCLE_ORDER: ThemeMode[] = ['starglass-light', 'starglass', 'auto']
 
 /** 解析后的实际主题 */
 const resolved = computed<Theme>(() => {
@@ -37,7 +37,7 @@ watch(
 export function useTheme() {
   const isDark = computed(() => resolved.value === 'starglass')
 
-  /** 三态循环：auto → 浅色 → 深色 → auto */
+  /** 三态循环：浅色 → 深色 → auto → 浅色 */
   function cycle() {
     const i = CYCLE_ORDER.indexOf(stored.value)
     stored.value = CYCLE_ORDER[(i + 1) % CYCLE_ORDER.length]

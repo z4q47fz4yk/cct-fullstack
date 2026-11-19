@@ -27,6 +27,8 @@ interface Props {
   size?: 'default' | 'sm'
   /** 货币前缀（如 "¥"），会显示在 value 之前 */
   prefix?: string
+  /** 趋势行（可选）：上升/下降图标 + 说明文字，默认上升=success、下降=error，可用 tone 覆盖 */
+  trend?: { direction: 'up' | 'down'; text: string; tone?: 'success' | 'error' }
 }
 
 const {
@@ -38,6 +40,7 @@ const {
   loading = false,
   size = 'default',
   prefix,
+  trend,
 } = defineProps<Props>()
 </script>
 
@@ -75,6 +78,18 @@ const {
           {{ value }}
         </span>
         <span v-if="unit" class="text-xs text-fg-muted shrink-0">{{ unit }}</span>
+      </div>
+
+      <!-- 趋势行（设计稿 .trend：up 绿 / down 红） -->
+      <div
+        v-if="trend && !loading"
+        class="text-xs mt-0.5 flex items-center gap-1"
+        :class="(trend.tone ?? (trend.direction === 'up' ? 'success' : 'error')) === 'success' ? 'text-success' : 'text-error'"
+      >
+        <span class="material-symbols-outlined icon-xs">
+          {{ trend.direction === 'up' ? 'trending_up' : 'trending_down' }}
+        </span>
+        <span>{{ trend.text }}</span>
       </div>
 
       <!-- 附加行（趋势 / 说明，可选） -->

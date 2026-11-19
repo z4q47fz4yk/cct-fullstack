@@ -8,6 +8,7 @@ import { BarChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import StatCard from '@/components/common/StatCard.vue'
+import PageHead from '@/components/common/PageHead.vue'
 import ChartEmptyState from '@/components/common/ChartEmptyState.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import SegmentControl, { type SegmentOption } from '@/components/common/SegmentControl.vue'
@@ -142,7 +143,7 @@ async function handleEstimate() {
   estimateError.value = null
   try {
     estimateResult.value = await estimatePlan(buildRequest())
-    notifySuccess({ title: '预估完成', description: '已按当前措施重算工期 / 成本 / 碳排' })
+    notifySuccess({ title: '预估完成' })
   } catch (e) {
     const msg = formatHttpError(e)
     estimateError.value = msg
@@ -158,10 +159,10 @@ async function handleSave(draft: boolean) {
   try {
     if (draft) {
       await savePlanDraft(buildRequest())
-      notifyInfo({ title: '草稿已保存', description: '草稿不参与聚合与践行度计算' })
+      notifyInfo({ title: '草稿已保存' })
     } else {
       await savePlan(buildRequest())
-      notifySuccess({ title: '已保存为计划基线', description: '评价阶段将以该基线进行对比' })
+      notifySuccess({ title: '已保存为计划基线' })
     }
   } catch (e) {
     const msg = formatHttpError(e)
@@ -347,10 +348,32 @@ const kindOptions: ReadonlyArray<SegmentOption<MeasureKind>> = [
 
 <template>
   <div class="h-full flex flex-col gap-4 overflow-y-auto">
+    <PageHead title="计划编制" subtitle="选择优化方案，编制计划资源与基线">
+      <RouterLink
+        :to="`/project/${currentProjectId}/insights/optimization`"
+        class="btn btn-outline btn-sm"
+      >
+        查看优化结果
+      </RouterLink>
+      <button class="btn btn-primary btn-sm" :disabled="isSaving" @click="handleSave(false)">
+        <span v-if="isSaving" class="loading loading-spinner loading-sm"></span>
+        <span v-else class="material-symbols-outlined icon-sm">save</span>
+        保存为计划基线
+      </button>
+    </PageHead>
+
     <!-- ① 方案摘要 -->
     <section class="panel p-4">
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-sm font-semibold text-base-content">① 方案摘要</h2>
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div class="flex items-center gap-3 flex-wrap">
+          <h2 class="section-title">方案摘要</h2>
+          <span
+            v-if="!isPlanMissing && plan"
+            class="text-xs font-medium px-2 py-0.5 rounded-full bg-success/15 text-success"
+          >
+            当前基线 · 保存于 {{ new Date(plan.updatedAt).toLocaleDateString() }}
+          </span>
+        </div>
         <span v-if="selectedRunId" class="text-xs text-fg-subtle font-mono">
           来源 · Run #{{ selectedRunId.slice(0, 8) }} · NSGA-II
         </span>
@@ -401,23 +424,21 @@ const kindOptions: ReadonlyArray<SegmentOption<MeasureKind>> = [
         v-else-if="!solutionsQuery.asyncStatus.value"
         icon="scatter_plot"
         title="暂无方案"
-        description="请先在「优化结果」中运行一次 NSGA-II 优化"
+        description="请先在「优化结果」中运行优化"
       />
     </section>
 
     <!-- ③ 减碳措施 -->
     <section class="panel p-4">
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-sm font-semibold text-base-content">③ 减碳措施</h2>
+        <h2 class="section-title">减碳措施</h2>
         <button class="btn btn-primary btn-sm" @click="openCreate">
           <span class="material-symbols-outlined icon-sm">add</span>
           添加措施
         </button>
       </div>
       <div v-if="measures.length === 0 && !isLoadingMeasures" class="py-6 text-center">
-        <p class="text-sm text-fg-muted">
-          暂无措施。添加光伏（负碳因子资源）或设备替换，预估计算会自动计入节碳。
-        </p>
+        <p class="text-sm text-fg-muted">暂无措施</p>
       </div>
       <div class="space-y-2">
         <div
@@ -462,11 +483,7 @@ const kindOptions: ReadonlyArray<SegmentOption<MeasureKind>> = [
     <section class="panel p-4">
       <div class="flex items-center justify-between mb-3 gap-4 flex-wrap">
         <div class="flex items-center gap-3">
-          <h2 class="text-sm font-semibold text-base-content">④ 预估计算</h2>
-          <span v-if="!isPlanMissing && plan" class="text-xs text-fg-subtle font-mono">
-            当前基线：{{ plan.status === 'PLANNED' ? '正式' : '草稿' }} · 保存于
-            {{ new Date(plan.updatedAt).toLocaleDateString() }}
-          </span>
+          <h2 class="section-title">预估计算</h2>
           <span
             v-if="plan?.isStale"
             class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-warning/15 text-warning"
@@ -482,11 +499,6 @@ const kindOptions: ReadonlyArray<SegmentOption<MeasureKind>> = [
             <span v-if="isEstimating" class="loading loading-spinner loading-sm"></span>
             <span v-else class="material-symbols-outlined icon-sm">calculate</span>
             重新预估
-          </button>
-          <button class="btn btn-success btn-sm" :disabled="isSaving" @click="handleSave(false)">
-            <span v-if="isSaving" class="loading loading-spinner loading-sm"></span>
-            <span v-else class="material-symbols-outlined icon-sm">save</span>
-            保存为计划基线
           </button>
         </div>
       </div>
@@ -533,14 +545,13 @@ const kindOptions: ReadonlyArray<SegmentOption<MeasureKind>> = [
         <div v-if="monthlyEmission.length > 0" class="h-52">
           <VChart :option="monthlyChartOption" autoresize />
         </div>
-        <p class="text-xs text-fg-subtle">月度碳排分布（含措施生效后）</p>
       </div>
 
       <ChartEmptyState
         v-else
         icon="calculate"
         title="尚未预估"
-        description="选择方案并确认措施后，点击「重新预估」查看调整结果"
+        description="选择方案后点击「重新预估」"
       />
     </section>
 
@@ -568,7 +579,7 @@ const kindOptions: ReadonlyArray<SegmentOption<MeasureKind>> = [
             </select>
           </label>
           <p v-if="addResources.length === 0" class="text-xs text-warning">
-            尚无负碳因子资源，请先在「资源管理」中创建碳因子为负的资源（如光伏）。
+            暂无负碳因子资源
           </p>
         </template>
 
@@ -616,7 +627,7 @@ const kindOptions: ReadonlyArray<SegmentOption<MeasureKind>> = [
         </div>
 
         <label class="fieldset">
-          <span class="fieldset-legend">实施日期（实际节碳自该日起算）</span>
+          <span class="fieldset-legend">实施日期</span>
           <input v-model="form.implementedDate" type="date" class="input input-bordered" />
         </label>
 

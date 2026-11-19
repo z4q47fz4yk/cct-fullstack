@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { useQuery } from '@pinia/colada'
-import { useForm, useIsFormDirty, useIsFormValid } from 'vee-validate'
+import { useForm, useIsFormDirty } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/valibot'
 import * as v from 'valibot'
 import { formatHttpError } from '@/utils/error'
@@ -10,6 +10,7 @@ import { useProjectApi } from '@/composables/useProjectApi'
 import { useProjectContext } from '@/composables/useProjectContext'
 import { listResourcesQuery } from '@/client/@pinia/colada.gen'
 import { vProjectUpdate } from '@/client'
+import PageHead from '@/components/common/PageHead.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import SegmentControl from '@/components/common/SegmentControl.vue'
 import ResourcesView from './resources.vue'
@@ -19,6 +20,7 @@ import { FETCH_ALL_PAGE_SIZE } from '@/constants/pagination'
 import type { Resource } from '@/types/resource'
 import type { SelectOption } from '@/types/select'
 import {
+  BUILDING_TYPE_OPTIONS,
   FIRE_RESISTANCE_LEVEL_OPTIONS,
   FOUNDATION_LEVEL_OPTIONS,
   PILE_FOUNDATION_LEVEL_OPTIONS,
@@ -28,6 +30,7 @@ import {
   WATERPROOF_LEVEL_OPTIONS,
 } from '@/constants/projectSettings'
 import regionData from '@/assets/china_region_data.json'
+import { loadProjectExtras, saveProjectExtras } from '@/utils/projectExtras'
 
 definePage({
   meta: {
@@ -108,11 +111,73 @@ const cityOptions = computed(() => {
   return regionMap[selectedProvince.value] ?? []
 })
 
-// 表单 schema：复用后端生成的 vProjectUpdate（约束零漂移），仅覆盖 name 为必填
+// 必填校验辅助：类型保持 nullish（与现有 null 值管线兼容），但 null/undefined 不通过。
+// 星号与这里的规则一一对应（验收：正式表单能阻止无效提交）。
+const isPresent = <T>(val: T | null | undefined): val is T => val !== null && val !== undefined
+const REQUIRED_MSG = '此项为必填'
+
 const formSchema = toTypedSchema(
   v.object({
     ...vProjectUpdate.entries,
     name: v.pipe(v.string(), v.minLength(1), v.maxLength(100)),
+    // 地下/地上建筑面积：非负数字，必填（无地下建筑时允许 0）
+    underground_building_area: v.pipe(
+      v.nullish(v.pipe(v.number(), v.minValue(0))),
+      v.check(isPresent, REQUIRED_MSG),
+    ),
+    aboveground_building_area: v.pipe(
+      v.nullish(v.pipe(v.number(), v.minValue(0))),
+      v.check(isPresent, REQUIRED_MSG),
+    ),
+    // 建设地点：省份 + 城市必选
+    province: v.pipe(
+      v.nullish(v.pipe(v.string(), v.minLength(1))),
+      v.check(isPresent, REQUIRED_MSG),
+    ),
+    city: v.pipe(
+      v.nullish(v.pipe(v.string(), v.minLength(1))),
+      v.check(isPresent, REQUIRED_MSG),
+    ),
+    // 拟开工 / 实际开工日期必填
+    planned_start_date: v.pipe(
+      v.nullish(v.pipe(v.string(), v.isoDate())),
+      v.check(isPresent, REQUIRED_MSG),
+    ),
+    actual_start_date: v.pipe(
+      v.nullish(v.pipe(v.string(), v.isoDate())),
+      v.check(isPresent, REQUIRED_MSG),
+    ),
+    // 临时用房资源必选
+    housing_resource_id: v.pipe(
+      v.nullish(v.pipe(v.number(), v.integer())),
+      v.check(isPresent, REQUIRED_MSG),
+    ),
+    // 安全系数（业务下限 1.0）与每间人数（正整数）
+    housing_safety_factor: v.pipe(
+      v.nullish(v.pipe(v.number(), v.minValue(1))),
+      v.check(isPresent, REQUIRED_MSG),
+    ),
+    persons_per_room: v.pipe(
+      v.nullish(v.pipe(v.number(), v.integer(), v.minValue(1))),
+      v.check(isPresent, REQUIRED_MSG),
+    ),
+    // 施工阶段碳排放总量指标：非负数字，必填
+    construction_carbon_emission_limit: v.pipe(
+      v.nullish(v.pipe(v.number(), v.minValue(0))),
+      v.check(isPresent, REQUIRED_MSG),
+    ),
+    // 施工阶段总成本指标（万元）：非负数字，必填
+    total_cost_limit: v.pipe(
+      v.nullish(v.pipe(v.number(), v.minValue(0))),
+      v.check(isPresent, REQUIRED_MSG),
+    ),
+    // 项目图片：必须存在有效图片（已有图片即满足）
+    image_data: v.pipe(v.nullish(v.string()), v.check(isPresent, REQUIRED_MSG)),
+    // ── 前端扩展字段（本地存储，后端暂无接口；字段名与后续后端契约保持一致） ──
+    building_type: v.nullish(v.pipe(v.string(), v.maxLength(20))),
+    carbon_emission_limit_production: v.nullish(v.pipe(v.number(), v.minValue(0))),
+    carbon_emission_limit_transport: v.nullish(v.pipe(v.number(), v.minValue(0))),
+    carbon_emission_limit_construction: v.nullish(v.pipe(v.number(), v.minValue(0))),
   }),
 )
 
@@ -151,14 +216,18 @@ const { handleSubmit, errors, defineField, resetForm, setFieldValue } = useForm(
     actual_start_date: null,
     actual_completion_date: null,
     construction_carbon_emission_limit: null,
+    building_type: null,
+    carbon_emission_limit_production: null,
+    carbon_emission_limit_transport: null,
+    carbon_emission_limit_construction: null,
+    total_cost_limit: null,
+    image_data: null,
   },
 })
 const isDirty = useIsFormDirty()
-const isValid = useIsFormValid()
 
 const [name, nameAttrs] = defineField('name')
 const [description, descriptionAttrs] = defineField('description')
-const [isActive, isActiveAttrs] = defineField('is_active')
 const [status, statusAttrs] = defineField('status')
 const [landArea, landAreaAttrs] = defineField('land_area')
 const [buildingArea, buildingAreaAttrs] = defineField('building_area')
@@ -207,10 +276,23 @@ const [actualCompletionDate, actualCompletionDateAttrs] = defineField('actual_co
 const [constructionCarbonEmissionLimit, constructionCarbonEmissionLimitAttrs] = defineField(
   'construction_carbon_emission_limit',
 )
+const [buildingType, buildingTypeAttrs] = defineField('building_type')
+const [carbonLimitProduction, carbonLimitProductionAttrs] = defineField(
+  'carbon_emission_limit_production',
+)
+const [carbonLimitTransport, carbonLimitTransportAttrs] = defineField(
+  'carbon_emission_limit_transport',
+)
+const [carbonLimitConstruction, carbonLimitConstructionAttrs] = defineField(
+  'carbon_emission_limit_construction',
+)
+const [totalCostLimit, totalCostLimitAttrs] = defineField('total_cost_limit')
+const [imageData] = defineField('image_data')
 
-// 把项目数据归一为表单值，同时作为「取消」恢复用的快照
+// 把项目数据归一为表单值（后端字段 + 前端扩展字段合并），同时作为「取消」恢复用的快照
 function snapshotFromProject(p: NonNullable<typeof project.value>) {
   return {
+    ...loadProjectExtras(p.id),
     name: p.name,
     description: p.description ?? '',
     is_active: p.is_active,
@@ -276,12 +358,60 @@ const totalBuildingArea = computed(() => {
   return u + a
 })
 
-// 结构形式数组的 computed 包装：defineField 推断为 string[] | null | undefined，
-// v-model + checkbox 需要稳定的 string[]；初始值与快照已保证 []，此处归一。
-const structureTypesArray = computed<string[]>({
-  get: () => structureTypes.value ?? [],
-  set: (next) => setFieldValue('structure_types', next),
+// 结构形式（设计稿为单选下拉）：界面单选 ↔ 接口数组契约（选中项存为单元素数组，
+// 未选择存 []；提交时统一归一为 null）。原数组中若有多项，未修改时原样保留。
+const structureTypeSingle = computed<string>({
+  get: () => structureTypes.value?.[0] ?? '',
+  set: (v) => setFieldValue('structure_types', v ? [v] : []),
 })
+
+// ─── 项目图片（设计稿：预览 + 选择/更换，≤3MB JPG/PNG/WebP） ──────
+const imagePreview = computed(() => imageData.value ?? '')
+const imageStatus = ref('')
+const imageFileInput = ref<HTMLInputElement | null>(null)
+
+function openImagePicker() {
+  imageFileInput.value?.click()
+}
+
+/** 独立保存项目图片：立即写入本地存储并同步碳排数据看板 */
+function saveProjectImage() {
+  if (!imageData.value) {
+    imageStatus.value = '请先选择图片。'
+    return
+  }
+  if (currentProjectId.value === null) return
+  saveProjectExtras(currentProjectId.value, { image_data: imageData.value })
+  imageStatus.value = '项目图片已保存，数据看板已同步。'
+  notifySuccess({ title: '项目图片已保存' })
+}
+
+function handleImageFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  imageStatus.value = ''
+  if (!file) return
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 3 * 1024 * 1024) {
+    imageStatus.value = '请选择不超过 3 MB 的 JPG、PNG 或 WebP 图片。'
+    input.value = ''
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = () => {
+    const dataUrl = typeof reader.result === 'string' ? reader.result : ''
+    if (!dataUrl) {
+      imageStatus.value = '文件读取失败，请重试。'
+      return
+    }
+    setFieldValue('image_data', dataUrl)
+    imageStatus.value = '图片已更新，保存后生效。'
+  }
+  reader.onerror = () => {
+    imageStatus.value = '文件读取失败，请重试。'
+  }
+  reader.readAsDataURL(file)
+  input.value = ''
+}
 
 function formatDateTime(value?: string | null) {
   if (!value) return '—'
@@ -299,13 +429,56 @@ function parseNullableNumber(raw: string): number | null {
 }
 
 const submit = handleSubmit(async (values) => {
+  // 悬浮按钮保持可点击：请求进行中重复点击直接忽略（不通过禁用表达）
+  if (isUpdatingProject.value) return
   try {
+    // 后端字段：显式列出（契约字段，随 generate-api 更新）
     await updateProject({
-      ...values,
+      name: values.name,
+      is_active: values.is_active,
+      status: values.status,
       description: values.description?.trim() === '' ? null : (values.description ?? null),
-      structure_types: values.structure_types?.length ? values.structure_types : null,
+      land_area: values.land_area,
+      building_area: values.building_area,
+      province: values.province,
+      city: values.city,
       address: values.address?.trim() === '' ? null : (values.address ?? null),
+      latitude: values.latitude,
+      longitude: values.longitude,
+      underground_building_area: values.underground_building_area,
+      aboveground_building_area: values.aboveground_building_area,
+      structure_types: values.structure_types?.length ? values.structure_types : null,
+      prefabrication_rate: values.prefabrication_rate,
+      design_service_life: values.design_service_life,
+      structural_safety_level: values.structural_safety_level,
+      foundation_design_level: values.foundation_design_level,
+      pile_foundation_design_level: values.pile_foundation_design_level,
+      fire_resistance_level: values.fire_resistance_level,
+      seismic_fortification_intensity: values.seismic_fortification_intensity,
+      underground_waterproof_level: values.underground_waterproof_level,
+      planned_start_date: values.planned_start_date,
+      planned_completion_date: values.planned_completion_date,
+      actual_start_date: values.actual_start_date,
+      actual_completion_date: values.actual_completion_date,
+      construction_carbon_emission_limit: values.construction_carbon_emission_limit,
+      housing_resource_id: values.housing_resource_id,
+      water_resource_id: values.water_resource_id,
+      electricity_resource_id: values.electricity_resource_id,
+      // 必填字段已通过校验（非空），此处归一为后端非空契约
+      housing_safety_factor: values.housing_safety_factor ?? 1.2,
+      persons_per_room: values.persons_per_room ?? 4,
     })
+    // 前端扩展字段（后端暂无接口）：按项目维度存本地存储
+    if (currentProjectId.value !== null) {
+      saveProjectExtras(currentProjectId.value, {
+        building_type: values.building_type,
+        carbon_emission_limit_production: values.carbon_emission_limit_production,
+        carbon_emission_limit_transport: values.carbon_emission_limit_transport,
+        carbon_emission_limit_construction: values.carbon_emission_limit_construction,
+        total_cost_limit: values.total_cost_limit,
+        image_data: values.image_data,
+      })
+    }
     notifySuccess({ title: '项目信息已保存' })
   } catch (error) {
     const description = formatHttpError(error, '请稍后重试')
@@ -360,32 +533,34 @@ onBeforeRouteLeave(async () => {
 
   <template v-else-if="project">
     <div class="space-y-4">
-      <!-- 操作工具条（设计稿 page-head toolbar：取消 / 保存） -->
-      <div v-if="isDirty" class="flex items-center justify-end gap-2">
-        <button
-          type="button"
-          class="btn btn-ghost px-4"
-          aria-label="取消项目信息修改"
-          :disabled="isUpdatingProject"
-          @click="handleCancel"
-        >
-          取消
-        </button>
-        <button
-          type="button"
-          class="btn btn-primary px-5"
-          aria-label="保存项目信息"
-          :disabled="isUpdatingProject || !isValid || !isDirty"
-          @click="submit"
-        >
-          <span
-            v-if="isUpdatingProject"
-            class="loading loading-spinner loading-xs"
-            aria-hidden="true"
-          />
-          <span>{{ isUpdatingProject ? '保存中' : '保存' }}</span>
-        </button>
-      </div>
+      <!-- 页头（设计稿 view-info page-head：常驻 取消 / 保存 toolbar） -->
+      <PageHead title="项目信息" subtitle="项目基本参数与建设概况">
+        <!-- 悬浮操作条：固定在视口右上角（顶栏下方），不随页面滚动；
+             按钮不禁用（校验失败时 vee-validate 会阻止提交并标出错误项） -->
+        <div class="actions-float">
+          <button
+            type="button"
+            class="btn btn-ghost px-4"
+            aria-label="取消项目信息修改"
+            @click="handleCancel"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary px-5"
+            aria-label="保存项目信息"
+            @click="submit"
+          >
+            <span
+              v-if="isUpdatingProject"
+              class="loading loading-spinner loading-xs"
+              aria-hidden="true"
+            />
+            <span>{{ isUpdatingProject ? '保存中' : '保存' }}</span>
+          </button>
+        </div>
+      </PageHead>
 
       <!-- 页内 Tab（设计稿：项目概况 / 基础数据） -->
       <SegmentControl
@@ -411,7 +586,7 @@ onBeforeRouteLeave(async () => {
             <h2 id="basic-info-title" class="section-title m-0">基本信息</h2>
           </div>
           <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div class="fieldset md:col-span-2">
+            <div class="fieldset">
               <label class="fieldset-label" for="project-name">
                 项目名称 <span class="text-error" aria-hidden="true">*</span>
               </label>
@@ -430,7 +605,9 @@ onBeforeRouteLeave(async () => {
             </div>
 
             <div class="fieldset">
-              <label class="fieldset-label" for="project-status">项目阶段</label>
+              <label class="fieldset-label" for="project-status">
+                项目状态 <span class="text-error" aria-hidden="true">*</span>
+              </label>
               <select
                 id="project-status"
                 v-model="status"
@@ -443,58 +620,10 @@ onBeforeRouteLeave(async () => {
                 <option value="CONSTRUCTION">施工中</option>
                 <option value="COMPLETED">已完成</option>
               </select>
-              <span class="text-xs text-fg-muted">标记为「已完成」将解锁评价阶段</span>
               <span v-if="errors.status" class="text-xs text-error">{{ errors.status }}</span>
             </div>
 
             <div class="fieldset">
-              <span class="fieldset-label">项目状态</span>
-              <input
-                v-model="isActive"
-                v-bind="isActiveAttrs"
-                :disabled="isUpdatingProject"
-                class="sr-only"
-                type="checkbox"
-                tabindex="-1"
-                aria-hidden="true"
-              />
-              <div
-                class="flex w-full gap-1 rounded-field border border-base-content/10 bg-base-content/5 p-1 shadow-inner"
-                role="group"
-                aria-label="项目状态"
-              >
-                <button
-                  type="button"
-                  class="h-9 flex-1 rounded-field px-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                  :class="{
-                    'bg-primary/15 text-primary shadow-sm': isActive,
-                    'text-fg-muted hover:bg-base-content/5 hover:text-base-content': !isActive,
-                  }"
-                  :disabled="isUpdatingProject"
-                  :aria-pressed="isActive"
-                  :aria-label="isActive ? '当前状态：进行中' : '设置项目状态为进行中'"
-                  @click="isActive = true"
-                >
-                  进行中
-                </button>
-                <button
-                  type="button"
-                  class="h-9 flex-1 rounded-field px-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                  :class="{
-                    'bg-primary/15 text-primary shadow-sm': !isActive,
-                    'text-fg-muted hover:bg-base-content/5 hover:text-base-content': isActive,
-                  }"
-                  :disabled="isUpdatingProject"
-                  :aria-pressed="!isActive"
-                  @click="isActive = false"
-                >
-                  已完成
-                </button>
-              </div>
-              <span class="text-xs text-fg-muted">停用后项目不再参与统计与优化</span>
-            </div>
-
-            <div class="fieldset md:col-span-2 xl:col-span-4">
               <label class="fieldset-label" for="project-description">项目描述</label>
               <textarea
                 id="project-description"
@@ -521,7 +650,7 @@ onBeforeRouteLeave(async () => {
           <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div class="fieldset">
               <label class="fieldset-label" for="underground-building-area"
-                >地下建筑面积（m²）</label
+                >地下建筑面积（m²）<span class="text-error" aria-hidden="true">*</span></label
               >
               <label
                 class="input flex w-full items-center gap-2"
@@ -556,7 +685,7 @@ onBeforeRouteLeave(async () => {
 
             <div class="fieldset">
               <label class="fieldset-label" for="aboveground-building-area"
-                >地上建筑面积（m²）</label
+                >地上建筑面积（m²）<span class="text-error" aria-hidden="true">*</span></label
               >
               <label
                 class="input flex w-full items-center gap-2"
@@ -604,7 +733,6 @@ onBeforeRouteLeave(async () => {
                 </span>
                 <span class="shrink-0 text-sm text-fg-muted">m²</span>
               </div>
-              <span class="text-xs text-fg-muted">地下 + 地上，自动计算</span>
             </div>
 
             <div class="fieldset">
@@ -637,7 +765,7 @@ onBeforeRouteLeave(async () => {
               </span>
             </div>
 
-            <div class="fieldset md:col-span-2">
+            <div class="fieldset">
               <label class="fieldset-label" for="building-area">建筑面积（m²）</label>
               <label
                 class="input flex w-full items-center gap-2"
@@ -667,6 +795,133 @@ onBeforeRouteLeave(async () => {
                 {{ errors.building_area }}
               </span>
             </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="province">
+                省份 <span class="text-error" aria-hidden="true">*</span>
+              </label>
+              <select
+                id="province"
+                v-model="selectedProvince"
+                v-bind="provinceAttrs"
+                :disabled="isUpdatingProject"
+                class="select w-full"
+                :class="{ 'select-error': errors.province }"
+              >
+                <option :value="null">请选择省份</option>
+                <option v-for="p in provinceOptions" :key="p" :value="p">
+                  {{ p }}
+                </option>
+              </select>
+              <span v-if="errors.province" class="text-xs text-error">
+                {{ errors.province }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="city">
+                城市 <span class="text-error" aria-hidden="true">*</span>
+              </label>
+              <select
+                id="city"
+                v-model="city"
+                v-bind="cityAttrs"
+                :disabled="isUpdatingProject || !selectedProvince"
+                class="select w-full"
+                :class="{ 'select-error': errors.city }"
+              >
+                <option :value="null">请选择城市</option>
+                <option v-for="c in cityOptions" :key="c" :value="c">
+                  {{ c }}
+                </option>
+              </select>
+              <span v-if="errors.city" class="text-xs text-error">
+                {{ errors.city }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="address">详细地址</label>
+              <input
+                id="address"
+                v-model="address"
+                v-bind="addressAttrs"
+                :disabled="isUpdatingProject"
+                class="input w-full"
+                :class="{ 'input-error': errors.address }"
+                placeholder="请输入具体地址"
+                type="text"
+              />
+              <span v-if="errors.address" class="text-xs text-error">
+                {{ errors.address }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="building-type">建筑类型</label>
+              <select
+                id="building-type"
+                v-model="buildingType"
+                v-bind="buildingTypeAttrs"
+                :disabled="isUpdatingProject"
+                class="select w-full"
+                :class="{ 'select-error': errors.building_type }"
+              >
+                <option :value="null">请选择</option>
+                <option v-for="opt in BUILDING_TYPE_OPTIONS" :key="opt" :value="opt">
+                  {{ opt }}
+                </option>
+              </select>
+              <span v-if="errors.building_type" class="text-xs text-error">
+                {{ errors.building_type }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="latitude">纬度（WGS84）</label>
+              <input
+                id="latitude"
+                :value="latitude ?? ''"
+                v-bind="latitudeAttrs"
+                :disabled="isUpdatingProject"
+                class="input w-full"
+                :class="{ 'input-error': errors.latitude }"
+                placeholder="如 39.9075"
+                type="number"
+                step="any"
+                min="-90"
+                max="90"
+                @input="
+                  (e) => (latitude = parseNullableNumber((e.target as HTMLInputElement).value))
+                "
+              />
+              <span v-if="errors.latitude" class="text-xs text-error">
+                {{ errors.latitude }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="longitude">经度（WGS84）</label>
+              <input
+                id="longitude"
+                :value="longitude ?? ''"
+                v-bind="longitudeAttrs"
+                :disabled="isUpdatingProject"
+                class="input w-full"
+                :class="{ 'input-error': errors.longitude }"
+                placeholder="如 116.39723"
+                type="number"
+                step="any"
+                min="-180"
+                max="180"
+                @input="
+                  (e) => (longitude = parseNullableNumber((e.target as HTMLInputElement).value))
+                "
+              />
+              <span v-if="errors.longitude" class="text-xs text-error">
+                {{ errors.longitude }}
+              </span>
+            </div>
           </div>
         </section>
 
@@ -677,7 +932,9 @@ onBeforeRouteLeave(async () => {
           </div>
           <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div class="fieldset">
-              <label class="fieldset-label" for="planned-start-date">拟开工日期</label>
+              <label class="fieldset-label" for="planned-start-date">
+                拟开工日期 <span class="text-error" aria-hidden="true">*</span>
+              </label>
               <input
                 id="planned-start-date"
                 :value="plannedStartDate ?? ''"
@@ -723,7 +980,9 @@ onBeforeRouteLeave(async () => {
             </div>
 
             <div class="fieldset">
-              <label class="fieldset-label" for="actual-start-date">实际开工日期</label>
+              <label class="fieldset-label" for="actual-start-date">
+                实际开工日期 <span class="text-error" aria-hidden="true">*</span>
+              </label>
               <input
                 id="actual-start-date"
                 :value="actualStartDate ?? ''"
@@ -776,29 +1035,22 @@ onBeforeRouteLeave(async () => {
             <h2 id="structure-title" class="section-title m-0">结构概况</h2>
           </div>
           <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <!-- 结构形式标签 -->
-            <div class="fieldset md:col-span-2 xl:col-span-4">
-              <label class="fieldset-label">各楼宇结构形式</label>
-              <div class="flex flex-wrap gap-2">
-                <label
-                  v-for="option in STRUCTURE_TYPE_OPTIONS"
-                  :key="option"
-                  class="flex cursor-pointer items-center gap-2 rounded-field border border-base-content/10 bg-base-content/5 px-3 py-2 transition-colors hover:bg-base-content/10"
-                  :class="{
-                    'border-primary/30 bg-primary/10': structureTypesArray.includes(option),
-                  }"
-                >
-                  <input
-                    type="checkbox"
-                    :value="option"
-                    v-model="structureTypesArray"
-                    v-bind="structureTypesAttrs"
-                    :disabled="isUpdatingProject"
-                    class="checkbox checkbox-sm checkbox-primary"
-                  />
-                  <span class="text-sm">{{ option }}</span>
-                </label>
-              </div>
+            <!-- 结构形式（设计稿：下拉选，与所有字段等宽） -->
+            <div class="fieldset">
+              <label class="fieldset-label" for="structure-type">各楼宇结构形式</label>
+              <select
+                id="structure-type"
+                v-model="structureTypeSingle"
+                v-bind="structureTypesAttrs"
+                :disabled="isUpdatingProject"
+                class="select w-full"
+                :class="{ 'select-error': errors.structure_types }"
+              >
+                <option value="">请选择</option>
+                <option v-for="option in STRUCTURE_TYPE_OPTIONS" :key="option" :value="option">
+                  {{ option }}
+                </option>
+              </select>
               <span v-if="errors.structure_types" class="text-xs text-error">
                 {{ errors.structure_types }}
               </span>
@@ -999,9 +1251,9 @@ onBeforeRouteLeave(async () => {
             <h2 id="housing-title" class="section-title m-0">临时用房</h2>
           </div>
           <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div class="fieldset md:col-span-2">
+            <div class="fieldset">
               <label class="fieldset-label" for="housing-resource">
-                临时用房资源（用于碳排放与资金计算）
+                临时用房资源 <span class="text-error" aria-hidden="true">*</span>
               </label>
               <SearchableSelect
                 id="housing-resource"
@@ -1018,7 +1270,9 @@ onBeforeRouteLeave(async () => {
             </div>
 
             <div class="fieldset">
-              <label class="fieldset-label" for="housing-safety-factor">安全系数</label>
+              <label class="fieldset-label" for="housing-safety-factor">
+                安全系数 <span class="text-error" aria-hidden="true">*</span>
+              </label>
               <label
                 class="input flex w-full items-center gap-2"
                 :class="{ 'input-error': errors.housing_safety_factor }"
@@ -1041,14 +1295,15 @@ onBeforeRouteLeave(async () => {
                   "
                 />
               </label>
-              <span class="text-xs text-fg-muted">建议值不低于 1.0</span>
               <span v-if="errors.housing_safety_factor" class="text-xs text-error">
                 {{ errors.housing_safety_factor }}
               </span>
             </div>
 
             <div class="fieldset">
-              <label class="fieldset-label" for="persons-per-room">每间人数</label>
+              <label class="fieldset-label" for="persons-per-room">
+                每间人数 <span class="text-error" aria-hidden="true">*</span>
+              </label>
               <label
                 class="input flex w-full items-center gap-2"
                 :class="{ 'input-error': errors.persons_per_room }"
@@ -1070,7 +1325,6 @@ onBeforeRouteLeave(async () => {
                 />
                 <span class="shrink-0 text-sm text-fg-muted">人</span>
               </label>
-              <span class="text-xs text-fg-muted">请输入正整数</span>
               <span v-if="errors.persons_per_room" class="text-xs text-error">
                 {{ errors.persons_per_room }}
               </span>
@@ -1085,7 +1339,7 @@ onBeforeRouteLeave(async () => {
           </div>
           <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2">
             <div class="fieldset">
-              <label class="fieldset-label" for="water-resource">水资源（水电桶）</label>
+              <label class="fieldset-label" for="water-resource">水资源</label>
               <SearchableSelect
                 id="water-resource"
                 v-model:selected-value="waterResourceId"
@@ -1101,7 +1355,7 @@ onBeforeRouteLeave(async () => {
             </div>
 
             <div class="fieldset">
-              <label class="fieldset-label" for="electricity-resource">电力资源（水电桶）</label>
+              <label class="fieldset-label" for="electricity-resource">电力资源</label>
               <SearchableSelect
                 id="electricity-resource"
                 v-model:selected-value="electricityResourceId"
@@ -1118,130 +1372,17 @@ onBeforeRouteLeave(async () => {
           </div>
         </section>
 
-        <!-- 项目地点 -->
-        <section class="panel p-0" aria-labelledby="location-title">
-          <div class="card-head">
-            <h2 id="location-title" class="section-title m-0">项目地点</h2>
-          </div>
-          <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div class="fieldset">
-              <label class="fieldset-label" for="province"> 省份 </label>
-              <select
-                id="province"
-                v-model="selectedProvince"
-                v-bind="provinceAttrs"
-                :disabled="isUpdatingProject"
-                class="select w-full"
-                :class="{ 'select-error': errors.province }"
-              >
-                <option :value="null">请选择省份</option>
-                <option v-for="p in provinceOptions" :key="p" :value="p">
-                  {{ p }}
-                </option>
-              </select>
-              <span v-if="errors.province" class="text-xs text-error">
-                {{ errors.province }}
-              </span>
-            </div>
-
-            <div class="fieldset">
-              <label class="fieldset-label" for="city"> 城市 </label>
-              <select
-                id="city"
-                v-model="city"
-                v-bind="cityAttrs"
-                :disabled="isUpdatingProject || !selectedProvince"
-                class="select w-full"
-                :class="{ 'select-error': errors.city }"
-              >
-                <option :value="null">请选择城市</option>
-                <option v-for="c in cityOptions" :key="c" :value="c">
-                  {{ c }}
-                </option>
-              </select>
-              <span v-if="errors.city" class="text-xs text-error">
-                {{ errors.city }}
-              </span>
-            </div>
-
-            <div class="fieldset md:col-span-2">
-              <label class="fieldset-label" for="address">详细地址</label>
-              <input
-                id="address"
-                v-model="address"
-                v-bind="addressAttrs"
-                :disabled="isUpdatingProject"
-                class="input w-full"
-                :class="{ 'input-error': errors.address }"
-                placeholder="请输入具体地址"
-                type="text"
-              />
-              <span v-if="errors.address" class="text-xs text-error">
-                {{ errors.address }}
-              </span>
-            </div>
-
-            <div class="fieldset">
-              <label class="fieldset-label" for="latitude">纬度（WGS84）</label>
-              <input
-                id="latitude"
-                :value="latitude ?? ''"
-                v-bind="latitudeAttrs"
-                :disabled="isUpdatingProject"
-                class="input w-full"
-                :class="{ 'input-error': errors.latitude }"
-                placeholder="如 39.9075"
-                type="number"
-                step="any"
-                min="-90"
-                max="90"
-                @input="
-                  (e) => (latitude = parseNullableNumber((e.target as HTMLInputElement).value))
-                "
-              />
-              <span class="text-xs text-fg-muted">
-                用于 Open-Meteo 天气自动同步；填写前先在地图上确认施工现场坐标
-              </span>
-              <span v-if="errors.latitude" class="text-xs text-error">
-                {{ errors.latitude }}
-              </span>
-            </div>
-
-            <div class="fieldset">
-              <label class="fieldset-label" for="longitude">经度（WGS84）</label>
-              <input
-                id="longitude"
-                :value="longitude ?? ''"
-                v-bind="longitudeAttrs"
-                :disabled="isUpdatingProject"
-                class="input w-full"
-                :class="{ 'input-error': errors.longitude }"
-                placeholder="如 116.39723"
-                type="number"
-                step="any"
-                min="-180"
-                max="180"
-                @input="
-                  (e) => (longitude = parseNullableNumber((e.target as HTMLInputElement).value))
-                "
-              />
-              <span class="text-xs text-fg-muted"> 用于 Open-Meteo 天气自动同步；需与纬度成对填写 </span>
-              <span v-if="errors.longitude" class="text-xs text-error">
-                {{ errors.longitude }}
-              </span>
-            </div>
-          </div>
-        </section>
 
         <!-- 碳排放指标 -->
         <section class="panel p-0" aria-labelledby="carbon-title">
           <div class="card-head">
             <h2 id="carbon-title" class="section-title m-0">碳排放指标</h2>
           </div>
-          <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div class="fieldset">
               <label class="fieldset-label" for="carbon-emission-limit">
-                施工阶段总碳排放量限额（tCO₂e）
+                施工阶段碳排放总量指标（tCO₂e）
+                <span class="text-error" aria-hidden="true">*</span>
               </label>
               <label
                 class="input flex w-full items-center gap-2"
@@ -1273,6 +1414,202 @@ onBeforeRouteLeave(async () => {
                 {{ errors.construction_carbon_emission_limit }}
               </span>
             </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="carbon-limit-production">
+                建材生产阶段碳排放量指标（tCO₂e）
+              </label>
+              <label
+                class="input flex w-full items-center gap-2"
+                :class="{ 'input-error': errors.carbon_emission_limit_production }"
+              >
+                <input
+                  id="carbon-limit-production"
+                  :value="carbonLimitProduction ?? ''"
+                  v-bind="carbonLimitProductionAttrs"
+                  :disabled="isUpdatingProject"
+                  class="w-full bg-transparent outline-none"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0"
+                  @input="
+                    (e) =>
+                      (carbonLimitProduction = parseNullableNumber(
+                        (e.target as HTMLInputElement).value,
+                      ))
+                  "
+                />
+                <span class="shrink-0 text-sm text-fg-muted">tCO₂e</span>
+              </label>
+              <span v-if="errors.carbon_emission_limit_production" class="text-xs text-error">
+                {{ errors.carbon_emission_limit_production }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="carbon-limit-transport">
+                建材运输阶段碳排放量指标（tCO₂e）
+              </label>
+              <label
+                class="input flex w-full items-center gap-2"
+                :class="{ 'input-error': errors.carbon_emission_limit_transport }"
+              >
+                <input
+                  id="carbon-limit-transport"
+                  :value="carbonLimitTransport ?? ''"
+                  v-bind="carbonLimitTransportAttrs"
+                  :disabled="isUpdatingProject"
+                  class="w-full bg-transparent outline-none"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0"
+                  @input="
+                    (e) =>
+                      (carbonLimitTransport = parseNullableNumber(
+                        (e.target as HTMLInputElement).value,
+                      ))
+                  "
+                />
+                <span class="shrink-0 text-sm text-fg-muted">tCO₂e</span>
+              </label>
+              <span v-if="errors.carbon_emission_limit_transport" class="text-xs text-error">
+                {{ errors.carbon_emission_limit_transport }}
+              </span>
+            </div>
+
+            <div class="fieldset">
+              <label class="fieldset-label" for="carbon-limit-construction">
+                建筑建造阶段碳排放量指标（tCO₂e）
+              </label>
+              <label
+                class="input flex w-full items-center gap-2"
+                :class="{ 'input-error': errors.carbon_emission_limit_construction }"
+              >
+                <input
+                  id="carbon-limit-construction"
+                  :value="carbonLimitConstruction ?? ''"
+                  v-bind="carbonLimitConstructionAttrs"
+                  :disabled="isUpdatingProject"
+                  class="w-full bg-transparent outline-none"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0"
+                  @input="
+                    (e) =>
+                      (carbonLimitConstruction = parseNullableNumber(
+                        (e.target as HTMLInputElement).value,
+                      ))
+                  "
+                />
+                <span class="shrink-0 text-sm text-fg-muted">tCO₂e</span>
+              </label>
+              <span v-if="errors.carbon_emission_limit_construction" class="text-xs text-error">
+                {{ errors.carbon_emission_limit_construction }}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 成本指标 -->
+        <section class="panel p-0" aria-labelledby="cost-title">
+          <div class="card-head">
+            <h2 id="cost-title" class="section-title m-0">成本指标</h2>
+          </div>
+          <div class="card-body grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div class="fieldset">
+              <label class="fieldset-label" for="total-cost-limit">
+                施工阶段总成本指标（万元）
+                <span class="text-error" aria-hidden="true">*</span>
+              </label>
+              <label
+                class="input flex w-full items-center gap-2"
+                :class="{ 'input-error': errors.total_cost_limit }"
+              >
+                <span class="material-symbols-outlined icon-sm text-primary/70" aria-hidden="true">
+                  payments
+                </span>
+                <input
+                  id="total-cost-limit"
+                  :value="totalCostLimit ?? ''"
+                  v-bind="totalCostLimitAttrs"
+                  :disabled="isUpdatingProject"
+                  class="w-full bg-transparent outline-none"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0"
+                  @input="
+                    (e) =>
+                      (totalCostLimit = parseNullableNumber((e.target as HTMLInputElement).value))
+                  "
+                />
+                <span class="shrink-0 text-sm text-fg-muted">万元</span>
+              </label>
+              <span v-if="errors.total_cost_limit" class="text-xs text-error">
+                {{ errors.total_cost_limit }}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 项目图片（设计稿：位于项目概况最下方） -->
+        <section class="panel p-0" aria-labelledby="project-image-title">
+          <div class="card-head">
+            <h2 id="project-image-title" class="section-title m-0">
+              项目图片 <span class="text-error" aria-hidden="true">*</span>
+            </h2>
+            <div class="toolbar">
+              <button
+                type="button"
+                class="btn btn-outline gap-1"
+                :disabled="isUpdatingProject"
+                @click="openImagePicker"
+              >
+                <span class="material-symbols-outlined icon-sm">image</span>
+                选择 / 更换图片
+              </button>
+              <button
+                type="button"
+                class="btn btn-primary gap-1"
+                :disabled="isUpdatingProject || !imagePreview"
+                @click="saveProjectImage"
+              >
+                <span class="material-symbols-outlined icon-sm">save</span>
+                保存图片
+              </button>
+            </div>
+            <input
+              ref="imageFileInput"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              class="hidden"
+              aria-label="选择或更换项目图片"
+              @change="handleImageFileChange"
+            />
+          </div>
+          <div class="card-body">
+            <img
+              v-if="imagePreview"
+              :src="imagePreview"
+              alt="项目图片"
+              class="block w-full max-w-2xl h-60 object-contain bg-base-200 rounded-field"
+            />
+            <div
+              v-else
+              class="w-full max-w-2xl h-60 flex items-center justify-center bg-base-200 rounded-field text-fg-subtle"
+            >
+              <div class="text-center">
+                <span class="material-symbols-outlined icon-2xl" aria-hidden="true">image</span>
+                <p class="text-sm mt-1">尚未上传项目图片</p>
+              </div>
+            </div>
+            <p v-if="imageStatus" class="text-xs text-fg-muted mt-2" role="status">{{ imageStatus }}</p>
+            <span v-if="errors.image_data" class="text-xs text-error block mt-2">
+              {{ errors.image_data }}
+            </span>
           </div>
         </section>
 
@@ -1292,3 +1629,22 @@ onBeforeRouteLeave(async () => {
     </div>
   </template>
 </template>
+
+<style scoped>
+/* 取消/保存悬浮操作条：固定在视口右上角（顶栏 58px 之下，与主内容右边距 22px 对齐），
+   不随主内容滚动，带面板底色与阴影保证可读性 */
+.actions-float {
+  position: fixed;
+  top: 58px;
+  right: 22px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-panel);
+  border: 1px solid var(--color-panel-border);
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 12px rgb(16 24 40 / 0.1);
+}
+</style>

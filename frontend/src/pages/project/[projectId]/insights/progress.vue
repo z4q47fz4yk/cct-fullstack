@@ -13,6 +13,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import ChartEmptyState from '@/components/common/ChartEmptyState.vue'
+import PageHead from '@/components/common/PageHead.vue'
 import SegmentControl, { type SegmentOption } from '@/components/common/SegmentControl.vue'
 import ProgressTimelinePlot from '@/components/schedule/ProgressTimelinePlot.vue'
 import type {
@@ -31,7 +32,6 @@ import { useWeatherApi } from '@/composables/useWeatherApi'
 import { useCarbonStats, type CarbonGranularity } from '@/composables/useCarbonStats'
 import { useConfirm } from '@/composables/useConfirm'
 import { notifySuccess, notifyError } from '@/composables/useToast'
-import { fmtEmission, fmtWanYuan, fmtNumber } from '@/utils/format'
 import { getThemeColors, getCategoryColor, getSliceColor } from '@/utils/themeColors'
 import { todayIsoLocal } from '@/utils/date'
 import { formatHttpError } from '@/utils/error'
@@ -54,7 +54,7 @@ const router = useRouter()
 const { currentProjectId } = useProjectContext()
 const { project } = useProjectApi()
 const { plan } = usePlanApi()
-const { projectSummaries, isLoadingProjectSummaries, progressTimeline } = useProgressApi()
+const { isLoadingProjectSummaries, progressTimeline } = useProgressApi()
 const { weather, createRecord, updateRecord, deleteRecord, refresh, syncWeather, isSyncing } =
   useWeatherApi()
 const { confirmDanger } = useConfirm()
@@ -79,7 +79,6 @@ function anchorPlusDays(days: number): string {
 }
 
 // ──── 顶部统计 ─────────────────────────────────────────────
-const summaryByTask = computed(() => new Map(projectSummaries.value.map((s) => [s.taskId, s])))
 
 const taskRows = computed(() => {
   const planMap = new Map((plan.value?.tasks ?? []).map((t) => [t.taskId, t]))
@@ -141,15 +140,6 @@ const taskRows = computed(() => {
   return rows
 })
 
-const completedCount = computed(() => projectSummaries.value.filter((s) => s.isCompleted).length)
-const overallPercent = computed(() => {
-  const list = projectSummaries.value
-  if (list.length === 0) return 0
-  return Math.round(list.reduce((sum, s) => sum + s.currentPercent, 0) / list.length)
-})
-
-const plannedDuration = computed(() => plan.value?.totalDuration ?? null)
-
 // ──── 时间粒度（日/周/月）：用户可切，按跨度自动收紧默认 ────
 const granOptions: ReadonlyArray<SegmentOption<PlotGranularity>> = [
   { value: 'day', label: '日' },
@@ -204,7 +194,7 @@ function pickGranularity(g: CarbonGranularity) {
 }
 
 // ──── 碳排（粒度随切换变化） ───────────────────────────────
-const { periodItems, totalEmissionTon, totalCost } = useCarbonStats(() => granularity.value)
+const { periodItems } = useCarbonStats(() => granularity.value)
 
 // ──── 碳排维度切换 ─────────────────────────────────────────
 type EmissionDim = 'total' | 'category' | 'resource'
@@ -281,7 +271,8 @@ const carbonBars = computed<CarbonBarDatum[]>(() => {
       }
       if (others !== 0) segments.push({ name: '其他', value: others, color: C.label })
     } else {
-      segments.push({ name: '碳排', value: b.total, color: C.violet })
+      // 总量：设计稿「累计碳排放」蓝色（#60a5fa → #2563eb 取浅色端）
+      segments.push({ name: '碳排', value: b.total, color: C.blue })
     }
     // 稳定顺序：按 value 降序（总量单段不受影响）
     if (emissionDim.value !== 'total') segments.sort((a, b2) => b2.value - a.value)
@@ -289,22 +280,7 @@ const carbonBars = computed<CarbonBarDatum[]>(() => {
   })
 })
 
-/** 碳排图例（页面层展示） */
-const emissionLegend = computed<{ name: string; color: string }[]>(() => {
-  if (emissionDim.value === 'category') {
-    return CATEGORY_ORDER.map((c) => ({
-      name: categoryConfigMap[c].label,
-      color: getCategoryColor(c),
-    }))
-  }
-  if (emissionDim.value === 'resource') {
-    return [
-      ...resourceTop.value.map((r, i) => ({ name: r.name, color: getSliceColor(i) })),
-      { name: '其他', color: C.label },
-    ]
-  }
-  return [{ name: '碳排', color: C.violet }]
-})
+/** 碳排图例（Plotly 图内已展示，此处在图内 legend 呈现） */
 
 // ──── 天气点（日期 → 日历 x） ──────────────────────────────
 const weatherDatum = computed<WeatherDatum[]>(() =>
@@ -438,7 +414,7 @@ async function handleSyncWeather() {
   const coords = project.value?.latitude ?? null
   if (coords == null || project.value?.longitude == null) {
     const r = await confirmDanger(
-      '项目未设置经纬度，无法自动同步历史天气。是否前往「项目信息」填写纬度/经度？',
+      '项目未设置经纬度，无法自动同步天气。是否前往「项目信息」填写？',
       '缺少经纬度',
     )
     if (r.confirmed && currentProjectId.value !== null) {
@@ -458,53 +434,31 @@ async function handleSyncWeather() {
     console.error('Sync weather failed:', e)
   }
 }
-
-const emissionLegendVisible = computed(() => emissionDim.value !== 'total')
 </script>
 
 <template>
   <div class="h-full flex flex-col gap-4 overflow-y-auto">
-    <!-- 顶部统计 -->
-    <div class="grid grid-cols-4 gap-3">
-      <div class="panel px-4 py-3">
-        <p class="text-[11px] text-fg-subtle">计划工期</p>
-        <p class="text-lg font-semibold font-num text-base-content">
-          {{ plannedDuration !== null ? fmtNumber(plannedDuration, 1) : '—' }}
-          <span class="text-xs text-fg-subtle font-normal">天</span>
-        </p>
-      </div>
-      <div class="panel px-4 py-3">
-        <p class="text-[11px] text-fg-subtle">完成度</p>
-        <p class="text-lg font-semibold font-num text-primary">{{ overallPercent }}%</p>
-      </div>
-      <div class="panel px-4 py-3">
-        <p class="text-[11px] text-fg-subtle">总碳排（实际）</p>
-        <p class="text-lg font-semibold font-num text-violet">
-          {{ fmtNumber(totalEmissionTon, 2)
-          }}<span class="text-xs text-fg-subtle font-normal"> t</span>
-        </p>
-      </div>
-      <div class="panel px-4 py-3">
-        <p class="text-[11px] text-fg-subtle">总成本（实际）</p>
-        <p class="text-lg font-semibold font-num text-info">
-          {{ fmtWanYuan(totalCost) }}<span class="text-xs text-fg-subtle font-normal"> 万</span>
-        </p>
-      </div>
-    </div>
+    <PageHead title="施工进度" subtitle="全景时间线：进度 · 碳排 · 天气">
+      <SegmentControl
+        :model-value="granularity"
+        :options="granOptions"
+        @update:model-value="pickGranularity"
+      />
+      <button class="btn btn-outline btn-sm" :disabled="isSyncing" @click="handleSyncWeather">
+        <span class="material-symbols-outlined icon-sm">partly_cloudy_day</span>
+        {{ isSyncing ? '同步中…' : '同步天气' }}
+      </button>
+    </PageHead>
 
     <!-- 全景主图 -->
     <div class="panel p-3 flex flex-col gap-3">
+      <h2 class="section-title px-1">全景时间线（甘特 · 累计进度 · 碳排）</h2>
       <div class="flex items-center justify-between gap-4 flex-wrap">
         <div class="flex items-center gap-3 flex-wrap">
           <SegmentControl v-model="emissionDim" :options="dimOptions" />
-          <SegmentControl
-            :model-value="granularity"
-            :options="granOptions"
-            @update:model-value="pickGranularity"
-          />
         </div>
         <div class="flex items-center gap-4 flex-wrap">
-          <!-- 甘特图例 -->
+          <!-- 甘特图例（「每日进度」在图内 legend 已有，不重复列出） -->
           <div class="flex items-center gap-3 text-xs">
             <span class="flex items-center gap-1.5"
               ><i class="w-2.5 h-2.5 rounded-full inline-block" :style="{ background: C.label }"></i
@@ -521,20 +475,6 @@ const emissionLegendVisible = computed(() => emissionDim.value !== 'total')
               ></i
               >实际完成</span
             >
-            <span class="flex items-center gap-1.5"
-              ><i class="w-2.5 h-2.5 rounded-full inline-block" :style="{ background: C.accel }"></i
-              >每日进度</span
-            >
-          </div>
-          <!-- 碳排维度图例，在 plotly 图中已存在 -->
-          <div v-if="false" class="flex items-center gap-3 text-xs">
-            <span v-for="item in emissionLegend" :key="item.name" class="flex items-center gap-1.5">
-              <i
-                class="w-2.5 h-2.5 rounded-full inline-block"
-                :style="{ background: item.color }"
-              ></i>
-              {{ item.name }}
-            </span>
           </div>
           <button class="btn btn-ghost btn-sm" @click="openWeatherCreate">
             <span class="material-symbols-outlined icon-sm">partly_cloudy_day</span>
@@ -547,7 +487,7 @@ const emissionLegendVisible = computed(() => emissionDim.value !== 'total')
         v-if="!hasAnyData"
         icon="timeline"
         title="暂无施工数据"
-        description="录入工序进度、资源用量或天气数据后展示全景时间线"
+        description="暂无数据"
       />
       <ProgressTimelinePlot v-else :data="plotData" :height="640" />
     </div>
@@ -556,9 +496,7 @@ const emissionLegendVisible = computed(() => emissionDim.value !== 'total')
     <BaseModal v-model:open="showWeatherModal" title="天气数据（日）" class="max-w-2xl">
       <div class="space-y-4">
         <div class="flex items-center justify-between gap-3 flex-wrap">
-          <p class="text-sm text-fg-muted">
-            手工录入某日天气，或用 Open-Meteo 拉取项目所在地的历史日均温 / 降水 / 光照。
-          </p>
+
           <button class="btn btn-ghost btn-sm" :disabled="isSyncing" @click="handleSyncWeather">
             <span class="material-symbols-outlined icon-sm">sync</span>
             {{ isSyncing ? '同步中…' : '自动同步历史' }}
@@ -630,7 +568,7 @@ const emissionLegendVisible = computed(() => emissionDim.value !== 'total')
           </table>
         </div>
         <p v-else class="text-sm text-fg-muted">
-          暂无天气记录。可手工录入或点击「自动同步历史」按项目经纬度拉取。
+          暂无天气记录
         </p>
       </div>
       <template #actions>

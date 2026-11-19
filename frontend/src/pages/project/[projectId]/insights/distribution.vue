@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import PageHead from '@/components/common/PageHead.vue'
 import SegmentControl, { type SegmentOption } from '@/components/common/SegmentControl.vue'
 import TagPieChartCard from '@/components/chart/TagPieChartCard.vue'
 import LoadingState from '@/components/common/LoadingState.vue'
@@ -51,9 +52,15 @@ const totalValue = computed(() => Object.values(summaries).reduce((sum, v) => su
 
 <template>
   <div class="h-full flex flex-col gap-4 overflow-y-auto">
-    <div class="flex items-center justify-end">
+    <PageHead title="碳排放计算" subtitle="按标签切片统计碳排与成本占比">
       <SegmentControl v-model="metric" :options="metricOptions" />
-    </div>
+      <RouterLink
+        :to="`/project/${currentProjectId}/settings/charts`"
+        class="btn btn-outline btn-sm"
+      >
+        配置切片
+      </RouterLink>
+    </PageHead>
 
     <LoadingState v-if="isLoading" variant="skeleton" class="h-56" />
 
@@ -64,18 +71,11 @@ const totalValue = computed(() => Object.values(summaries).reduce((sum, v) => su
         <span class="material-symbols-outlined icon-2xl text-fg-subtle">donut_small</span>
       </div>
       <p class="text-sm text-fg-muted">尚未配置标签图表</p>
-      <p class="text-xs text-fg-subtle mt-1">
-        前往
-        <RouterLink :to="`/project/${currentProjectId}/settings/charts`" class="link link-primary">
-          设置 → 碳排放图表
-        </RouterLink>
-        配置切片创建饼图
-      </p>
     </div>
 
     <template v-else>
       <!-- 合计统计卡（设计稿 stat-row） -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div class="stat-row">
         <StatCard
           :label="metric === 'emission' ? '碳排放合计' : '成本合计'"
           :value="metric === 'emission' ? fmtNumber(totalValue / 1000, 2) : fmtNumber(totalValue / 10000, 2)"

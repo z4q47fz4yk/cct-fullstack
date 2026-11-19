@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import ChartEmptyState from '@/components/common/ChartEmptyState.vue'
+import PageHead from '@/components/common/PageHead.vue'
+import StatCard from '@/components/common/StatCard.vue'
 import { useComplianceApi } from '@/composables/useComplianceApi'
 import { usePlanApi } from '@/composables/usePlanApi'
 import { fmtNumber, fmtWanYuan } from '@/utils/format'
@@ -27,41 +29,78 @@ function statusBadge(diff: number): { label: string; cls: string } {
   return good ? { label: '达标', cls: 'badge-success' } : { label: '需关注', cls: 'badge-warning' }
 }
 
-const cards = computed(() => {
+interface DiffCard {
+  label: string
+  value: string
+  unit?: string
+  icon: string
+  color: 'primary' | 'warning' | 'success'
+  /** 计划 vs 实际附加说明 */
+  sub: string
+  trend?: { direction: 'up' | 'down'; text: string }
+}
+
+const cards = computed<DiffCard[]>(() => {
   const d = data.value
   if (!d) return []
+
+  const durationDiff =
+    d.actualDuration !== null && d.actualDuration !== undefined
+      ? d.actualDuration - d.plannedDuration
+      : null
+  const costDiff = d.actualCost - d.plannedCost
+  const emissionDiff = d.actualEmission - d.plannedEmission
+
   return [
     {
-      label: '总工期',
-      planned: `${fmtNumber(d.plannedDuration, 1)} 天`,
-      actual:
-        d.actualDuration !== null && d.actualDuration !== undefined
-          ? `${fmtNumber(d.actualDuration, 1)} 天`
-          : '—',
-      diff:
-        d.actualDuration !== null && d.actualDuration !== undefined
-          ? `${d.actualDuration - d.plannedDuration > 0 ? '+' : ''}${fmtNumber(d.actualDuration - d.plannedDuration, 1)} 天`
-          : '—',
-      badge:
-        d.actualDuration !== null && d.actualDuration !== undefined
-          ? statusBadge(d.actualDuration - d.plannedDuration)
-          : null,
+      label: '工期差异',
+      value: durationDiff !== null ? `${durationDiff > 0 ? '+' : ''}${fmtNumber(durationDiff, 1)}` : '—',
+      unit: durationDiff !== null ? '天' : undefined,
+      icon: 'schedule',
+      color: 'primary',
+      sub:
+        durationDiff !== null
+          ? `计划 ${fmtNumber(d.plannedDuration, 1)} 天 · 实际 ${fmtNumber(d.actualDuration!, 1)} 天`
+          : `计划 ${fmtNumber(d.plannedDuration, 1)} 天`,
+      trend:
+        durationDiff === null
+          ? undefined
+          : durationDiff > 0
+            ? { direction: 'down', text: '延期，需关注' }
+            : { direction: 'up', text: '可控' },
     },
     {
-      label: '总成本',
-      planned: `${fmtWanYuan(d.plannedCost)} 万`,
-      actual: `${fmtWanYuan(d.actualCost)} 万`,
-      diff: `${d.actualCost - d.plannedCost > 0 ? '+' : ''}${fmtWanYuan(d.actualCost - d.plannedCost)} 万`,
-      badge: statusBadge(d.actualCost - d.plannedCost),
+      label: '成本差异',
+      value: `${costDiff > 0 ? '+' : ''}${fmtWanYuan(costDiff)}`,
+      unit: '万元',
+      icon: 'payments',
+      color: 'warning',
+      sub: `计划 ${fmtWanYuan(d.plannedCost)} 万 · 实际 ${fmtWanYuan(d.actualCost)} 万`,
+      trend: costDiff > 0 ? { direction: 'down', text: '超支' } : { direction: 'up', text: '节约' },
     },
     {
-      label: '总碳排',
-      planned: `${fmtNumber(d.plannedEmission / 1000, 2)} t`,
-      actual: `${fmtNumber(d.actualEmission / 1000, 2)} t`,
-      diff: `${d.actualEmission - d.plannedEmission > 0 ? '+' : ''}${fmtNumber((d.actualEmission - d.plannedEmission) / 1000, 2)} t`,
-      badge: statusBadge(d.actualEmission - d.plannedEmission),
+      label: '碳排差异',
+      value: `${emissionDiff > 0 ? '+' : ''}${fmtNumber(emissionDiff / 1000, 2)}`,
+      unit: 't',
+      icon: 'eco',
+      color: 'success',
+      sub: `计划 ${fmtNumber(d.plannedEmission / 1000, 2)} t · 实际 ${fmtNumber(d.actualEmission / 1000, 2)} t`,
+      trend:
+        emissionDiff > 0 ? { direction: 'down', text: '超排' } : { direction: 'up', text: '减排' },
     },
   ]
+})
+
+/** 达标评价：三项差异均 <= 0 视为达标 */
+const evaluation = computed<{ label: string; ok: boolean } | null>(() => {
+  const d = data.value
+  if (!d) return null
+  const durationDiff =
+    d.actualDuration !== null && d.actualDuration !== undefined
+      ? d.actualDuration - d.plannedDuration
+      : 0
+  const ok = durationDiff <= 0 && d.actualCost - d.plannedCost <= 0 && d.actualEmission - d.plannedEmission <= 0
+  return { label: ok ? '达标' : '需关注', ok }
 })
 
 function taskBadge(row: ComplianceTaskRow): { label: string; cls: string } {
@@ -78,67 +117,44 @@ const monthlyRows = computed(() => data.value?.monthly ?? [])
 
 <template>
   <div class="h-full flex flex-col gap-4 overflow-y-auto">
-    <!-- 状态徽标（原顶栏投送，移至页内工具条） -->
-    <div v-if="data" class="flex items-center justify-end">
-      <span
-        class="text-xs font-mono px-2 py-1 rounded-full"
-        :class="data.evaluationUnlocked ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'"
-      >
-        {{ data.evaluationUnlocked ? '评价已解锁' : '评价未解锁' }}
-      </span>
-    </div>
-    <div
-      v-if="plan?.isStale"
-      class="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5"
-    >
-      <span class="material-symbols-outlined text-warning icon-sm mt-0.5">warning</span>
-      <p class="text-xs text-base-content">
-        计划基线数据已变更，当前对照基于旧基线。建议到「计划编制」重新预估并保存； 也可在「设置 →
-        数据体检」中手动检查过期状态。
-      </p>
-    </div>
+    <PageHead title="计划践行度" subtitle="计划基线与实际执行的差异对照与达标评价">
+      <span v-if="plan?.isStale" class="badge badge-warning">基线已过期，建议重新预估</span>
+    </PageHead>
 
     <ChartEmptyState
       v-if="isNoPlan"
       icon="fact_check"
       title="尚未保存施工计划基线"
-      description="请先到「计划编制」页保存为计划基线"
     />
     <div v-else-if="isLoading" class="space-y-4">
-      <div class="grid grid-cols-3 gap-4">
-        <div v-for="i in 3" :key="i" class="skeleton h-24 w-full rounded-lg"></div>
+      <div class="stat-row">
+        <div v-for="i in 4" :key="i" class="skeleton h-24 w-full rounded-lg"></div>
       </div>
       <div class="skeleton h-64 w-full rounded-lg"></div>
     </div>
 
     <template v-else-if="data">
-      <div class="grid grid-cols-3 gap-4">
-        <div v-for="c in cards" :key="c.label" class="panel p-4">
-          <div class="flex items-center justify-between mb-2">
-            <p class="text-xs text-fg-subtle">{{ c.label }}</p>
-            <span v-if="c.badge" class="badge badge-sm" :class="c.badge.cls">
-              {{ c.badge.label }}
-            </span>
-          </div>
-          <div class="flex items-baseline justify-between gap-2">
-            <div>
-              <p class="text-[11px] text-fg-subtle">计划</p>
-              <p class="text-sm font-semibold font-num text-base-content">{{ c.planned }}</p>
-            </div>
-            <div>
-              <p class="text-[11px] text-fg-subtle">实际</p>
-              <p class="text-sm font-semibold font-num text-base-content">{{ c.actual }}</p>
-            </div>
-            <span
-              class="text-xs font-num"
-              :class="
-                !c.badge ? 'text-fg-subtle' : c.badge.cls === 'badge-success' ? 'text-success' : 'text-warning'
-              "
-            >
-              {{ c.diff }}
-            </span>
-          </div>
-        </div>
+      <!-- 差异统计卡 + 达标评价（设计稿 stat-row + trend） -->
+      <div class="stat-row">
+        <StatCard
+          v-for="c in cards"
+          :key="c.label"
+          :label="c.label"
+          :value="c.value"
+          :unit="c.unit"
+          :icon="c.icon"
+          :color="c.color"
+          :trend="c.trend"
+        >
+          {{ c.sub }}
+        </StatCard>
+        <StatCard
+          v-if="evaluation"
+          label="评价"
+          :value="evaluation.label"
+          :icon="evaluation.ok ? 'fact_check' : 'warning'"
+          :color="evaluation.ok ? 'success' : 'warning'"
+        />
       </div>
 
       <div class="panel p-4">

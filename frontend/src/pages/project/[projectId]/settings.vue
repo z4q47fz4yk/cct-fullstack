@@ -1,10 +1,10 @@
 <script setup lang="ts">
 definePage({
   meta: {
-    title: '项目概览',
-    icon: 'dashboard',
+    title: '项目信息管理',
+    icon: 'grid_view',
     showInNav: true,
-    navOrder: 0,
+    navOrder: 1,
   },
   redirect: {
     name: '/project/[projectId]/settings/',

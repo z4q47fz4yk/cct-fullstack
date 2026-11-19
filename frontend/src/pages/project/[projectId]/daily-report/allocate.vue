@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AllocateTable from '@/components/daily-report/AllocateTable.vue'
 import ReportSteps from '@/components/daily-report/ReportSteps.vue'
+import PageHead from '@/components/common/PageHead.vue'
 import { useDailyReportStoreV2 } from '@/stores/report'
 import AllocationByTask from '@/components/daily-report/AllocationByTask.vue'
 import { useProjectContext } from '@/composables/useProjectContext'
@@ -53,6 +54,20 @@ const blockDescription = computed(() => blockInfo.value?.description ?? '')
 const guideTarget = computed(() => blockInfo.value?.target ?? '')
 const guideLabel = computed(() => blockInfo.value?.label ?? '')
 
+// 待分配条数：已提交核对且未跳过的资源中，分配总量仍小于用量的条数
+const pendingCount = computed(() => {
+  let count = 0
+  for (const item of storeV2.mappingDecision) {
+    if (item.action == 'SKIP') continue
+    let allocated = 0
+    for (const quantities of storeV2.allocatedResourceQuantities.values()) {
+      allocated += quantities[item.resourceName] ?? 0
+    }
+    if (allocated < item.quantity) count++
+  }
+  return count
+})
+
 function goToGuide() {
   if (guideTarget.value) router.push(guideTarget.value)
 }
@@ -65,7 +80,8 @@ async function goToConfirm() {
 </script>
 
 <template>
-  <div class="p-6 pb-24 max-w-6xl mx-auto">
+  <div class="p-6 pb-24">
+    <PageHead title="分配工序" subtitle="将资源使用量分配到具体工序" />
     <!-- 数据未就绪:大空白态 -->
     <div v-if="!isReadyToAllocate" class="text-center py-8">
       <div
@@ -84,38 +100,45 @@ async function goToConfirm() {
     <!-- 数据已就绪:正常内容 -->
     <div v-else class="space-y-4">
       <ReportSteps :current="3" />
-      <AllocationByTask v-model:selected-task-id="selectedTaskId" :disable-action="false" />
+      <div class="card">
+        <div class="card-head"><div class="card-title">工序资源分配</div></div>
+        <div class="card-body space-y-4">
+          <AllocationByTask v-model:selected-task-id="selectedTaskId" :disable-action="false" />
 
-      <AllocateTable
-        v-model:task-id="selectedTaskId"
-        v-model:is-allocation-valid="isAllocationValid"
-      />
+          <AllocateTable
+            v-model:task-id="selectedTaskId"
+            v-model:is-allocation-valid="isAllocationValid"
+          />
 
-      <!-- 未选择工序提示 -->
-      <div v-if="!selectedTaskId" class="panel p-6 text-center">
-        <div
-          class="w-16 h-16 rounded-full bg-base-300 flex items-center justify-center mx-auto mb-3"
-        >
-          <span class="material-symbols-outlined icon-xl text-fg-subtle">touch_app</span>
+          <!-- 未选择工序提示 -->
+          <div v-if="!selectedTaskId" class="p-6 text-center">
+            <div
+              class="w-16 h-16 rounded-full bg-base-300 flex items-center justify-center mx-auto mb-3"
+            >
+              <span class="material-symbols-outlined icon-xl text-fg-subtle">touch_app</span>
+            </div>
+            <p class="text-fg-subtle">请从上方选择一个工序开始分配资源</p>
+          </div>
+
+          <div v-if="storeV2.error" class="alert alert-error alert-sm" role="alert">
+            <span class="material-symbols-outlined icon-sm">error</span>
+            <span>{{ storeV2.error }}</span>
+          </div>
         </div>
-        <p class="text-fg-subtle">请从上方选择一个工序开始分配资源</p>
-      </div>
 
-      <div v-if="storeV2.error" class="alert alert-error alert-sm" role="alert">
-        <span class="material-symbols-outlined icon-sm">error</span>
-        <span>{{ storeV2.error }}</span>
-      </div>
-
-      <div class="pt-4">
-        <button
-          class="btn btn-primary btn-block"
-          :disabled="storeV2.isLoading || !isAllocationValid"
-          @click="goToConfirm"
-        >
-          <span v-if="storeV2.isLoading" class="loading loading-spinner loading-xs"></span>
-          <span v-else class="material-symbols-outlined">arrow_forward</span>
-          <span>{{ storeV2.isLoading ? '处理中...' : '下一步：确认提交' }}</span>
-        </button>
+        <!-- 底部操作条：左侧待分配提示 + 右侧确认提交 -->
+        <div class="card-body border-t border-base-300 flex items-center justify-between gap-3">
+          <span class="text-sm text-fg-muted">{{ pendingCount }} 条待分配</span>
+          <button
+            class="btn btn-primary"
+            :disabled="storeV2.isLoading || !isAllocationValid"
+            @click="goToConfirm"
+          >
+            <span v-if="storeV2.isLoading" class="loading loading-spinner loading-xs"></span>
+            <span v-else class="material-symbols-outlined">arrow_forward</span>
+            <span>{{ storeV2.isLoading ? '处理中...' : '确认提交' }}</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>

@@ -237,25 +237,28 @@ const tableHeaders = [
               <td>
                 <div class="flex items-center gap-1">
                   <button
-                    class="btn btn-ghost btn-xs btn-square"
+                    type="button"
+                    class="action-text"
                     title="为整批打标"
                     @click="emit('tags-batch', g.records)"
                   >
-                    <span class="material-symbols-outlined icon-sm">label</span>
+                    打标
                   </button>
                   <button
-                    class="btn btn-ghost btn-xs btn-square"
+                    type="button"
+                    class="action-text"
                     title="查看详情"
                     @click="emit('view-detail', g.chunkKey)"
                   >
-                    <span class="material-symbols-outlined icon-sm">visibility</span>
+                    查看
                   </button>
                   <button
-                    class="btn btn-ghost btn-xs btn-square text-error hover:bg-error/10"
+                    type="button"
+                    class="action-text action-delete"
                     title="删除该分块记录"
                     @click="handleDelete(g)"
                   >
-                    <span class="material-symbols-outlined icon-sm">delete_sweep</span>
+                    删除
                   </button>
                 </div>
               </td>

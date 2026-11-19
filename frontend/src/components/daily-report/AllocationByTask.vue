@@ -81,15 +81,17 @@ function pickTask(id: number) {
         <!-- 操作按钮 -->
         <div v-if="!disableAction" class="flex justify-end gap-2">
           <button
+            type="button"
+            class="action-text action-delete"
+            title="删除该工序的分配"
             @click.stop="
               () => {
                 if (selectedTaskId == taskId) selectedTaskId = null
                 storeV2.allocatedResourceQuantities.delete(taskId)
               }
             "
-            class="btn btn-error btn-xs material-symbols-outlined icon-xs"
           >
-            delete
+            <span class="material-symbols-outlined icon-sm">delete</span>
           </button>
         </div>
       </div>

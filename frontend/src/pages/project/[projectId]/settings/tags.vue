@@ -13,6 +13,7 @@ import type { ResourceCategory } from '@/types/resource'
 import { categoryConfigMap } from '@/types/resource'
 import { UNGROUPED_LABEL, filterTags } from '@/utils/tagGroup'
 import ErrorState from '@/components/common/ErrorState.vue'
+import PageHead from '@/components/common/PageHead.vue'
 import PaginationBar from '@/components/common/PaginationBar.vue'
 import TableEmptyState from '@/components/common/TableEmptyState.vue'
 import { fmtNumber } from '@/utils/format'
@@ -192,82 +193,71 @@ const groupCount = (g: TagGroupResp): number => g.count
   />
 
   <div v-else class="space-y-4">
-    <!-- 操作工具条（设计稿 page-head toolbar：新建标签） -->
-    <div class="flex items-center justify-end">
-      <button class="btn btn-primary gap-1 px-5" :disabled="isLoading" @click="openCreate()">
+    <!-- 页头（设计稿 view-tags page-head：新建标签） -->
+    <PageHead title="碳排放标签" subtitle="资源 / 任务 / 用量打标，用于碳排分布切片统计">
+      <button class="btn btn-primary gap-1" :disabled="isLoading" @click="openCreate()">
         <span class="material-symbols-outlined icon-sm">add</span>
-        添加标签
+        新建标签
       </button>
-    </div>
+    </PageHead>
 
-    <!-- 汇总说明 -->
-    <section class="panel px-4 py-3 flex items-center gap-3">
-      <span class="material-symbols-outlined text-primary icon-md shrink-0">label</span>
-      <p class="text-xs text-fg-muted leading-relaxed">
-        标签为扁平结构，名称在项目内唯一；「分组」仅用于列表/选择器分组展示，不参与碳排放统计。
-        资源、任务、用量分别打标，饼图按其标签命中统计。 项目创建时系统会写入「默认」标签（如
-        人工/机械/材料/运输/其他），它们仅供识别，不允许编辑或删除。
-      </p>
+    <!-- 分组筛选 chips（设计稿 tag-filters：全部 / 各分组 + 计数徽标） -->
+    <section class="panel px-4 py-3" aria-label="标签分组筛选">
+      <div class="tag-filters" role="group" aria-label="标签分组筛选">
+        <span class="filter-label">分组</span>
+        <button
+          type="button"
+          class="tag-filter"
+          :class="{ active: selectedGroup === null }"
+          :aria-pressed="selectedGroup === null"
+          @click="selectedGroup = null"
+        >
+          全部
+          <span class="filter-count">{{ tags.length }}</span>
+        </button>
+        <button
+          v-for="g in groups"
+          :key="g.group"
+          type="button"
+          class="tag-filter"
+          :class="{ active: selectedGroup === g.group }"
+          :aria-pressed="selectedGroup === g.group"
+          @click="selectedGroup = g.group"
+        >
+          {{ groupLabel(g.group) }}
+          <span class="filter-count">{{ groupCount(g) }}</span>
+        </button>
+      </div>
     </section>
 
-    <div class="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4 items-start">
-      <!-- 左：分组列表（设计稿：幽灵按钮=选中，描边按钮=未选中） -->
-      <section class="panel p-0" aria-labelledby="group-list-title">
+    <div class="space-y-4">
+      <!-- 标签列表（表格）：card-head 内放分组内新建 + 搜索框 -->
+      <section class="panel p-0" aria-labelledby="tag-list-title">
         <div class="card-head">
-          <h2 id="group-list-title" class="section-title m-0">标签分组</h2>
-        </div>
-        <div class="card-body flex flex-col gap-1.5">
-          <button
-            type="button"
-            class="btn w-full justify-between"
-            :class="selectedGroup === null ? 'btn-ghost' : 'btn-outline'"
-            @click="selectedGroup = null"
-          >
-            <span>全部标签</span>
-            <span class="text-xs font-num opacity-70">{{ tags.length }}</span>
-          </button>
-          <button
-            v-for="g in groups"
-            :key="g.group"
-            type="button"
-            class="btn w-full justify-between"
-            :class="selectedGroup === g.group ? 'btn-ghost' : 'btn-outline'"
-            @click="selectedGroup = g.group"
-          >
-            <span class="truncate">{{ groupLabel(g.group) }}</span>
-            <span class="text-xs font-num opacity-70">{{ groupCount(g) }}</span>
-          </button>
-        </div>
-      </section>
-
-      <!-- 右：标签列表（表格）+ 详情 -->
-      <div class="min-w-0 space-y-4">
-        <section class="panel p-0" aria-labelledby="tag-list-title">
-          <div class="card-head">
-            <h2 id="tag-list-title" class="section-title m-0">
-              {{ selectedGroup === null ? '全部标签' : groupLabel(selectedGroup) }}
-              <span class="text-xs font-num text-fg-muted font-normal">{{ visibleTags.length }}</span>
-            </h2>
-            <div class="flex items-center gap-2">
-              <button
-                v-if="selectedGroup !== null"
-                class="btn btn-ghost btn-sm"
-                @click="openCreate(selectedGroup === UNGROUPED_LABEL ? '' : selectedGroup)"
-              >
-                <span class="material-symbols-outlined icon-sm">add</span>
-                添加到此分组
-              </button>
-              <label class="input input-sm flex w-52 items-center gap-2">
-                <span class="material-symbols-outlined icon-sm text-fg-subtle">search</span>
-                <input
-                  v-model="searchQuery"
-                  type="text"
-                  class="w-full bg-transparent"
-                  placeholder="搜索标签"
-                />
-              </label>
-            </div>
+          <h2 id="tag-list-title" class="section-title m-0">
+            标签列表
+            <span class="text-xs font-num text-fg-muted font-normal">{{ visibleTags.length }}</span>
+          </h2>
+          <div class="toolbar">
+            <button
+              v-if="selectedGroup !== null"
+              class="btn btn-ghost btn-sm"
+              @click="openCreate(selectedGroup === UNGROUPED_LABEL ? '' : selectedGroup)"
+            >
+              <span class="material-symbols-outlined icon-sm">add</span>
+              添加到此分组
+            </button>
+            <label class="input input-sm flex w-52 items-center gap-2">
+              <span class="material-symbols-outlined icon-sm text-fg-subtle">search</span>
+              <input
+                v-model="searchQuery"
+                type="text"
+                class="w-full bg-transparent"
+                placeholder="搜索标签"
+              />
+            </label>
           </div>
+        </div>
 
           <div class="overflow-x-auto">
             <table class="table">
@@ -276,7 +266,7 @@ const groupCount = (g: TagGroupResp): number => g.count
                   <th>标签名称</th>
                   <th class="w-28">分组</th>
                   <th>描述</th>
-                  <th class="w-24 text-center">操作</th>
+                  <th class="w-[120px] text-center">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -305,20 +295,22 @@ const groupCount = (g: TagGroupResp): number => g.count
                     <td>
                       <div class="flex items-center justify-center gap-1">
                         <button
-                          class="btn-icon"
+                          type="button"
+                          class="action-text"
                           title="编辑标签"
                           :disabled="tag.isDefault"
                           @click.stop="openEdit(tag)"
                         >
-                          <span class="material-symbols-outlined icon-sm">edit</span>
+                          编辑
                         </button>
                         <button
-                          class="btn-icon hover:!text-error hover:!border-error"
+                          type="button"
+                          class="action-text action-delete"
                           title="删除标签"
                           :disabled="tag.isDefault"
                           @click.stop="handleDelete(tag)"
                         >
-                          <span class="material-symbols-outlined icon-sm">delete</span>
+                          删除
                         </button>
                       </div>
                     </td>
@@ -487,7 +479,6 @@ const groupCount = (g: TagGroupResp): number => g.count
           </div>
           </div>
         </section>
-      </div>
     </div>
 
     <!-- 新建/编辑标签弹窗 -->

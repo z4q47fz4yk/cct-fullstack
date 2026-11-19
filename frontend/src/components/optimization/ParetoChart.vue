@@ -17,6 +17,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import ChartEmptyState from '@/components/common/ChartEmptyState.vue'
 import 'echarts-gl'
 import { useParetoChart, type ViewMode } from '@/composables/useParetoChart'
+import { getThemeColors, withOpacity } from '@/utils/themeColors'
 import type { OptimizeSolution } from '@/client/types.gen'
 
 // 注册 ECharts 组件
@@ -30,6 +31,15 @@ const { selectedId, solutions } = defineProps<{
 const emit = defineEmits<{
   'update:selectedId': [id: number | null]
 }>()
+
+// 图例色：帕累托解 = indigo 半透明（与 useParetoChart 一致），选中 = cyan
+const paretoLegendStyle = computed(() => {
+  const C = getThemeColors()
+  return {
+    background: withOpacity(C.indigo, 0.6),
+    boxShadow: `0 0 8px ${withOpacity(C.indigo, 0.5)}`,
+  }
+})
 
 // 使用 composable
 // Vue 3.5 解构的 props 在运行时是 ref，但 TS 类型仍为原值；用 computed 包一层以满足 composable 的 Ref 参数类型
@@ -63,8 +73,8 @@ const isEmpty = computed(() => solutions.length === 0)
     <!-- 标题和视图切换 -->
     <div class="flex items-center justify-between mb-4">
       <div>
-        <h2 class="text-base font-semibold text-base-content">帕累托前沿</h2>
-        <p class="text-xs text-fg-muted mt-0.5">工期 · 成本 · 碳排放 多目标解集分布</p>
+        <h2 class="text-base font-semibold text-base-content">帕累托最优解集（散点图）</h2>
+        <p class="text-xs text-fg-muted mt-0.5">点选方案查看甘特图</p>
       </div>
 
       <!-- 视图切换 Tab -->
@@ -104,10 +114,7 @@ const isEmpty = computed(() => solutions.length === 0)
     <!-- 图例 -->
     <div class="flex items-center justify-center gap-4 mt-4">
       <div class="flex items-center gap-2">
-        <div
-          class="w-2.5 h-2.5 rounded-full"
-          style="background: rgba(129, 140, 248, 0.6); box-shadow: 0 0 8px rgba(129, 140, 248, 0.5)"
-        ></div>
+        <div class="w-2.5 h-2.5 rounded-full" :style="paretoLegendStyle"></div>
         <span class="text-xs text-fg-muted">帕累托解</span>
       </div>
       <div class="flex items-center gap-2">
